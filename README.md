@@ -27,11 +27,12 @@
 
 ---
 
-## 3. 開発環境・技術スタック
+（Tailwind CSSを導入し、UIのスタイリングに活用）
 
 | カテゴリ | 使用技術・要件 |
 | :--- | :--- |
 | **言語・フレームワーク** | TypeScript, React, Vite |
+| **スタイリング** | Tailwind CSS |
 | **バックエンド/DB** | Firebase (Firestore) |
 | **ソースコード管理** | GitHub |
 | **ホスティング/デプロイ** | Vercel（自動でHTTPS化） |
