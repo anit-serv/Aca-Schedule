@@ -38,3 +38,41 @@ export interface Band {
 
 // バンド作成・更新用の入力型（IDや日時を除く）
 export type BandInput = Omit<Band, 'id' | 'createdAt' | 'updatedAt'>;
+
+// タイムテーブルエントリの種類
+export type EntryType = 'band' | 'custom';
+
+// カスタムイベント（休憩、MCなど）
+export interface CustomEvent {
+  id: string;
+  name: string;
+  duration: number; // 分単位
+}
+
+// タイムテーブルのエントリ
+export interface TimetableEntry {
+  id: string;
+  type: EntryType;
+  bandId?: string; // type が 'band' の場合
+  customEvent?: CustomEvent; // type が 'custom' の場合
+  startTime?: string; // HH:mm形式（自動計算される）
+  endTime?: string; // HH:mm形式（自動計算される）
+  order: number; // 並び順
+}
+
+// 日付ごとのタイムテーブル
+export interface DailyTimetable {
+  date: string; // ISO 8601形式
+  startTime: string; // HH:mm形式（その日の開始時刻）
+  entries: TimetableEntry[];
+}
+
+// イベント全体のタイムテーブル
+export interface Timetable {
+  id: string;
+  eventId: string;
+  type: 'performance' | 'rehearsal'; // 本番用かリハーサル用か
+  dailyTimetables: DailyTimetable[];
+  createdAt: Date;
+  updatedAt: Date;
+}

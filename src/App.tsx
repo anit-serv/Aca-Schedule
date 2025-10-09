@@ -1,17 +1,10 @@
 import { useState, useEffect } from 'react';
 import { BandManagement } from './components/BandManagement';
-import { bandService } from './services/firestore';
-import type { Band, EventSettings } from './types';
+import { TimetableEditing } from './components/TimetableEditing.tsx';
+import { bandService, timetableService } from './services/firestore';
+import type { Band, EventSettings, Timetable, DailyTimetable } from './types';
 
 // === コンポーネント定義 ===
-
-// タイムテーブル編集モードの表示コンポーネント
-const TimetableView = () => (
-  <div className="p-8">
-    <h2 className="text-2xl font-bold mb-4">タイムテーブル編集モード</h2>
-    <p className="text-gray-400">ここに、タイムテーブルを編集する画面を作成します。</p>
-  </div>
-);
 
 // モードを定義するための型
 type Mode = 'band-management' | 'timetable-editing';
@@ -34,10 +27,11 @@ function App() {
     presetDurations: [10, 15, 20, 25], // デフォルトのプリセット演奏時間
   });
 
+  // タイムテーブルの状態管理
+  const [timetable, setTimetable] = useState<Timetable | null>(null);
+
   // バンドデータの読み込み
   useEffect(() => {
-    // デモモードの場合はFirebaseを使用しない
-    // TODO: 実際のイベントIDでFirebaseからデータを取得
     const eventId = eventSettings.id;
     
     // リアルタイム監視を設定
@@ -49,14 +43,62 @@ function App() {
     return () => unsubscribe();
   }, [eventSettings.id]);
 
+  // タイムテーブルデータの読み込み
+  useEffect(() => {
+    const eventId = eventSettings.id;
+    
+    // リアルタイム監視を設定
+    const unsubscribe = timetableService.subscribeTimetable(
+      eventId,
+      'performance',
+      (fetchedTimetable) => {
+        setTimetable(fetchedTimetable);
+      }
+    );
+
+    // クリーンアップ
+    return () => unsubscribe();
+  }, [eventSettings.id]);
+
+  // タイムテーブルが存在しない場合は作成
+  useEffect(() => {
+    const createInitialTimetable = async () => {
+      if (timetable === null && mode === 'timetable-editing') {
+        try {
+          const newTimetable: Omit<Timetable, 'id'> = {
+            eventId: eventSettings.id,
+            type: 'performance',
+            dailyTimetables: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          await timetableService.createTimetable(newTimetable);
+        } catch (error) {
+          console.error('タイムテーブル作成エラー:', error);
+        }
+      }
+    };
+
+    createInitialTimetable();
+  }, [timetable, mode, eventSettings.id]);
+
   // バンドデータの変更を処理
   const handleBandsChange = async (updatedBands: Band[]) => {
     // ローカル状態を即座に更新（楽観的更新）
     setBands(updatedBands);
+  };
 
-    // TODO: Firestoreへの保存処理
-    // 現時点では、各バンドの更新をFirestoreに反映する処理を実装
-    // (BandManagementコンポーネント内で個別に処理する方が効率的)
+  // 日別タイムテーブルの変更を処理
+  const handleDailyTimetableChange = async (updatedDailyTimetable: DailyTimetable) => {
+    // Firestoreに保存
+    if (timetable) {
+      try {
+        await timetableService.updateDailyTimetable(timetable.id, updatedDailyTimetable);
+      } catch (error) {
+        console.error('タイムテーブル更新エラー:', error);
+        alert('タイムテーブルの更新に失敗しました。');
+      }
+    }
   };
 
   return (
@@ -95,7 +137,7 @@ function App() {
       </header>
 
       {/* メインコンテンツ */}
-      <main className="max-w-7xl mx-auto">
+      <main className="max-w-7xl mx-auto p-6">
         {mode === 'band-management' ? (
           <BandManagement
             bands={bands}
@@ -103,7 +145,12 @@ function App() {
             onBandsChange={handleBandsChange}
           />
         ) : (
-          <TimetableView />
+          <TimetableEditing
+            bands={bands}
+            eventSettings={eventSettings}
+            timetable={timetable}
+            onTimetableChange={handleDailyTimetableChange}
+          />
         )}
       </main>
     </div>

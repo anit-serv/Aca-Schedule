@@ -13,7 +13,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Band, EventSettings } from '../types';
+import type { Band, EventSettings, Timetable, DailyTimetable } from '../types';
 
 // Firestore用のBand型（Dateの代わりにTimestampを使用）
 interface BandFirestore extends Omit<Band, 'createdAt' | 'updatedAt'> {
@@ -170,5 +170,141 @@ export const eventService = {
     delete updateData.id;
     
     await updateDoc(eventRef, updateData);
+  },
+};
+
+// Firestore用のTimetable型
+interface TimetableFirestore extends Omit<Timetable, 'id' | 'createdAt' | 'updatedAt'> {
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// TimetableをFirestore形式に変換
+const timetableToFirestore = (timetable: Timetable): Omit<TimetableFirestore, 'id'> => ({
+  eventId: timetable.eventId,
+  type: timetable.type,
+  dailyTimetables: timetable.dailyTimetables,
+  createdAt: Timestamp.fromDate(timetable.createdAt),
+  updatedAt: Timestamp.fromDate(timetable.updatedAt),
+});
+
+// Firestore形式からTimetableに変換
+const firestoreToTimetable = (id: string, data: DocumentData): Timetable => ({
+  id,
+  eventId: data.eventId,
+  type: data.type,
+  dailyTimetables: data.dailyTimetables || [],
+  createdAt: data.createdAt?.toDate() || new Date(),
+  updatedAt: data.updatedAt?.toDate() || new Date(),
+});
+
+// タイムテーブルのFirestore操作
+export const timetableService = {
+  // タイムテーブルを取得
+  async getTimetable(eventId: string, type: 'performance' | 'rehearsal'): Promise<Timetable | null> {
+    const timetablesRef = collection(db, 'timetables');
+    const q = query(
+      timetablesRef,
+      where('eventId', '==', eventId),
+      where('type', '==', type)
+    );
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return null;
+    }
+    
+    const timetableDoc = snapshot.docs[0];
+    return firestoreToTimetable(timetableDoc.id, timetableDoc.data());
+  },
+
+  // タイムテーブルを作成
+  async createTimetable(timetable: Omit<Timetable, 'id'>): Promise<string> {
+    const timetablesRef = collection(db, 'timetables');
+    const timetableData = timetableToFirestore({ ...timetable, id: '' });
+    const docRef = await addDoc(timetablesRef, timetableData);
+    return docRef.id;
+  },
+
+  // タイムテーブルを更新
+  async updateTimetable(timetableId: string, updates: Partial<Timetable>): Promise<void> {
+    const timetableRef = doc(db, 'timetables', timetableId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: any = {
+      ...updates,
+      updatedAt: Timestamp.now(),
+    };
+    
+    delete updateData.id;
+    delete updateData.createdAt;
+    
+    await updateDoc(timetableRef, updateData);
+  },
+
+  // 日別タイムテーブルを更新
+  async updateDailyTimetable(
+    timetableId: string,
+    dailyTimetable: DailyTimetable
+  ): Promise<void> {
+    const timetableRef = doc(db, 'timetables', timetableId);
+    const timetable = await this.getTimetableById(timetableId);
+    
+    if (!timetable) {
+      throw new Error('Timetable not found');
+    }
+    
+    const existingIndex = timetable.dailyTimetables.findIndex(
+      (dt) => dt.date === dailyTimetable.date
+    );
+    
+    const newDailyTimetables = [...timetable.dailyTimetables];
+    if (existingIndex >= 0) {
+      newDailyTimetables[existingIndex] = dailyTimetable;
+    } else {
+      newDailyTimetables.push(dailyTimetable);
+    }
+    
+    await updateDoc(timetableRef, {
+      dailyTimetables: newDailyTimetables,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // IDでタイムテーブルを取得
+  async getTimetableById(timetableId: string): Promise<Timetable | null> {
+    const snapshot = await getDocs(
+      query(collection(db, 'timetables'), where('__name__', '==', timetableId))
+    );
+    
+    if (snapshot.empty) {
+      return null;
+    }
+    
+    const timetableDoc = snapshot.docs[0];
+    return firestoreToTimetable(timetableDoc.id, timetableDoc.data());
+  },
+
+  // タイムテーブルをリアルタイム監視
+  subscribeTimetable(
+    eventId: string,
+    type: 'performance' | 'rehearsal',
+    callback: (timetable: Timetable | null) => void
+  ): () => void {
+    const timetablesRef = collection(db, 'timetables');
+    const q = query(
+      timetablesRef,
+      where('eventId', '==', eventId),
+      where('type', '==', type)
+    );
+    
+    return onSnapshot(q, (snapshot: QuerySnapshot) => {
+      if (snapshot.empty) {
+        callback(null);
+        return;
+      }
+      
+      const timetableDoc = snapshot.docs[0];
+      callback(firestoreToTimetable(timetableDoc.id, timetableDoc.data()));
+    });
   },
 };
