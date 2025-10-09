@@ -12,11 +12,16 @@ export interface EventSettings {
   presetDurations: number[]; // よく使う演奏時間のプリセット（分）
 }
 
-// 出演可能時間帯
+// 時間範囲（30分単位）
+export interface TimeRange {
+  startTime: string; // HH:mm形式（例: "10:00", "10:30"）
+  endTime: string; // HH:mm形式（例: "11:00", "11:30"）
+}
+
+// 出演可能時間帯（1日に複数の時間範囲を持てる）
 export interface AvailableTimeSlot {
   date: string; // ISO 8601形式の日付文字列
-  startTime: string; // HH:mm形式
-  endTime: string; // HH:mm形式
+  timeRanges: TimeRange[]; // 複数の時間範囲
 }
 
 // バンド情報
