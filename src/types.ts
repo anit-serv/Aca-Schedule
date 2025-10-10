@@ -6,10 +6,11 @@ export interface EventSettings {
   venue: string;
   goal: string;
   performanceDates: string[]; // ISO 8601形式の日付文字列配列
-  rehearsalType: 'rehearsal-day' | 'same-day-rehearsal' | 'none';
+  rehearsalType: 'rehearsal-day' | 'cool-pre-rehearsal' | 'day-start-rehearsal' | 'none';
   rehearsalDates?: string[]; // リハーサル日形式の場合のみ使用
   rehearsalDuration?: number; // 全バンド共通のリハーサル時間（分）
   presetDurations: number[]; // よく使う演奏時間のプリセット（分）
+  customEvents?: CustomEvent[]; // カスタムイベント（休憩、MCなど）
 }
 
 // 時間範囲（30分単位）
@@ -58,13 +59,22 @@ export interface TimetableEntry {
   startTime?: string; // HH:mm形式（自動計算される）
   endTime?: string; // HH:mm形式（自動計算される）
   order: number; // 並び順
+  transitionTime?: number; // 転換時間（分単位、このエントリの前に挿入される）
+}
+
+// クール（タイムテーブルの区切り）
+export interface Cool {
+  id: string;
+  number: number; // クール番号（イベント全体で連番）
+  entries: TimetableEntry[];
 }
 
 // 日付ごとのタイムテーブル
 export interface DailyTimetable {
   date: string; // ISO 8601形式
   startTime: string; // HH:mm形式（その日の開始時刻）
-  entries: TimetableEntry[];
+  cools: Cool[]; // クール構造（空配列の場合はクール分けなし）
+  entries: TimetableEntry[]; // クール分けしない場合のエントリー（後方互換性のため残す）
 }
 
 // イベント全体のタイムテーブル

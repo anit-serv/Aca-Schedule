@@ -5,9 +5,17 @@ interface BandBankItemProps {
   id: string;
   band: Band & { placedCount: number };
   placedCount: number;
+  timetableType?: 'performance' | 'rehearsal';
+  rehearsalDuration?: number;
 }
 
-export const BandBankItem = ({ id, band, placedCount }: BandBankItemProps) => {
+export const BandBankItem = ({ 
+  id, 
+  band, 
+  placedCount, 
+  timetableType = 'performance',
+  rehearsalDuration = 0 
+}: BandBankItemProps) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
   });
@@ -32,7 +40,7 @@ export const BandBankItem = ({ id, band, placedCount }: BandBankItemProps) => {
         <div className="flex-1">
           <div className="font-semibold text-white">{band.name || '(未設定)'}</div>
           <div className="text-sm text-gray-400 mt-1">
-            {band.performanceDuration}分
+            {timetableType === 'rehearsal' ? `${rehearsalDuration}分` : `${band.performanceDuration}分`}
           </div>
           {band.members.length > 0 && (
             <div className="text-xs text-gray-500 mt-1">
@@ -41,9 +49,11 @@ export const BandBankItem = ({ id, band, placedCount }: BandBankItemProps) => {
             </div>
           )}
         </div>
-        <div className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded font-semibold">
-          {placedCount}/{band.performanceCount}
-        </div>
+        {timetableType === 'performance' && (
+          <div className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded font-semibold">
+            {placedCount}/{band.performanceCount}
+          </div>
+        )}
       </div>
     </div>
   );

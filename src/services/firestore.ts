@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -108,19 +109,37 @@ interface EventSettingsFirestore extends Omit<EventSettings, 'id'> {
 }
 
 // EventSettingsをFirestore形式に変換
-const eventSettingsToFirestore = (settings: EventSettings): EventSettingsFirestore => ({
-  name: settings.name,
-  year: settings.year,
-  venue: settings.venue,
-  goal: settings.goal,
-  performanceDates: settings.performanceDates,
-  rehearsalType: settings.rehearsalType,
-  rehearsalDates: settings.rehearsalDates,
-  rehearsalDuration: settings.rehearsalDuration,
-  presetDurations: settings.presetDurations,
-  createdAt: Timestamp.now(),
-  updatedAt: Timestamp.now(),
-});
+const eventSettingsToFirestore = (settings: EventSettings): Partial<EventSettingsFirestore> & Omit<EventSettingsFirestore, 'rehearsalDates' | 'rehearsalDuration' | 'customEvents'> => {
+  // Firestoreはundefined値を許容しないため、undefinedフィールドは除外する
+  const firestoreData: Partial<EventSettingsFirestore> & Omit<EventSettingsFirestore, 'rehearsalDates' | 'rehearsalDuration' | 'customEvents'> = {
+    name: settings.name,
+    year: settings.year,
+    venue: settings.venue,
+    goal: settings.goal,
+    performanceDates: settings.performanceDates,
+    rehearsalType: settings.rehearsalType,
+    presetDurations: settings.presetDurations,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+
+  // rehearsalDatesがundefinedでない場合のみ含める
+  if (settings.rehearsalDates !== undefined) {
+    (firestoreData as EventSettingsFirestore).rehearsalDates = settings.rehearsalDates;
+  }
+
+  // rehearsalDurationがundefinedでない場合のみ含める
+  if (settings.rehearsalDuration !== undefined) {
+    (firestoreData as EventSettingsFirestore).rehearsalDuration = settings.rehearsalDuration;
+  }
+
+  // customEventsがundefinedでない場合のみ含める
+  if (settings.customEvents !== undefined) {
+    (firestoreData as EventSettingsFirestore).customEvents = settings.customEvents;
+  }
+
+  return firestoreData as EventSettingsFirestore;
+};
 
 // Firestore形式からEventSettingsに変換
 const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings => ({
@@ -134,42 +153,122 @@ const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings
   rehearsalDates: data.rehearsalDates,
   rehearsalDuration: data.rehearsalDuration,
   presetDurations: data.presetDurations || [10, 15, 20],
+  customEvents: data.customEvents || [],
 });
 
 // イベント設定のFirestore操作
 export const eventService = {
   // イベント設定を作成
   async createEvent(settings: Omit<EventSettings, 'id'>): Promise<string> {
-    const eventsRef = collection(db, 'events');
-    const settingsData = eventSettingsToFirestore({ ...settings, id: '' });
-    const docRef = await addDoc(eventsRef, settingsData);
-    return docRef.id;
+    try {
+      console.log('[eventService.createEvent] 開始:', settings);
+      const eventsRef = collection(db, 'events');
+      const settingsData = eventSettingsToFirestore({ ...settings, id: '' });
+      console.log('[eventService.createEvent] Firestore形式に変換:', settingsData);
+      const docRef = await addDoc(eventsRef, settingsData);
+      console.log('[eventService.createEvent] 成功:', docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.error('[eventService.createEvent] エラー:', error);
+      throw error;
+    }
   },
 
   // イベント設定を取得
   async getEvent(eventId: string): Promise<EventSettings | null> {
-    const snapshot = await getDocs(query(collection(db, 'events'), where('__name__', '==', eventId)));
-    
-    if (snapshot.empty) {
-      return null;
+    try {
+      console.log('[eventService.getEvent] 開始:', eventId);
+      const eventRef = doc(db, 'events', eventId);
+      const eventDoc = await getDoc(eventRef);
+      
+      console.log('[eventService.getEvent] ドキュメント存在:', eventDoc.exists());
+      
+      if (!eventDoc.exists()) {
+        console.log('[eventService.getEvent] ドキュメントが存在しません');
+        return null;
+      }
+      
+      const data = eventDoc.data();
+      console.log('[eventService.getEvent] 生データ:', data);
+      
+      const settings = firestoreToEventSettings(eventDoc.id, data);
+      console.log('[eventService.getEvent] 変換後:', settings);
+      
+      return settings;
+    } catch (error) {
+      console.error('[eventService.getEvent] エラー:', error);
+      throw error;
     }
-    
-    const eventDoc = snapshot.docs[0];
-    return firestoreToEventSettings(eventDoc.id, eventDoc.data());
   },
 
   // イベント設定を更新
   async updateEvent(eventId: string, updates: Partial<EventSettings>): Promise<void> {
     const eventRef = doc(db, 'events', eventId);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = {
-      ...updates,
-      updatedAt: Timestamp.now(),
+    
+    // 完全なEventSettingsオブジェクトを作成（idは仮の値）
+    const fullSettings: EventSettings = {
+      id: eventId,
+      name: updates.name || '',
+      year: updates.year || 0,
+      venue: updates.venue || '',
+      goal: updates.goal || '',
+      performanceDates: updates.performanceDates || [],
+      rehearsalType: updates.rehearsalType || 'none',
+      rehearsalDates: updates.rehearsalDates,
+      rehearsalDuration: updates.rehearsalDuration,
+      presetDurations: updates.presetDurations || [],
+      customEvents: updates.customEvents,
     };
     
+    // Firestore形式に変換
+    const firestoreData = eventSettingsToFirestore(fullSettings);
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData = firestoreData as any;
+    
+    // idとcreatedAtは更新しない
     delete updateData.id;
+    delete updateData.createdAt;
+    
+    // updatedAtは更新時刻を設定
+    updateData.updatedAt = Timestamp.now();
     
     await updateDoc(eventRef, updateData);
+  },
+
+  // イベントを削除(関連する全てのデータも削除)
+  async deleteEvent(eventId: string): Promise<void> {
+    try {
+      console.log('[eventService.deleteEvent] 開始:', eventId);
+
+      // イベントに関連する全てのタイムテーブルを削除
+      const timetablesRef = collection(db, 'timetables');
+      const timetablesQuery = query(timetablesRef, where('eventId', '==', eventId));
+      const timetablesSnapshot = await getDocs(timetablesQuery);
+      
+      const timetableDeletePromises = timetablesSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(timetableDeletePromises);
+      console.log(`[eventService.deleteEvent] ${timetablesSnapshot.size}件のタイムテーブルを削除`);
+
+      // イベントに関連する全てのバンドを削除
+      const bandsRef = collection(db, 'bands');
+      const bandsQuery = query(bandsRef, where('eventId', '==', eventId));
+      const bandsSnapshot = await getDocs(bandsQuery);
+      
+      const bandDeletePromises = bandsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(bandDeletePromises);
+      console.log(`[eventService.deleteEvent] ${bandsSnapshot.size}件のバンドを削除`);
+
+      // イベント設定を削除
+      const eventRef = doc(db, 'events', eventId);
+      await deleteDoc(eventRef);
+      console.log('[eventService.deleteEvent] イベント設定を削除');
+
+      console.log('[eventService.deleteEvent] 完了');
+    } catch (error) {
+      console.error('[eventService.deleteEvent] エラー:', error);
+      throw error;
+    }
   },
 };
 
