@@ -16,6 +16,7 @@ interface CoolSectionProps {
   isReadOnly?: boolean; // クール直前リハーサルなどで編集を制限
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
   onCoolStartTimeChange?: (coolIndex: number, startTime: string | undefined) => void;
+  previousCoolEndTime?: string; // 前のクールの終了時刻（デフォルト値として使用）
   nextCoolStartTime?: string; // 次のクールの開始時刻（警告表示用）
   dailyStartTime: string; // その日の開始時刻（最小値として使用）
 }
@@ -33,6 +34,7 @@ export const CoolSection = ({
   isReadOnly = false,
   onTransitionTimeChange,
   onCoolStartTimeChange,
+  previousCoolEndTime,
   nextCoolStartTime,
   dailyStartTime,
 }: CoolSectionProps) => {
@@ -96,6 +98,13 @@ export const CoolSection = ({
   const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setStartTimeInput(value);
+  };
+
+  const handleStartTimeFocus = () => {
+    // 現在値が空で、前のクールの終了時刻がある場合、デフォルト値として設定
+    if (startTimeInput === '' && previousCoolEndTime) {
+      setStartTimeInput(previousCoolEndTime);
+    }
   };
 
   const handleStartTimeBlur = () => {
@@ -173,6 +182,7 @@ export const CoolSection = ({
                   type="time"
                   value={startTimeInput}
                   onChange={handleStartTimeChange}
+                  onFocus={handleStartTimeFocus}
                   onBlur={handleStartTimeBlur}
                   min={dailyStartTime}
                   className="bg-gray-700 text-white px-2 py-1 rounded border border-gray-500 focus:border-blue-400 focus:outline-none"

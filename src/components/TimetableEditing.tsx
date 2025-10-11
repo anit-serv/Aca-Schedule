@@ -126,6 +126,7 @@ export const TimetableEditing = ({
   const isReadOnly = timetableType === 'rehearsal' && eventSettings.rehearsalType === 'cool-pre-rehearsal';
 
   // バンドの演奏時間が変更されたら、タイムテーブルの時刻を再計算
+  // または日付が切り替わったときも再計算
   useEffect(() => {
     if (!currentTimetable || !bands || bands.length === 0) return;
     
@@ -149,7 +150,7 @@ export const TimetableEditing = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bands]); // bandsの変更のみを監視（他を含めると無限ループになる）
+  }, [bands, selectedDate]); // bandsの変更と日付の切り替えを監視
 
 
   // すべてのエントリーIDを取得（クール間ドラッグ＆ドロップのため）
@@ -488,6 +489,19 @@ export const TimetableEditing = ({
               >
                 <div className="space-y-6">
                   {currentTimetable.cools.map((cool, coolIndex) => {
+                    // 前のクールの終了時刻を取得（デフォルト値として使用）
+                    // 第1クールの場合は本番/リハーサル開始時刻を使用
+                    const previousCoolEndTime = coolIndex > 0
+                      ? (() => {
+                          const prevCool = currentTimetable.cools![coolIndex - 1];
+                          if (prevCool.entries.length > 0) {
+                            const lastEntry = prevCool.entries[prevCool.entries.length - 1];
+                            return lastEntry.endTime;
+                          }
+                          return undefined;
+                        })()
+                      : currentTimetable.startTime; // 第1クールの場合は開始時刻を使用
+
                     // 次のクールの開始時刻を取得（警告表示用）
                     const nextCoolStartTime = coolIndex < currentTimetable.cools!.length - 1
                       ? currentTimetable.cools![coolIndex + 1].startTime
@@ -508,6 +522,7 @@ export const TimetableEditing = ({
                         isReadOnly={isReadOnly}
                         onTransitionTimeChange={handleTransitionTimeChange}
                         onCoolStartTimeChange={handleCoolStartTimeChange}
+                        previousCoolEndTime={previousCoolEndTime}
                         nextCoolStartTime={nextCoolStartTime}
                         dailyStartTime={currentTimetable.startTime}
                       />
