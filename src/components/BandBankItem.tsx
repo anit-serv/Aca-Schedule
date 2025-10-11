@@ -38,16 +38,25 @@ export const BandBankItem = ({
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <div className="font-semibold text-white">{band.name || '(未設定)'}</div>
+          {/* バンド名（ツールチップでメンバー表示） */}
+          {band.members.length > 0 ? (
+            <div className="group relative">
+              <div className="font-semibold text-white">{band.name || '(未設定)'}</div>
+              {/* メンバーツールチップ */}
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-40 w-max max-w-xs">
+                <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg">
+                  <div className="text-xs text-gray-300">
+                    {band.members.join(', ')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="font-semibold text-white">{band.name || '(未設定)'}</div>
+          )}
           <div className="text-sm text-gray-400 mt-1">
             {timetableType === 'rehearsal' ? `${rehearsalDuration}分` : `${band.performanceDuration}分`}
           </div>
-          {band.members.length > 0 && (
-            <div className="text-xs text-gray-500 mt-1">
-              {band.members.slice(0, 3).join(', ')}
-              {band.members.length > 3 && ` 他${band.members.length - 3}名`}
-            </div>
-          )}
         </div>
         {timetableType === 'performance' && (
           <div className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded font-semibold">

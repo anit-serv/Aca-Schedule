@@ -182,9 +182,26 @@ export const SortableTimetableRow = ({
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <div className={`font-medium ${entry.type === 'custom' ? 'text-purple-300' : ''}`}>
-                {bandName}
-              </div>
+              {/* バンド名（ツールチップでメンバー表示） */}
+              {bandMembers && bandMembers.length > 0 ? (
+                <div className="group relative">
+                  <div className={`font-medium ${entry.type === 'custom' ? 'text-purple-300' : ''}`}>
+                    {bandName}
+                  </div>
+                  {/* メンバーツールチップ */}
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-40 w-max max-w-xs">
+                    <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg">
+                      <div className="text-xs text-gray-300">
+                        {bandMembers.join(', ')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className={`font-medium ${entry.type === 'custom' ? 'text-purple-300' : ''}`}>
+                  {bandName}
+                </div>
+              )}
               {highestSeverityViolation && (
                 <div 
                   ref={iconRef}
@@ -213,12 +230,6 @@ export const SortableTimetableRow = ({
                 </div>
               )}
             </div>
-            {bandMembers && bandMembers.length > 0 && (
-              <div className="text-xs text-gray-400 mt-1">
-                {bandMembers.slice(0, 3).join(', ')}
-                {bandMembers.length > 3 && ` 他${bandMembers.length - 3}名`}
-              </div>
-            )}
           </div>
         </div>
       </td>

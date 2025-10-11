@@ -92,7 +92,8 @@ export interface Timetable {
 export type ViolationType = 
   | 'availability-exceeded' // 出演可能時間帯の超過
   | 'duplicate-in-cool'      // 同一クール内での重複
-  | 'consecutive-performance'; // 連続出演
+  | 'consecutive-performance' // 連続出演
+  | 'cool-time-exceeded';    // 次のクール開始時刻を超過
 
 // 制約違反の重大度
 export type ViolationSeverity = 'high' | 'medium' | 'low';

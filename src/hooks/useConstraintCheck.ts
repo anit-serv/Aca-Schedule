@@ -214,6 +214,49 @@ export const useConstraintCheck = (
       }
     }
 
+    // 4. 次のクール開始時刻超過チェック
+    if (dailyTimetable.cools && dailyTimetable.cools.length > 1) {
+      for (let i = 0; i < dailyTimetable.cools.length - 1; i++) {
+        const currentCool = dailyTimetable.cools[i];
+        const nextCool = dailyTimetable.cools[i + 1];
+        
+        // 次のクールに固定開始時刻が設定されている場合のみチェック
+        if (!nextCool.startTime) continue;
+        
+        // 現在のクールの最後のエントリーを取得
+        const lastEntry = currentCool.entries[currentCool.entries.length - 1];
+        if (!lastEntry || !lastEntry.endTime) continue;
+        
+        const lastEntryEnd = timeToMinutes(lastEntry.endTime);
+        const nextCoolStart = timeToMinutes(nextCool.startTime);
+        
+        // 現在のクールの終了時刻が次のクールの開始時刻を超過している場合
+        if (lastEntryEnd > nextCoolStart) {
+          const bandNumber = bandNumbers.get(lastEntry.id);
+          const bandNumberInfo = bandNumber ? ` (#${bandNumber})` : '';
+          
+          let bandName = '';
+          if (lastEntry.type === 'band' && lastEntry.bandId) {
+            const band = bandMap.get(lastEntry.bandId);
+            if (band) bandName = band.name;
+          } else if (lastEntry.type === 'custom' && lastEntry.customEvent) {
+            bandName = lastEntry.customEvent.name;
+          }
+          
+          violations.push({
+            id: `cool-time-${lastEntry.id}`,
+            type: 'cool-time-exceeded',
+            severity: 'high',
+            entryId: lastEntry.id,
+            coolId: currentCool.id,
+            date: dailyTimetable.date,
+            message: `${bandName}${bandNumberInfo} の終了時刻（${lastEntry.endTime}）が次のクール${nextCool.number}の開始時刻（${nextCool.startTime}）を超過しています`,
+            bandId: lastEntry.type === 'band' ? lastEntry.bandId : undefined,
+          });
+        }
+      }
+    }
+
     return violations;
   }, [dailyTimetable, bands, bandNumbers]);
 };
