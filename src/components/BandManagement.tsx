@@ -81,7 +81,7 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
       {showAvailabilityModal && selectedBandId && (
         <BandAvailabilityModal
           band={bands.find(b => b.id === selectedBandId)!}
-          performanceDates={eventSettings.performanceDates}
+          eventSettings={eventSettings}
           onClose={() => {
             setShowAvailabilityModal(false);
             setSelectedBandId(null);

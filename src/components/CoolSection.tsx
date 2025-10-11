@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableTimetableRow } from './SortableTimetableRow';
-import type { Cool, Band } from '../types';
+import type { Cool, Band, ConstraintViolation } from '../types';
 
 interface CoolSectionProps {
   cool: Cool;
@@ -19,6 +19,8 @@ interface CoolSectionProps {
   previousCoolEndTime?: string; // 前のクールの終了時刻（デフォルト値として使用）
   nextCoolStartTime?: string; // 次のクールの開始時刻（警告表示用）
   dailyStartTime: string; // その日の開始時刻（最小値として使用）
+  violations?: ConstraintViolation[]; // このクール内の制約違反
+  bandNumbers: Map<string, number>; // エントリーIDとバンド番号のマッピング
 }
 
 export const CoolSection = ({ 
@@ -37,6 +39,8 @@ export const CoolSection = ({
   previousCoolEndTime,
   nextCoolStartTime,
   dailyStartTime,
+  violations = [],
+  bandNumbers,
 }: CoolSectionProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [startTimeInput, setStartTimeInput] = useState(cool.startTime || '');
@@ -254,6 +258,7 @@ export const CoolSection = ({
         <table className="w-full">
           <thead className="bg-gray-650">
             <tr>
+              <th className="px-3 py-2 text-center text-sm font-semibold w-16">#</th>
               <th className="px-4 py-2 text-left text-sm font-semibold w-24">開始</th>
               <th className="px-4 py-2 text-left text-sm font-semibold w-24">終了</th>
               <th className="px-4 py-2 text-left text-sm font-semibold w-20">時間</th>
@@ -264,7 +269,7 @@ export const CoolSection = ({
           <tbody>
             {cool.entries.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                   バンドをドラッグ＆ドロップで配置
                 </td>
               </tr>
@@ -278,6 +283,12 @@ export const CoolSection = ({
                   // これにより、バンド情報が変更されるとkeyが変わり、コンポーネントが再マウントされる
                   const rowKey = `${entry.id}-${bandsSignature}`;
                   
+                  // このエントリーの制約違反をフィルタ
+                  const entryViolations = violations.filter(v => v.entryId === entry.id);
+                  
+                  // このエントリーのバンド番号を取得
+                  const bandNumber = bandNumbers.get(entry.id);
+                  
                   return (
                     <SortableTimetableRow
                       key={rowKey}
@@ -288,6 +299,8 @@ export const CoolSection = ({
                       onRemove={() => onRemoveEntry(entry.id)}
                       isReadOnly={isReadOnly}
                       onTransitionTimeChange={onTransitionTimeChange}
+                      violations={entryViolations}
+                      bandNumber={bandNumber}
                     />
                   );
                 })}

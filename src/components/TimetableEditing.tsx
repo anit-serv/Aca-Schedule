@@ -18,6 +18,7 @@ import { BandBankDropZone } from './BandBankDropZone';
 import { useCoolManagement } from '../hooks/useCoolManagement';
 import { useTimetableDragDrop } from '../hooks/useTimetableDragDrop';
 import { useTimetableHelpers } from '../hooks/useTimetableHelpers';
+import { useConstraintCheck } from '../hooks/useConstraintCheck';
 
 interface TimetableEditingProps {
   bands: Band[];
@@ -42,6 +43,7 @@ export const TimetableEditing = ({
   const [overEntryId, setOverEntryId] = useState<string | null>(null);
   const [inputCoolCount, setInputCoolCount] = useState<string>('1');
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
+  const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
 
   // カスタムイベントが変更されたらeventSettingsを更新
   useEffect(() => {
@@ -121,6 +123,43 @@ export const TimetableEditing = ({
     rehearsalTimetable,
     selectedDate,
   });
+
+  // バンド番号の計算（本番/リハごとに、日付をまたいで連番）
+  const bandNumbers = useMemo(() => {
+    const numbers = new Map<string, number>();
+    
+    if (!timetable) return numbers;
+    
+    let bandCounter = 1;
+    
+    // 全ての日付のタイムテーブルを順番に処理
+    timetable.dailyTimetables
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .forEach(dailyTimetable => {
+        if (dailyTimetable.cools && dailyTimetable.cools.length > 0) {
+          // クール構造の場合
+          dailyTimetable.cools.forEach(cool => {
+            cool.entries.forEach(entry => {
+              if (entry.type === 'band') {
+                numbers.set(entry.id, bandCounter++);
+              }
+            });
+          });
+        } else {
+          // フラット構造の場合
+          dailyTimetable.entries.forEach(entry => {
+            if (entry.type === 'band') {
+              numbers.set(entry.id, bandCounter++);
+            }
+          });
+        }
+      });
+    
+    return numbers;
+  }, [timetable]);
+
+  // 制約チェック（bandNumbersを使用するため、この順序が必要）
+  const violations = useConstraintCheck(currentTimetable, bands, bandNumbers);
 
   // 読み取り専用モード判定（クール直前リハーサルの場合、リハーサル編集は読み取り専用）
   const isReadOnly = timetableType === 'rehearsal' && eventSettings.rehearsalType === 'cool-pre-rehearsal';
@@ -382,9 +421,9 @@ export const TimetableEditing = ({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="space-y-4">
+      <div className="flex flex-col h-full">
         {/* タイムテーブルタイプ選択タブ */}
-        <div className="flex gap-2 border-b border-gray-700">
+        <div className="flex gap-2 border-b border-gray-700 flex-shrink-0 px-6 pt-6">
           <button
             onClick={() => handleTimetableTypeChange('performance')}
             className={`px-6 py-3 font-medium transition-colors ${
@@ -408,7 +447,7 @@ export const TimetableEditing = ({
         </div>
 
         {/* 日付選択タブ */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0 pt-2 px-6">
           {(timetableType === 'performance' 
               ? eventSettings.performanceDates 
               : (eventSettings.rehearsalType === 'cool-pre-rehearsal' || eventSettings.rehearsalType === 'day-start-rehearsal')
@@ -435,9 +474,147 @@ export const TimetableEditing = ({
         </div>
 
         {/* メインコンテンツエリア */}
-        <div className="flex h-[calc(100vh-14rem)] gap-4">
-          {/* 中央ペイン: タイムテーブル */}
-          <div className="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+        <div className="flex-1 overflow-hidden px-6 pb-6">
+          <div className="flex gap-4 h-full relative">
+            {/* 制約違反サマリーパネル - スライドメニュー */}
+            {violations.length > 0 && (
+              <>
+                {/* スライドパネル */}
+                <div 
+                  className={`fixed left-0 top-auto h-[calc(100vh-12rem)] bg-gray-800 rounded-r-lg p-4 overflow-y-auto shadow-xl border-r border-t border-b border-gray-700 transition-transform duration-300 ease-in-out z-30 ${
+                    isViolationPanelOpen ? 'translate-x-0' : '-translate-x-full'
+                  }`}
+                  style={{ width: '320px' }}
+                >
+                <h3 className="text-lg font-bold mb-3 flex items-center gap-2 whitespace-nowrap">
+                  <span className="text-yellow-400">⚠️</span>
+                  制約違反 ({(() => {
+                    const uniqueViolations = new Map<string, typeof violations[0]>();
+                    violations.forEach(v => {
+                      if (v.type === 'duplicate-in-cool') {
+                        const baseId = v.id.replace(/-ref-.*$/, '');
+                        if (!v.id.includes('-ref-')) {
+                          uniqueViolations.set(baseId, v);
+                        }
+                      } else if (v.type === 'consecutive-performance') {
+                        const baseId = v.id.replace(/-ref$/, '');
+                        if (!v.id.includes('-ref')) {
+                          uniqueViolations.set(baseId, v);
+                        }
+                      } else {
+                        uniqueViolations.set(v.id, v);
+                      }
+                    });
+                    return uniqueViolations.size;
+                  })()}件)
+                </h3>
+                <div className="space-y-2">
+                {(() => {
+                  // 一意の違反のみを抽出
+                  const uniqueViolations = new Map<string, typeof violations[0]>();
+                  violations.forEach(v => {
+                    if (v.type === 'duplicate-in-cool') {
+                      const baseId = v.id.replace(/-ref-.*$/, '');
+                      if (!v.id.includes('-ref-')) {
+                        uniqueViolations.set(baseId, v);
+                      }
+                    } else if (v.type === 'consecutive-performance') {
+                      const baseId = v.id.replace(/-ref$/, '');
+                      if (!v.id.includes('-ref')) {
+                        uniqueViolations.set(baseId, v);
+                      }
+                    } else {
+                      uniqueViolations.set(v.id, v);
+                    }
+                  });
+                  
+                  const uniqueList = Array.from(uniqueViolations.values());
+                  const highViolations = uniqueList.filter(v => v.severity === 'high');
+                  const mediumViolations = uniqueList.filter(v => v.severity === 'medium');
+                  const lowViolations = uniqueList.filter(v => v.severity === 'low');
+                  
+                  return (
+                    <>
+                      {highViolations.length > 0 && (
+                        <div className="bg-red-900/30 border border-red-700 rounded p-3">
+                          <div className="text-sm font-bold text-red-400 mb-2 flex items-center gap-1">
+                            <span>🚫</span> 重大 ({highViolations.length}件)
+                          </div>
+                          {highViolations.map((v, idx) => (
+                            <div key={idx} className="text-xs text-gray-300 mb-1">
+                              • {v.message}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {mediumViolations.length > 0 && (
+                        <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3">
+                          <div className="text-sm font-bold text-yellow-400 mb-2 flex items-center gap-1">
+                            <span>⚠️</span> 警告 ({mediumViolations.length}件)
+                          </div>
+                          {mediumViolations.map((v, idx) => (
+                            <div key={idx} className="text-xs text-gray-300 mb-1">
+                              • {v.message}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {lowViolations.length > 0 && (
+                        <div className="bg-blue-900/30 border border-blue-700 rounded p-3">
+                          <div className="text-sm font-bold text-blue-400 mb-2 flex items-center gap-1">
+                            <span>ℹ️</span> 情報 ({lowViolations.length}件)
+                          </div>
+                          {lowViolations.map((v, idx) => (
+                            <div key={idx} className="text-xs text-gray-300 mb-1">
+                              • {v.message}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+              </div>
+              
+              {/* 取っ手部分 - パネル右上に小さく配置 */}
+              <button
+                onClick={() => setIsViolationPanelOpen(!isViolationPanelOpen)}
+                className={`fixed top-auto bg-yellow-900/70 hover:bg-yellow-900/90 transition-all duration-300 ease-in-out rounded-r-lg shadow-lg border-r-2 border-t-2 border-b-2 border-yellow-700 z-30 ${
+                  isViolationPanelOpen ? 'left-[320px]' : 'left-0'
+                }`}
+                title={isViolationPanelOpen ? "制約違反を閉じる" : "制約違反を表示"}
+              >
+                <div className="px-1.5 py-2 flex flex-col items-center gap-1">
+                  <span className="text-base">⚠️</span>
+                  <span className="text-[10px] font-bold text-yellow-400">{(() => {
+                    const uniqueViolations = new Map<string, typeof violations[0]>();
+                    violations.forEach(v => {
+                      if (v.type === 'duplicate-in-cool') {
+                        const baseId = v.id.replace(/-ref-.*$/, '');
+                        if (!v.id.includes('-ref-')) {
+                          uniqueViolations.set(baseId, v);
+                        }
+                      } else if (v.type === 'consecutive-performance') {
+                        const baseId = v.id.replace(/-ref$/, '');
+                        if (!v.id.includes('-ref')) {
+                          uniqueViolations.set(baseId, v);
+                        }
+                      } else {
+                        uniqueViolations.set(v.id, v);
+                      }
+                    });
+                    return uniqueViolations.size;
+                  })()}</span>
+                </div>
+              </button>
+            </>
+          )}
+          
+          {/* タイムテーブルとバンドバンクのコンテナ */}
+          <div className="flex gap-4 flex-1 min-w-0" style={{ marginLeft: violations.length > 0 ? '36px' : '0' }}>
+            {/* 中央ペイン: タイムテーブル */}
+            <div className="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto min-w-0">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold">タイムテーブル</h3>
               <div className="flex items-center gap-4">
@@ -525,6 +702,8 @@ export const TimetableEditing = ({
                         previousCoolEndTime={previousCoolEndTime}
                         nextCoolStartTime={nextCoolStartTime}
                         dailyStartTime={currentTimetable.startTime}
+                        violations={violations.filter(v => v.coolId === cool.id)}
+                        bandNumbers={bandNumbers}
                       />
                     );
                   })}
@@ -537,6 +716,8 @@ export const TimetableEditing = ({
                 overEntryId={overEntryId}
                 onRemoveEntry={handleRemoveEntry}
                 onTransitionTimeChange={handleTransitionTimeChange}
+                violations={violations}
+                bandNumbers={bandNumbers}
               />
             )}
           </div>
@@ -550,8 +731,9 @@ export const TimetableEditing = ({
             onAddCustomEvent={handleAddCustomEvent}
             onDeleteCustomEvent={handleDeleteCustomEvent}
           />
+          </div>
         </div>
-      </div>
+        </div>
 
       {/* ドラッグオーバーレイ */}
       <DragOverlay>
@@ -571,6 +753,7 @@ export const TimetableEditing = ({
           </div>
         )}
       </DragOverlay>
+      </div>
     </DndContext>
   );
 };

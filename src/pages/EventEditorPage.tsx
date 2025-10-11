@@ -869,9 +869,9 @@ export const EventEditorPage = () => {
 
   return (
     // 全体を囲むコンテナ。ダークテーマの背景色とテキスト色を設定
-    <div className="bg-gray-900 text-white min-h-screen font-sans">
+    <div className="bg-gray-900 text-white h-screen font-sans flex flex-col overflow-hidden">
       {/* ヘッダーセクション */}
-      <header className="bg-gray-800 shadow-lg">
+      <header className="bg-gray-800 shadow-lg flex-shrink-0">
         <nav className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
           <div>
             <h1 className="text-xl font-bold">{eventSettings.name}</h1>
@@ -942,23 +942,25 @@ export const EventEditorPage = () => {
       </header>
 
       {/* メインコンテンツ */}
-      <main className="max-w-7xl mx-auto p-6">
-        {mode === 'band-management' ? (
-          <BandManagement
-            bands={bands}
-            eventSettings={eventSettings}
-            onBandsChange={handleBandsChange}
-          />
-        ) : (
-          <TimetableEditing
-            bands={bands}
-            eventSettings={eventSettings}
-            performanceTimetable={performanceTimetable}
-            rehearsalTimetable={rehearsalTimetable}
-            onPerformanceTimetableChange={handlePerformanceTimetableChange}
-            onRehearsalTimetableChange={handleRehearsalTimetableChange}
-          />
-        )}
+      <main className="flex-1 overflow-hidden">
+        <div className="h-full">
+          {mode === 'band-management' ? (
+            <BandManagement
+              bands={bands}
+              eventSettings={eventSettings}
+              onBandsChange={handleBandsChange}
+            />
+          ) : (
+            <TimetableEditing
+              bands={bands}
+              eventSettings={eventSettings}
+              performanceTimetable={performanceTimetable}
+              rehearsalTimetable={rehearsalTimetable}
+              onPerformanceTimetableChange={handlePerformanceTimetableChange}
+              onRehearsalTimetableChange={handleRehearsalTimetableChange}
+            />
+          )}
+        </div>
       </main>
 
       {/* イベント設定モーダル */}

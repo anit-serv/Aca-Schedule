@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import type { Band, TimeRange } from '../types';
+import type { Band, TimeRange, EventSettings } from '../types';
 
 interface BandAvailabilityModalProps {
   band: Band;
-  performanceDates: string[];
+  eventSettings: EventSettings;
   onClose: () => void;
   onUpdate: (availableTimeSlots: Band['availableTimeSlots']) => void;
 }
@@ -20,12 +20,37 @@ const generateTimeSlots = (): string[] => {
 
 export const BandAvailabilityModal = ({
   band,
-  performanceDates,
+  eventSettings,
   onClose,
   onUpdate,
 }: BandAvailabilityModalProps) => {
+  // 本番日とリハーサル日を結合
+  const allDates = useMemo(() => {
+    const dates: Array<{ date: string; type: 'performance' | 'rehearsal' }> = [];
+    
+    // 本番日を追加
+    eventSettings.performanceDates.forEach(date => {
+      dates.push({ date, type: 'performance' });
+    });
+    
+    // リハーサル日を追加
+    if (eventSettings.rehearsalType === 'rehearsal-day' && eventSettings.rehearsalDates) {
+      eventSettings.rehearsalDates.forEach(date => {
+        dates.push({ date, type: 'rehearsal' });
+      });
+    } else if (eventSettings.rehearsalType === 'cool-pre-rehearsal' || eventSettings.rehearsalType === 'day-start-rehearsal') {
+      // クール直前・当日開始リハの場合は本番日と同じ
+      eventSettings.performanceDates.forEach(date => {
+        dates.push({ date, type: 'rehearsal' });
+      });
+    }
+    
+    // 日付順にソート
+    return dates.sort((a, b) => a.date.localeCompare(b.date));
+  }, [eventSettings]);
+
   const [timeSlots, setTimeSlots] = useState(band.availableTimeSlots);
-  const [selectedDate, setSelectedDate] = useState(performanceDates[0] || '');
+  const [selectedDate, setSelectedDate] = useState(allDates[0]?.date || '');
   
   // ドラッグ選択の状態
   const [isDragging, setIsDragging] = useState(false);
@@ -163,14 +188,15 @@ export const BandAvailabilityModal = ({
         <div className="px-6 py-4 overflow-y-auto flex-1">
           {/* 日付選択タブ */}
           <div className="flex gap-2 mb-4 flex-wrap">
-            {performanceDates.map(date => {
+            {allDates.map(({ date, type }) => {
               const dateObj = new Date(date);
               const formattedDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
               const hasSelection = timeSlots.some(s => s.date === date && s.timeRanges.length > 0);
+              const label = type === 'rehearsal' ? 'リハ' : '本番';
               
               return (
                 <button
-                  key={date}
+                  key={`${date}-${type}`}
                   onClick={() => setSelectedDate(date)}
                   className={`px-4 py-2 rounded-md font-medium transition-colors ${
                     selectedDate === date
@@ -180,8 +206,11 @@ export const BandAvailabilityModal = ({
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
                 >
-                  {formattedDate}
-                  {hasSelection && ' ✓'}
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs opacity-70">{label}</span>
+                    <span>{formattedDate}</span>
+                  </div>
+                  {hasSelection && <span className="ml-1">✓</span>}
                 </button>
               );
             })}

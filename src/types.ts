@@ -87,3 +87,25 @@ export interface Timetable {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// 制約違反の種類
+export type ViolationType = 
+  | 'availability-exceeded' // 出演可能時間帯の超過
+  | 'duplicate-in-cool'      // 同一クール内での重複
+  | 'consecutive-performance'; // 連続出演
+
+// 制約違反の重大度
+export type ViolationSeverity = 'high' | 'medium' | 'low';
+
+// 制約違反情報
+export interface ConstraintViolation {
+  id: string; // 違反ID
+  type: ViolationType; // 違反の種類
+  severity: ViolationSeverity; // 重大度
+  entryId: string; // 該当するタイムテーブルエントリのID
+  coolId?: string; // 該当するクールのID（クール内の違反の場合）
+  date: string; // 該当する日付（ISO 8601形式）
+  message: string; // 違反の説明メッセージ
+  bandId?: string; // 該当するバンドのID
+  relatedEntryIds?: string[]; // 関連する他のエントリID（重複や連続出演の場合）
+}

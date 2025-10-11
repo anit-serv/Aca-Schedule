@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTimetableRow } from './SortableTimetableRow';
-import type { TimetableEntry, Band } from '../types';
+import type { TimetableEntry, Band, ConstraintViolation } from '../types';
 
 interface TimetableDropZoneProps {
   entries: TimetableEntry[];
@@ -10,6 +10,8 @@ interface TimetableDropZoneProps {
   overEntryId: string | null;
   onRemoveEntry: (entryId: string) => void;
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
+  violations?: ConstraintViolation[]; // 制約違反
+  bandNumbers: Map<string, number>; // エントリーIDとバンド番号のマッピング
 }
 
 export const TimetableDropZone = ({ 
@@ -17,7 +19,9 @@ export const TimetableDropZone = ({
   bands, 
   overEntryId, 
   onRemoveEntry,
-  onTransitionTimeChange
+  onTransitionTimeChange,
+  violations = [],
+  bandNumbers,
 }: TimetableDropZoneProps) => {
   const { setNodeRef } = useDroppable({
     id: 'timetable-droppable',
@@ -40,6 +44,7 @@ export const TimetableDropZone = ({
       <table className="w-full">
         <thead className="bg-gray-600 sticky top-0">
           <tr>
+            <th className="px-3 py-3 text-center text-sm font-semibold w-16">#</th>
             <th className="px-4 py-3 text-left text-sm font-semibold w-24">開始</th>
             <th className="px-4 py-3 text-left text-sm font-semibold w-24">終了</th>
             <th className="px-4 py-3 text-left text-sm font-semibold w-20">時間</th>
@@ -50,7 +55,7 @@ export const TimetableDropZone = ({
         <tbody>
           {entries.length === 0 ? (
             <tr>
-              <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
+              <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
                 右のバンドバンクからドラッグ＆ドロップでバンドを配置してください
               </td>
             </tr>
@@ -65,6 +70,13 @@ export const TimetableDropZone = ({
                 const isDropTarget = overEntryId === entryId;
                 // バンド情報が更新されたときに確実に再レンダリングするため、keyにbandsSignatureを含める
                 const rowKey = `${entry.id}-${bandsSignature}`;
+                
+                // このエントリーの制約違反をフィルタ
+                const entryViolations = violations.filter(v => v.entryId === entry.id);
+                
+                // このエントリーのバンド番号を取得
+                const bandNumber = bandNumbers.get(entry.id);
+                
                 return (
                   <SortableTimetableRow
                     key={rowKey}
@@ -74,6 +86,8 @@ export const TimetableDropZone = ({
                     isDropTarget={isDropTarget}
                     onRemove={() => onRemoveEntry(entry.id)}
                     onTransitionTimeChange={onTransitionTimeChange}
+                    violations={entryViolations}
+                    bandNumber={bandNumber}
                   />
                 );
               })}

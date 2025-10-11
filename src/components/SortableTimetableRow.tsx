@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useState, useEffect, useMemo } from 'react';
-import type { Band, TimetableEntry } from '../types';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import type { Band, TimetableEntry, ConstraintViolation } from '../types';
 
 interface SortableTimetableRowProps {
   id: string;
@@ -11,6 +11,8 @@ interface SortableTimetableRowProps {
   onRemove: () => void;
   isReadOnly?: boolean; // クール直前リハーサルなどで編集を制限
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
+  violations?: ConstraintViolation[]; // この行の制約違反リスト
+  bandNumber?: number; // バンド番号（カスタムイベントの場合はundefined）
 }
 
 export const SortableTimetableRow = ({
@@ -21,17 +23,44 @@ export const SortableTimetableRow = ({
   onRemove,
   isReadOnly = false,
   onTransitionTimeChange,
+  violations = [],
+  bandNumber,
 }: SortableTimetableRowProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
 
   const [showTransitionModal, setShowTransitionModal] = useState(false);
   const [transitionInput, setTransitionInput] = useState((entry.transitionTime || 0).toString());
+  const [tooltipStyle, setTooltipStyle] = useState<{ top?: number; bottom?: number; left: number }>({ left: 0 });
+  const iconRef = useRef<HTMLDivElement>(null);
 
   // バンド情報が更新されたときに転換時間入力をリセット
   useEffect(() => {
     setTransitionInput((entry.transitionTime || 0).toString());
   }, [entry.transitionTime]);
+
+  // ツールチップの位置を計算
+  const handleMouseEnter = () => {
+    if (iconRef.current) {
+      const rect = iconRef.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      const spaceBelow = windowHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      
+      // 下に400px以上の余裕がない場合は上に表示
+      if (spaceBelow < 400 && spaceAbove > spaceBelow) {
+        setTooltipStyle({
+          bottom: windowHeight - rect.top + 4,
+          left: rect.left,
+        });
+      } else {
+        setTooltipStyle({
+          top: rect.bottom + 4,
+          left: rect.left,
+        });
+      }
+    }
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -73,11 +102,37 @@ export const SortableTimetableRow = ({
     return performanceDuration;
   })();
 
+  // 制約違反の最も重大度の高いものを取得
+  const highestSeverityViolation = useMemo(() => {
+    if (violations.length === 0) return null;
+    
+    const severityOrder = { high: 0, medium: 1, low: 2 };
+    return violations.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])[0];
+  }, [violations]);
+
+  // 違反の重大度に応じた背景色とアイコンを取得
+  const getViolationStyle = () => {
+    if (!highestSeverityViolation) return { bgColor: '', icon: '' };
+    
+    switch (highestSeverityViolation.severity) {
+      case 'high':
+        return { bgColor: 'bg-red-900/30', icon: '🚫', iconColor: 'text-red-400' };
+      case 'medium':
+        return { bgColor: 'bg-yellow-900/30', icon: '⚠️', iconColor: 'text-yellow-400' };
+      case 'low':
+        return { bgColor: 'bg-blue-900/30', icon: 'ℹ️', iconColor: 'text-blue-400' };
+      default:
+        return { bgColor: '', icon: '', iconColor: '' };
+    }
+  };
+
+  const violationStyle = getViolationStyle();
+
   return (
     <>
       {isDropTarget && (
         <tr className="h-1">
-          <td colSpan={5} className="p-0">
+          <td colSpan={6} className="p-0">
             <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
           </td>
         </tr>
@@ -86,9 +141,15 @@ export const SortableTimetableRow = ({
         ref={setNodeRef}
         style={style}
         className={`border-b border-gray-600 hover:bg-gray-650 ${
-          isDragging ? 'bg-gray-600' : entry.type === 'custom' ? 'bg-purple-900/20' : ''
+          isDragging ? 'bg-gray-600' : 
+          violationStyle.bgColor ? violationStyle.bgColor :
+          entry.type === 'custom' ? 'bg-purple-900/20' : ''
         }`}
       >
+      {/* バンド番号列 */}
+      <td className="px-3 py-3 text-sm text-center font-semibold text-gray-300">
+        {bandNumber !== undefined ? bandNumber : ''}
+      </td>
       <td className="px-2 py-3 text-sm">
         <div className="flex items-center gap-1">
           {/* 転換時間アイコン */}
@@ -119,9 +180,38 @@ export const SortableTimetableRow = ({
           >
             ⋮⋮
           </div>
-          <div>
-            <div className={`font-medium ${entry.type === 'custom' ? 'text-purple-300' : ''}`}>
-              {bandName}
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <div className={`font-medium ${entry.type === 'custom' ? 'text-purple-300' : ''}`}>
+                {bandName}
+              </div>
+              {highestSeverityViolation && (
+                <div 
+                  ref={iconRef}
+                  className="group relative"
+                  onMouseEnter={handleMouseEnter}
+                >
+                  <span className={`text-lg ${violationStyle.iconColor}`}>
+                    {violationStyle.icon}
+                  </span>
+                  {/* ツールチップ（fixedポジショニングでスクロールコンテナの外に表示） */}
+                  <div 
+                    className="fixed hidden group-hover:block z-50 w-80"
+                    style={tooltipStyle}
+                  >
+                    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-2xl max-h-96 overflow-y-auto">
+                      <div className="text-xs font-bold mb-2 text-white">
+                        制約違反 ({violations.length}件)
+                      </div>
+                      {violations.map((violation, idx) => (
+                        <div key={idx} className="text-xs text-gray-300 mb-1 break-words">
+                          • {violation.message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             {bandMembers && bandMembers.length > 0 && (
               <div className="text-xs text-gray-400 mt-1">
@@ -151,7 +241,7 @@ export const SortableTimetableRow = ({
     {/* 転換時間設定モーダル */}
     {showTransitionModal && (
       <tr>
-        <td colSpan={5} className="p-0">
+        <td colSpan={6} className="p-0">
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
               <h3 className="text-lg font-bold mb-4">転換時間の設定</h3>
