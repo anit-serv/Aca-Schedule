@@ -67,6 +67,7 @@ export interface Cool {
   id: string;
   number: number; // クール番号（イベント全体で連番）
   entries: TimetableEntry[];
+  startTime?: string; // HH:mm形式（クールの固定開始時刻、未設定の場合は前のエントリーから継続）
 }
 
 // 日付ごとのタイムテーブル

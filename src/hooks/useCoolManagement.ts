@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { Cool, DailyTimetable, Timetable, EventSettings, TimetableEntry } from '../types';
+import type { Cool, DailyTimetable, Timetable, EventSettings } from '../types';
 
 interface UseCoolManagementProps {
   timetableType: 'performance' | 'rehearsal';
@@ -8,7 +8,7 @@ interface UseCoolManagementProps {
   currentTimetable: DailyTimetable;
   selectedDate: string;
   onTimetableChange: (timetable: DailyTimetable) => void;
-  calculateTimes: (entries: TimetableEntry[], startTime: string) => TimetableEntry[];
+  recalculateTimes: (cools: Cool[], dailyStartTime: string) => Cool[];
 }
 
 export const useCoolManagement = ({
@@ -18,7 +18,7 @@ export const useCoolManagement = ({
   currentTimetable,
   selectedDate,
   onTimetableChange,
-  calculateTimes,
+  recalculateTimes,
 }: UseCoolManagementProps) => {
   
   // 日付に基づいてクール番号の開始値を計算
@@ -47,21 +47,11 @@ export const useCoolManagement = ({
     return coolNumber;
   }, [timetable, timetableType, eventSettings]);
   
-  // クール内の時刻を再計算
+  // クール内の時刻を再計算（非推奨：代わりにrecalculateTimesを使用）
   const recalculateCoolTimes = useCallback((cools: Cool[], startTime: string): Cool[] => {
-    let currentTime = startTime;
-    
-    return cools.map((cool) => {
-      const calculatedEntries = calculateTimes(cool.entries, currentTime);
-      if (calculatedEntries.length > 0) {
-        currentTime = calculatedEntries[calculatedEntries.length - 1].endTime!;
-      }
-      return {
-        ...cool,
-        entries: calculatedEntries,
-      };
-    });
-  }, [calculateTimes]);
+    // 新しいrecalculateTimesを使用（クール開始時刻を考慮）
+    return recalculateTimes(cools, startTime);
+  }, [recalculateTimes]);
   
   // クール数を変更
   const handleCoolCountChange = useCallback((newCount: number) => {
@@ -198,51 +188,57 @@ export const useCoolManagement = ({
     console.log('[クール削除] 完了 - 後続日付の更新はApp.tsx側で実行');
   }, [currentTimetable, selectedDate, getBaseCoolNumber, recalculateCoolTimes, onTimetableChange]);
   
-  // クールを上に移動
+  // クールを上に移動（バンド配列のみを入れ替え、クール番号とstartTimeは保持）
   const handleMoveCoolUp = useCallback((coolIndex: number) => {
     if (!currentTimetable.cools || coolIndex === 0) return;
     
     const updatedCools = [...currentTimetable.cools];
-    [updatedCools[coolIndex - 1], updatedCools[coolIndex]] = 
-      [updatedCools[coolIndex], updatedCools[coolIndex - 1]];
     
-    // クール番号を再計算
-    const baseNumber = getBaseCoolNumber(selectedDate);
-    const renumberedCools = updatedCools.map((cool, index) => ({
-      ...cool,
-      number: baseNumber + index,
-    }));
+    // バンド配列(entries)のみを入れ替え
+    const tempEntries = updatedCools[coolIndex - 1].entries;
+    updatedCools[coolIndex - 1] = {
+      ...updatedCools[coolIndex - 1],
+      entries: updatedCools[coolIndex].entries,
+    };
+    updatedCools[coolIndex] = {
+      ...updatedCools[coolIndex],
+      entries: tempEntries,
+    };
     
-    const calculatedCools = recalculateCoolTimes(renumberedCools, currentTimetable.startTime);
+    // 時刻を再計算（クール番号とstartTimeはそのまま）
+    const calculatedCools = recalculateCoolTimes(updatedCools, currentTimetable.startTime);
     
     onTimetableChange({
       ...currentTimetable,
       cools: calculatedCools,
     });
-  }, [currentTimetable, selectedDate, getBaseCoolNumber, recalculateCoolTimes, onTimetableChange]);
+  }, [currentTimetable, recalculateCoolTimes, onTimetableChange]);
   
-  // クールを下に移動
+  // クールを下に移動（バンド配列のみを入れ替え、クール番号とstartTimeは保持）
   const handleMoveCoolDown = useCallback((coolIndex: number) => {
     if (!currentTimetable.cools || coolIndex === currentTimetable.cools.length - 1) return;
     
     const updatedCools = [...currentTimetable.cools];
-    [updatedCools[coolIndex], updatedCools[coolIndex + 1]] = 
-      [updatedCools[coolIndex + 1], updatedCools[coolIndex]];
     
-    // クール番号を再計算
-    const baseNumber = getBaseCoolNumber(selectedDate);
-    const renumberedCools = updatedCools.map((cool, index) => ({
-      ...cool,
-      number: baseNumber + index,
-    }));
+    // バンド配列(entries)のみを入れ替え
+    const tempEntries = updatedCools[coolIndex].entries;
+    updatedCools[coolIndex] = {
+      ...updatedCools[coolIndex],
+      entries: updatedCools[coolIndex + 1].entries,
+    };
+    updatedCools[coolIndex + 1] = {
+      ...updatedCools[coolIndex + 1],
+      entries: tempEntries,
+    };
     
-    const calculatedCools = recalculateCoolTimes(renumberedCools, currentTimetable.startTime);
+    // 時刻を再計算（クール番号とstartTimeはそのまま）
+    const calculatedCools = recalculateCoolTimes(updatedCools, currentTimetable.startTime);
     
     onTimetableChange({
       ...currentTimetable,
       cools: calculatedCools,
     });
-  }, [currentTimetable, selectedDate, getBaseCoolNumber, recalculateCoolTimes, onTimetableChange]);
+  }, [currentTimetable, recalculateCoolTimes, onTimetableChange]);
   
   return {
     getBaseCoolNumber,

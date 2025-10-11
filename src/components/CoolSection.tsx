@@ -15,6 +15,9 @@ interface CoolSectionProps {
   onMoveCoolDown: (coolIndex: number) => void;
   isReadOnly?: boolean; // クール直前リハーサルなどで編集を制限
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
+  onCoolStartTimeChange?: (coolIndex: number, startTime: string | undefined) => void;
+  nextCoolStartTime?: string; // 次のクールの開始時刻（警告表示用）
+  dailyStartTime: string; // その日の開始時刻（最小値として使用）
 }
 
 export const CoolSection = ({ 
@@ -29,12 +32,21 @@ export const CoolSection = ({
   onMoveCoolDown,
   isReadOnly = false,
   onTransitionTimeChange,
+  onCoolStartTimeChange,
+  nextCoolStartTime,
+  dailyStartTime,
 }: CoolSectionProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [startTimeInput, setStartTimeInput] = useState(cool.startTime || '');
 
   const { setNodeRef } = useDroppable({
     id: `cool-droppable-${coolIndex}`,
   });
+
+  // coolの開始時刻が変更されたら入力フィールドも更新
+  useEffect(() => {
+    setStartTimeInput(cool.startTime || '');
+  }, [cool.startTime]);
 
   // メニュー外をクリックしたときに閉じる
   useEffect(() => {
@@ -68,11 +80,112 @@ export const CoolSection = ({
     setIsMenuOpen(!isMenuOpen);
   };
 
+  const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setStartTimeInput(value);
+  };
+
+  const handleStartTimeBlur = () => {
+    if (onCoolStartTimeChange) {
+      // 空文字の場合はundefinedに変換（開始時刻未設定）
+      if (startTimeInput.trim() === '') {
+        onCoolStartTimeChange(coolIndex, undefined);
+        return;
+      }
+
+      // 開始時刻がdailyStartTimeより前でないか検証
+      const timeToMinutes = (time: string): number => {
+        const [hours, minutes] = time.split(':').map(Number);
+        return hours * 60 + minutes;
+      };
+
+      const inputMinutes = timeToMinutes(startTimeInput);
+      const minMinutes = timeToMinutes(dailyStartTime);
+
+      if (inputMinutes < minMinutes) {
+        // 最小値より前の場合は警告を表示し、元の値に戻す
+        alert(`開始時刻は${dailyStartTime}以降に設定してください。`);
+        setStartTimeInput(cool.startTime || '');
+        return;
+      }
+
+      onCoolStartTimeChange(coolIndex, startTimeInput);
+    }
+  };
+
+  const handleClearStartTime = () => {
+    setStartTimeInput('');
+    if (onCoolStartTimeChange) {
+      onCoolStartTimeChange(coolIndex, undefined);
+    }
+  };
+
+  // クールの最後のエントリーの終了時刻を取得
+  const getLastEntryEndTime = (): string | undefined => {
+    if (cool.entries.length === 0) return undefined;
+    const lastEntry = cool.entries[cool.entries.length - 1];
+    return lastEntry.endTime;
+  };
+
+  // 時刻超過警告の判定
+  const isTimeExceeded = (): boolean => {
+    if (!nextCoolStartTime) return false;
+    const lastEndTime = getLastEntryEndTime();
+    if (!lastEndTime) return false;
+    
+    // HH:mm形式の時刻を分単位に変換して比較
+    const timeToMinutes = (time: string): number => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+    
+    return timeToMinutes(lastEndTime) > timeToMinutes(nextCoolStartTime);
+  };
+
+  const showWarning = isTimeExceeded();
+
   return (
-    <div className="bg-gray-700 rounded-lg overflow-hidden">
+    <div className={`bg-gray-700 rounded-lg overflow-hidden ${showWarning ? 'ring-2 ring-red-500' : ''}`}>
       {totalCools > 1 && !isReadOnly && (
         <div className="bg-gray-600 px-4 py-2 flex justify-between items-center">
-          <div className="font-semibold">第{cool.number}クール</div>
+          <div className="flex items-center gap-4">
+            <div className="font-semibold">第{cool.number}クール</div>
+            <div className="flex items-center gap-2 text-sm">
+              <label htmlFor={`cool-start-time-${coolIndex}`} className="text-gray-300">
+                開始時刻:
+              </label>
+              <div className="flex items-center gap-1">
+                <input
+                  id={`cool-start-time-${coolIndex}`}
+                  type="time"
+                  value={startTimeInput}
+                  onChange={handleStartTimeChange}
+                  onBlur={handleStartTimeBlur}
+                  min={dailyStartTime}
+                  className="bg-gray-700 text-white px-2 py-1 rounded border border-gray-500 focus:border-blue-400 focus:outline-none"
+                  placeholder="未設定"
+                  title={`${dailyStartTime}以降の時刻を設定してください`}
+                />
+                {startTimeInput && (
+                  <button
+                    onClick={handleClearStartTime}
+                    className="text-gray-400 hover:text-white px-1 transition-colors"
+                    title="開始時刻をクリア"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {!startTimeInput && (
+                <span className="text-gray-400 text-xs">(前のクールから継続)</span>
+              )}
+              {showWarning && (
+                <span className="text-red-400 text-xs flex items-center gap-1">
+                  ⚠️ 次のクール開始時刻を超過
+                </span>
+              )}
+            </div>
+          </div>
           <div className="relative">
             <button
               onClick={handleMenuToggle}

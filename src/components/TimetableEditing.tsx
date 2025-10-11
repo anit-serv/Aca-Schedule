@@ -11,7 +11,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import type { Band, EventSettings, Timetable, DailyTimetable, Cool, CustomEvent } from '../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent } from '../types';
 import { CoolSection } from './CoolSection';
 import { TimetableDropZone } from './TimetableDropZone';
 import { BandBankDropZone } from './BandBankDropZone';
@@ -111,7 +111,7 @@ export const TimetableEditing = ({
   }, [coolCount]); // inputCoolCountを依存配列から除外（無限ループ防止）
 
   // タイムテーブルヘルパーフック
-  const { unplacedBands, calculateTimes } = useTimetableHelpers({
+  const { unplacedBands, calculateTimes, recalculateTimes } = useTimetableHelpers({
     bands,
     eventSettings,
     timetableType,
@@ -134,26 +134,10 @@ export const TimetableEditing = ({
     );
   }, [currentTimetable]);
 
-  // クール内の時刻を再計算
-  const recalculateCoolTimes = (cools: Cool[], startTime: string): Cool[] => {
-    let currentTime = startTime;
-    
-    return cools.map((cool) => {
-      const calculatedEntries = calculateTimes(cool.entries, currentTime);
-      if (calculatedEntries.length > 0) {
-        currentTime = calculatedEntries[calculatedEntries.length - 1].endTime!;
-      }
-      return {
-        ...cool,
-        entries: calculatedEntries,
-      };
-    });
-  };
-
   // 開始時刻の変更
   const handleStartTimeChange = (newStartTime: string) => {
     if (currentTimetable.cools && currentTimetable.cools.length > 0) {
-      const calculatedCools = recalculateCoolTimes(currentTimetable.cools, newStartTime);
+      const calculatedCools = recalculateTimes(currentTimetable.cools, newStartTime);
       onTimetableChange({
         ...currentTimetable,
         startTime: newStartTime,
@@ -178,7 +162,7 @@ export const TimetableEditing = ({
           entry.id === entryId ? { ...entry, transitionTime } : entry
         ),
       }));
-      const calculatedCools = recalculateCoolTimes(updatedCools, currentTimetable.startTime);
+      const calculatedCools = recalculateTimes(updatedCools, currentTimetable.startTime);
       onTimetableChange({
         ...currentTimetable,
         cools: calculatedCools,
@@ -195,6 +179,31 @@ export const TimetableEditing = ({
     }
   };
 
+  // クール開始時刻の変更
+  const handleCoolStartTimeChange = (coolIndex: number, startTime: string | undefined) => {
+    if (!currentTimetable.cools || currentTimetable.cools.length === 0) return;
+
+    const updatedCools = currentTimetable.cools.map((cool, index) => {
+      if (index === coolIndex) {
+        // startTimeがundefinedの場合、プロパティ自体を削除
+        if (startTime === undefined) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { startTime: _, ...coolWithoutStartTime } = cool;
+          return coolWithoutStartTime;
+        }
+        return { ...cool, startTime };
+      }
+      return cool;
+    });
+
+    const calculatedCools = recalculateTimes(updatedCools, currentTimetable.startTime);
+    
+    onTimetableChange({
+      ...currentTimetable,
+      cools: calculatedCools,
+    });
+  };
+
   // クール管理フック
   const {
     handleCoolCountChange,
@@ -208,7 +217,7 @@ export const TimetableEditing = ({
     currentTimetable,
     selectedDate,
     onTimetableChange,
-    calculateTimes,
+    recalculateTimes,
   });
 
   // ドラッグ&ドロップフック
@@ -226,7 +235,7 @@ export const TimetableEditing = ({
     currentTimetable,
     onTimetableChange,
     calculateTimes,
-    recalculateCoolTimes,
+    recalculateCoolTimes: recalculateTimes,
     isReadOnly,
   });
 
@@ -450,22 +459,32 @@ export const TimetableEditing = ({
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-6">
-                  {currentTimetable.cools.map((cool, coolIndex) => (
-                    <CoolSection
-                      key={cool.id}
-                      cool={cool}
-                      coolIndex={coolIndex}
-                      totalCools={currentTimetable.cools!.length}
-                      bands={bands}
-                      overEntryId={overEntryId}
-                      onRemoveEntry={(entryId) => handleRemoveEntry(entryId, coolIndex)}
-                      onDeleteCool={handleDeleteCool}
-                      onMoveCoolUp={handleMoveCoolUp}
-                      onMoveCoolDown={handleMoveCoolDown}
-                      isReadOnly={isReadOnly}
-                      onTransitionTimeChange={handleTransitionTimeChange}
-                    />
-                  ))}
+                  {currentTimetable.cools.map((cool, coolIndex) => {
+                    // 次のクールの開始時刻を取得（警告表示用）
+                    const nextCoolStartTime = coolIndex < currentTimetable.cools!.length - 1
+                      ? currentTimetable.cools![coolIndex + 1].startTime
+                      : undefined;
+
+                    return (
+                      <CoolSection
+                        key={cool.id}
+                        cool={cool}
+                        coolIndex={coolIndex}
+                        totalCools={currentTimetable.cools!.length}
+                        bands={bands}
+                        overEntryId={overEntryId}
+                        onRemoveEntry={(entryId) => handleRemoveEntry(entryId, coolIndex)}
+                        onDeleteCool={handleDeleteCool}
+                        onMoveCoolUp={handleMoveCoolUp}
+                        onMoveCoolDown={handleMoveCoolDown}
+                        isReadOnly={isReadOnly}
+                        onTransitionTimeChange={handleTransitionTimeChange}
+                        onCoolStartTimeChange={handleCoolStartTimeChange}
+                        nextCoolStartTime={nextCoolStartTime}
+                        dailyStartTime={currentTimetable.startTime}
+                      />
+                    );
+                  })}
                 </div>
               </SortableContext>
             ) : (

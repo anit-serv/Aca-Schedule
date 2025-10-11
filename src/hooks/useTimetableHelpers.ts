@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import type { Band, EventSettings, Timetable, TimetableEntry } from '../types';
+import type { Band, EventSettings, Timetable, TimetableEntry, Cool } from '../types';
 
 interface UseTimetableHelpersProps {
   bands: Band[];
@@ -193,9 +193,38 @@ export const useTimetableHelpers = ({
     });
   }, [bands, timetableType, eventSettings.rehearsalDuration]);
 
+  // クール構造を考慮した時刻再計算
+  const recalculateTimes = useCallback((cools: Cool[], dailyStartTime: string): Cool[] => {
+    if (!cools || cools.length === 0) return cools;
+
+    let currentTime = dailyStartTime;
+    
+    return cools.map((cool) => {
+      // クールに開始時刻が設定されている場合はそれを使用
+      if (cool.startTime) {
+        currentTime = cool.startTime;
+      }
+      // 未設定の場合は前のエントリーの終了時刻から継続
+
+      const updatedEntries = calculateTimes(cool.entries, currentTime);
+      
+      // 最後のエントリーの終了時刻を次のクールの開始時刻として使用
+      if (updatedEntries.length > 0) {
+        const lastEntry = updatedEntries[updatedEntries.length - 1];
+        currentTime = lastEntry.endTime || currentTime;
+      }
+
+      return {
+        ...cool,
+        entries: updatedEntries,
+      };
+    });
+  }, [calculateTimes]);
+
   return {
     bandUsageCount,
     unplacedBands,
     calculateTimes,
+    recalculateTimes,
   };
 };
