@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableTimetableRow } from './SortableTimetableRow';
 import type { Cool, Band } from '../types';
@@ -38,7 +38,7 @@ export const CoolSection = ({
 }: CoolSectionProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [startTimeInput, setStartTimeInput] = useState(cool.startTime || '');
-
+  
   const { setNodeRef } = useDroppable({
     id: `cool-droppable-${coolIndex}`,
   });
@@ -47,6 +47,19 @@ export const CoolSection = ({
   useEffect(() => {
     setStartTimeInput(cool.startTime || '');
   }, [cool.startTime]);
+
+  // bandsが更新されたときに強制的に再レンダリング
+  // このクールに関連するバンドのupdatedAtの合計をシグネチャとして使用
+  const bandsSignature = useMemo(() => {
+    const signature = cool.entries
+      .filter(entry => entry.type === 'band' && entry.bandId)
+      .map(entry => {
+        const band = bands.find(b => b.id === entry.bandId);
+        return band ? band.updatedAt.getTime() : 0;
+      })
+      .reduce((sum, time) => sum + time, 0);
+    return signature;
+  }, [bands, cool.entries]);
 
   // メニュー外をクリックしたときに閉じる
   useEffect(() => {
@@ -251,10 +264,9 @@ export const CoolSection = ({
                   const band = entry.bandId ? bands.find((b) => b.id === entry.bandId) : null;
                   const entryId = `entry-${entry.id}`;
                   const isDropTarget = overEntryId === entryId;
-                  // バンド情報が更新されたときに確実に再レンダリングするため、keyにバンド情報を含める
-                  const rowKey = band 
-                    ? `${entry.id}-${band.name}-${band.performanceDuration}-${band.updatedAt.getTime()}`
-                    : entry.id;
+                  // バンド情報が更新されたときに確実に再レンダリングするため、keyにbandsSignatureを含める
+                  // これにより、バンド情報が変更されるとkeyが変わり、コンポーネントが再マウントされる
+                  const rowKey = `${entry.id}-${bandsSignature}`;
                   
                   return (
                     <SortableTimetableRow

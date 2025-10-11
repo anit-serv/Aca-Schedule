@@ -36,16 +36,31 @@ const bandToFirestore = (band: Band, eventId: string): Omit<BandFirestore, 'id'>
 });
 
 // Firestore形式からBandに変換
-const firestoreToBand = (id: string, data: DocumentData): Band => ({
-  id,
-  name: data.name,
-  performanceDuration: data.performanceDuration,
-  performanceCount: data.performanceCount,
-  members: data.members || [],
-  availableTimeSlots: data.availableTimeSlots || [],
-  createdAt: data.createdAt?.toDate() || new Date(),
-  updatedAt: data.updatedAt?.toDate() || new Date(),
-});
+const firestoreToBand = (id: string, data: DocumentData): Band => {
+  // 常に新しいオブジェクトインスタンスを作成してReactの変更検知を確実にする
+  return {
+    id,
+    name: data.name,
+    performanceDuration: data.performanceDuration,
+    performanceCount: data.performanceCount,
+    // 配列は必ず新しいインスタンスを作成
+    members: Array.isArray(data.members) ? [...data.members] : [],
+    availableTimeSlots: Array.isArray(data.availableTimeSlots) 
+      ? data.availableTimeSlots.map((slot: { date: string; timeRanges: { startTime: string; endTime: string }[] }) => ({
+          date: slot.date,
+          timeRanges: Array.isArray(slot.timeRanges) 
+            ? slot.timeRanges.map((range: { startTime: string; endTime: string }) => ({
+                startTime: range.startTime,
+                endTime: range.endTime,
+              }))
+            : [],
+        }))
+      : [],
+    // Dateオブジェクトも必ず新しいインスタンスを作成
+    createdAt: data.createdAt?.toDate() ? new Date(data.createdAt.toDate().getTime()) : new Date(),
+    updatedAt: data.updatedAt?.toDate() ? new Date(data.updatedAt.toDate().getTime()) : new Date(),
+  };
+};
 
 // バンド管理のFirestore操作
 export const bandService = {

@@ -510,48 +510,207 @@ useEffect(() => {
 
 ---
 
+### クール開始時刻設定機能 (完了✅)
+
+#### 実装内容
+- **クール別開始時刻設定**: 各クールに固定の開始時刻を設定可能
+- **開始時刻の検証**: 本番/リハーサル開始時刻より前には設定できない
+- **開始時刻の削除**: 設定した開始時刻をクリアして前のクールから継続可能
+- **時刻超過警告**: 次のクール開始時刻を超過した場合に視覚的に警告
+
+#### 主要機能の詳細
+
+**1. クール開始時刻の設定**
+- **入力UI**: クールヘッダーに時刻入力フィールドを配置
+- **HH:mm形式**: 24時間形式での時刻入力
+- **未設定時の動作**: 前のクールの最後のバンドの終了時刻から自動的に継続
+- **最小値制限**: その日の開始時刻より前の時刻は設定不可
+
+**2. 開始時刻の削除機能**
+- **クリアボタン**: 開始時刻が設定されている場合、「✕」ボタンを表示
+- **ワンクリック削除**: ボタンをクリックで開始時刻をクリア
+- **状態表示**: 削除後は「(前のクールから継続)」と表示
+
+**3. 検証機能**
+- **JavaScript検証**: `handleStartTimeBlur`で時刻を分単位に変換して比較
+- **ユーザーフィードバック**: 無効な値の場合、アラートを表示して元の値に戻す
+- **HTML5検証**: `min`属性でブラウザレベルの検証も実装
+
+**4. 時刻超過警告**
+- **自動判定**: クールの最後のエントリーの終了時刻が次のクールの開始時刻を超過した場合
+- **視覚的警告**: 
+  - 赤い枠線（`ring-2 ring-red-500`）
+  - 警告メッセージ「⚠️ 次のクール開始時刻を超過」
+- **リアルタイム**: エントリー追加・削除時に即座に再判定
+
+**5. 時刻計算ロジックの改善**
+- **クール開始時刻優先**: `cool.startTime`が設定されている場合はそれを使用
+- **未設定時は継続**: 前のエントリーの終了時刻から自動的に継続
+- **Firestore互換性**: `startTime`が`undefined`の場合、プロパティ自体を削除
+
+**6. クール移動時の挙動**
+- **バンドのみ入れ替え**: クールを上下に移動する際、バンド配列（entries）のみを入れ替え
+- **番号と時刻は保持**: クール番号と開始時刻（startTime）は元の位置に残る
+- **意図しない変更を防止**: 各クールの開始時刻設定が意図せず変更されることを防ぐ
+
+#### 実装ファイル
+- `src/types.ts` - Cool型にstartTime?: stringを追加
+- `src/components/CoolSection.tsx` - 開始時刻入力UI、削除ボタン、警告表示
+- `src/components/TimetableEditing.tsx` - handleCoolStartTimeChange、dailyStartTimeの伝播
+- `src/hooks/useTimetableHelpers.ts` - recalculateTimes関数の追加
+- `src/hooks/useCoolManagement.ts` - クール移動時のバンドのみ入れ替えロジック
+
+#### 技術的な実装詳細
+
+**開始時刻の削除処理**:
+```typescript
+const handleCoolStartTimeChange = (coolIndex: number, startTime: string | undefined) => {
+  const updatedCools = currentTimetable.cools.map((cool, index) => {
+    if (index === coolIndex) {
+      if (startTime === undefined) {
+        // プロパティ自体を削除（Firestore互換性のため）
+        const { startTime: _, ...coolWithoutStartTime } = cool;
+        return coolWithoutStartTime;
+      }
+      return { ...cool, startTime };
+    }
+    return cool;
+  });
+};
+```
+
+**時刻計算ロジック**:
+```typescript
+const recalculateTimes = useCallback((cools: Cool[], dailyStartTime: string): Cool[] => {
+  let currentTime = dailyStartTime;
+  
+  return cools.map((cool) => {
+    // クール開始時刻が設定されている場合はそれを使用
+    if (cool.startTime) {
+      currentTime = cool.startTime;
+    }
+    // 未設定の場合は前のエントリーから継続
+    
+    const updatedEntries = calculateTimes(cool.entries, currentTime);
+    // 最後のエントリーの終了時刻を次のクールに引き継ぎ
+    if (updatedEntries.length > 0) {
+      currentTime = updatedEntries[updatedEntries.length - 1].endTime || currentTime;
+    }
+    
+    return { ...cool, entries: updatedEntries };
+  });
+}, [calculateTimes]);
+```
+
+**クール移動時のバンドのみ入れ替え**:
+```typescript
+const handleMoveCoolUp = useCallback((coolIndex: number) => {
+  const updatedCools = [...currentTimetable.cools];
+  
+  // バンド配列(entries)のみを入れ替え
+  const tempEntries = updatedCools[coolIndex - 1].entries;
+  updatedCools[coolIndex - 1] = {
+    ...updatedCools[coolIndex - 1],
+    entries: updatedCools[coolIndex].entries,
+  };
+  updatedCools[coolIndex] = {
+    ...updatedCools[coolIndex],
+    entries: tempEntries,
+  };
+  // クール番号とstartTimeはそのまま保持
+}, [currentTimetable, recalculateCoolTimes, onTimetableChange]);
+```
+
+---
+
 ## 🐛 既知の問題
 
-### 1. バンド情報の更新がタイムテーブルに反映されない（未解決🔴）
+### 1. バンド情報の更新がタイムテーブルに反映されない（解決済み✅）
 
 **問題の詳細**:
-- バンド管理画面でバンド情報（名前、演奏時間、メンバー）を変更しても、タイムテーブル編集画面に反映されない
-- バンドバンク上では正しく反映されている
-- バンドを削除した場合、タイムテーブルからは正しく削除される（この機能は正常動作）
-- 演奏時間の変更も反映されない
+- バンド管理画面でバンド情報（名前、演奏時間、メンバー）を変更しても、タイムテーブル編集画面に反映されなかった
+- バンドバンク上では正しく反映されていた
+- バンドを削除・並び替え・追加などのアクションを行うと反映された
 
-**試行した解決策**:
+**根本原因**:
+問題は2層構造になっていた：
 
-1. **`key`propにバンド情報を含める**:
-   - `CoolSection.tsx`と`TimetableDropZone.tsx`で実装
-   - `key={entry.id}-${band.name}-${band.performanceDuration}-${band.updatedAt.getTime()}`
-   - バンド情報が変更されるとkeyが変わり、Reactが強制的に再レンダリングするはず
-   - **結果**: 動作せず ❌
+1. **Firestoreデータの参照問題**:
+   - `firestoreToBand`関数で配列やDateオブジェクトを新しいインスタンスとして作成していなかった
+   - Reactの変更検知が機能しなかった
 
-2. **`useMemo`でバンド情報をメモ化**:
-   - `SortableTimetableRow.tsx`で`bandName`、`bandMembers`、`performanceDuration`を`useMemo`化
-   - 依存配列に`band`オブジェクト全体を指定
-   - バンド情報が変更されたときに再計算されるはず
-   - **結果**: 動作せず ❌
+2. **タイムテーブルの時刻計算問題**（決定的な原因）:
+   - タイムテーブルに配置されたバンドの表示時間は、**開始時刻と終了時刻の差分**から計算されていた
+   - バンドの`performanceDuration`が変更されても、**開始・終了時刻が自動的に再計算されていなかった**
+   - そのため、useMemoは正しく動作していても、実際に表示される時間は古い時刻から計算された値のままだった
 
-3. **Firestoreリアルタイムリスナーの確認**:
-   - `EventEditorPage.tsx`の`subscribeToBands`は正しく実装されている
-   - デバッグログでバンドデータの更新を確認済み
-   - `setBands()`は呼ばれている
-   - **結果**: Firestore側は正常だが、UIに反映されない ❌
+**解決策**:
 
-**考えられる原因**:
-- `useSortable`フックの内部メモ化によりpropsの変更が検知されない可能性
-- `@dnd-kit`ライブラリの制約により、ドラッグ可能な要素の再レンダリングが抑制されている
-- `band`オブジェクトの参照が変わっていない（Firestoreのデータ変換時に新しいオブジェクトが作成されていない）
-- Reactの差分検出アルゴリズムが変更を検知できていない
+1. **Firestoreデータの新しいインスタンス作成**:
+```typescript
+const firestoreToBand = (id: string, data: DocumentData): Band => {
+  return {
+    id,
+    name: data.name,
+    performanceDuration: data.performanceDuration,
+    performanceCount: data.performanceCount,
+    members: Array.isArray(data.members) ? [...data.members] : [],
+    availableTimeSlots: Array.isArray(data.availableTimeSlots) 
+      ? data.availableTimeSlots.map((slot) => ({
+          date: slot.date,
+          timeRanges: slot.timeRanges.map((range) => ({
+            startTime: range.startTime,
+            endTime: range.endTime,
+          })),
+        }))
+      : [],
+    createdAt: new Date(data.createdAt.toDate().getTime()),
+    updatedAt: new Date(data.updatedAt.toDate().getTime()),
+  };
+};
+```
 
-**次のステップ**:
-1. `firestoreToBand`関数で、必ず新しいオブジェクトインスタンスを作成するように修正
-2. `useEffect`で`band`propの変更を監視し、強制的に状態を更新
-3. `SortableTimetableRow`コンポーネントを完全に再マウントする仕組みを検討
-4. 代替案として、バンド情報を直接Firestoreから読み込む（propsで渡さない）
-5. `@dnd-kit`以外のドラッグ&ドロップライブラリへの移行を検討
+2. **バンド情報変更時の時刻自動再計算**（決定的な解決策）:
+```typescript
+// TimetableEditing.tsx
+useEffect(() => {
+  if (!currentTimetable || !bands || bands.length === 0) return;
+
+  if (currentTimetable.cools && currentTimetable.cools.length > 0) {
+    // クール構造の場合
+    const updatedCools = recalculateTimes(currentTimetable.cools, currentTimetable.startTime);
+    if (JSON.stringify(updatedCools) !== JSON.stringify(currentTimetable.cools)) {
+      onTimetableChange({
+        ...currentTimetable,
+        cools: updatedCools,
+      });
+    }
+  } else {
+    // フラット構造の場合
+    const updatedEntries = calculateTimes(currentTimetable.entries, currentTimetable.startTime);
+    if (JSON.stringify(updatedEntries) !== JSON.stringify(currentTimetable.entries)) {
+      onTimetableChange({
+        ...currentTimetable,
+        entries: updatedEntries,
+      });
+    }
+  }
+}, [bands]); // bandsの変更を監視
+```
+
+3. **補助的な改善**:
+   - `CoolSection`と`TimetableDropZone`で`bandsSignature`を計算
+   - `rowKey`に`bandsSignature`を含めることで、React keyの変更を保証
+   - `SortableTimetableRow`のuseMemo依存配列に`band`オブジェクト全体を含める
+
+**修正したファイル**:
+- `src/services/firestore.ts` (lines 38-61): `firestoreToBand`関数の完全書き直し
+- `src/components/TimetableEditing.tsx`: バンド変更監視useEffectを追加
+- `src/components/CoolSection.tsx`: bandsSignature計算とrowKeyへの反映
+- `src/components/TimetableDropZone.tsx`: 同上
+- `src/components/SortableTimetableRow.tsx`: useMemo依存配列の修正
+
+**結果**: ✅ 完全に解決！バンド情報（名前、演奏時間、メンバー）の変更が即座にタイムテーブルに反映されるようになりました。
 
 ---
 
@@ -776,7 +935,7 @@ npm run build
 - 📋 未着手: 3 マイルストーン (v0.6〜v1.0)
 
 ### 既知の問題
-- 🔴 Critical: 1 (バンド情報更新の未反映)
+- 🔴 Critical: 0
 - 🟡 Medium: 2 (クール間D&D、D&Dキャンセル)
 - 🟢 Low: 0
 

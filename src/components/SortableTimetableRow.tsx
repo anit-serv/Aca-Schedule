@@ -40,6 +40,7 @@ export const SortableTimetableRow = ({
   };
 
   // バンド情報をメモ化して、確実に最新の情報を使用
+  // band オブジェクトが変更されたときに再計算されるよう、band 自体を依存配列に含める
   const bandName = useMemo(() => {
     if (entry.type === 'band' && band) {
       return band.name;
@@ -56,8 +57,9 @@ export const SortableTimetableRow = ({
   }, [band]);
 
   const performanceDuration = useMemo(() => {
-    return band?.performanceDuration || entry.customEvent?.duration || 0;
-  }, [band?.performanceDuration, entry.customEvent?.duration]);
+    const duration = band?.performanceDuration || entry.customEvent?.duration || 0;
+    return duration;
+  }, [band, entry.customEvent?.duration]);
 
   // 開始時刻と終了時刻から実際の時間を計算
   const duration = (() => {

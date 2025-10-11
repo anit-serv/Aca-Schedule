@@ -49,6 +49,7 @@ export const TimetableEditing = ({
     // 現時点ではローカルステートのみで管理
   }, [customEvents]);
 
+
   // タイムテーブルタイプが切り替わったときに日付を適切に設定
   const handleTimetableTypeChange = (newType: 'performance' | 'rehearsal') => {
     setTimetableType(newType);
@@ -123,6 +124,33 @@ export const TimetableEditing = ({
 
   // 読み取り専用モード判定（クール直前リハーサルの場合、リハーサル編集は読み取り専用）
   const isReadOnly = timetableType === 'rehearsal' && eventSettings.rehearsalType === 'cool-pre-rehearsal';
+
+  // バンドの演奏時間が変更されたら、タイムテーブルの時刻を再計算
+  useEffect(() => {
+    if (!currentTimetable || !bands || bands.length === 0) return;
+    
+    if (currentTimetable.cools && currentTimetable.cools.length > 0) {
+      // クール構造の場合
+      const updatedCools = recalculateTimes(currentTimetable.cools, currentTimetable.startTime);
+      if (JSON.stringify(updatedCools) !== JSON.stringify(currentTimetable.cools)) {
+        onTimetableChange({
+          ...currentTimetable,
+          cools: updatedCools,
+        });
+      }
+    } else {
+      // フラット構造の場合
+      const updatedEntries = calculateTimes(currentTimetable.entries, currentTimetable.startTime);
+      if (JSON.stringify(updatedEntries) !== JSON.stringify(currentTimetable.entries)) {
+        onTimetableChange({
+          ...currentTimetable,
+          entries: updatedEntries,
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bands]); // bandsの変更のみを監視（他を含めると無限ループになる）
+
 
   // すべてのエントリーIDを取得（クール間ドラッグ＆ドロップのため）
   const allEntryIds = useMemo(() => {

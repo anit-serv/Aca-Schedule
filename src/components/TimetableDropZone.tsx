@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTimetableRow } from './SortableTimetableRow';
@@ -21,6 +22,18 @@ export const TimetableDropZone = ({
   const { setNodeRef } = useDroppable({
     id: 'timetable-droppable',
   });
+
+  // bandsが更新されたときに強制的に再レンダリング
+  // このタイムテーブルに関連するバンドのupdatedAtの合計をシグネチャとして使用
+  const bandsSignature = useMemo(() => {
+    return entries
+      .filter(entry => entry.type === 'band' && entry.bandId)
+      .map(entry => {
+        const band = bands.find(b => b.id === entry.bandId);
+        return band ? band.updatedAt.getTime() : 0;
+      })
+      .reduce((sum, time) => sum + time, 0);
+  }, [bands, entries]);
 
   return (
     <div ref={setNodeRef} className="bg-gray-700 rounded-lg overflow-hidden min-h-[400px]">
@@ -50,10 +63,8 @@ export const TimetableDropZone = ({
                 const band = entry.bandId ? bands.find((b) => b.id === entry.bandId) : null;
                 const entryId = `entry-${entry.id}`;
                 const isDropTarget = overEntryId === entryId;
-                // バンド情報が更新されたときに確実に再レンダリングするため、keyにバンド情報を含める
-                const rowKey = band 
-                  ? `${entry.id}-${band.name}-${band.performanceDuration}-${band.updatedAt.getTime()}`
-                  : entry.id;
+                // バンド情報が更新されたときに確実に再レンダリングするため、keyにbandsSignatureを含める
+                const rowKey = `${entry.id}-${bandsSignature}`;
                 return (
                   <SortableTimetableRow
                     key={rowKey}
