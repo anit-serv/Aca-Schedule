@@ -422,69 +422,123 @@ export const TimetableEditing = ({
       onDragEnd={handleDragEnd}
     >
       <div className="flex flex-col h-full">
-        {/* タイムテーブルタイプ選択タブ */}
-        <div className="flex gap-2 border-b border-gray-700 flex-shrink-0 px-6 pt-6">
-          <button
-            onClick={() => handleTimetableTypeChange('performance')}
-            className={`px-6 py-3 font-medium transition-colors ${
-              timetableType === 'performance'
-                ? 'border-b-2 border-blue-500 text-blue-500'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            本番用
-          </button>
-          <button
-            onClick={() => handleTimetableTypeChange('rehearsal')}
-            className={`px-6 py-3 font-medium transition-colors ${
-              timetableType === 'rehearsal'
-                ? 'border-b-2 border-blue-500 text-blue-500'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            リハ用
-          </button>
-        </div>
+        {/* コンテキストバー */}
+        <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-6 py-3">
+          <div className="flex items-center justify-between gap-6">
+            {/* 左側: タイムテーブルタイプ選択（セグメントコントロール）と日付選択 */}
+            <div className="flex items-center gap-4 flex-1">
+              {/* セグメントコントロール（本番用/リハ用） */}
+              <div className="inline-flex bg-gray-700 rounded-lg p-1">
+                <button
+                  onClick={() => handleTimetableTypeChange('performance')}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    timetableType === 'performance'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-300 hover:text-white'
+                  }`}
+                >
+                  本番用
+                </button>
+                <button
+                  onClick={() => handleTimetableTypeChange('rehearsal')}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    timetableType === 'rehearsal'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-300 hover:text-white'
+                  }`}
+                >
+                  リハ用
+                </button>
+              </div>
 
-        {/* 日付選択タブ */}
-        <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0 pt-2 px-6">
-          {(timetableType === 'performance' 
-              ? eventSettings.performanceDates 
-              : (eventSettings.rehearsalType === 'cool-pre-rehearsal' || eventSettings.rehearsalType === 'day-start-rehearsal')
-                ? eventSettings.performanceDates
-                : eventSettings.rehearsalDates || []
-          ).sort().map((date) => {
-            const dateObj = new Date(date);
-            const formattedDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+              {/* 日付選択ボタン */}
+              <div className="flex gap-2 overflow-x-auto">
+                {(timetableType === 'performance' 
+                    ? eventSettings.performanceDates 
+                    : (eventSettings.rehearsalType === 'cool-pre-rehearsal' || eventSettings.rehearsalType === 'day-start-rehearsal')
+                      ? eventSettings.performanceDates
+                      : eventSettings.rehearsalDates || []
+                ).sort().map((date) => {
+                  const dateObj = new Date(date);
+                  const formattedDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
 
-            return (
-              <button
-                key={date}
-                onClick={() => setSelectedDate(date)}
-                className={`px-4 py-2 rounded-md whitespace-nowrap transition-colors ${
-                  selectedDate === date
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {formattedDate}
-              </button>
-            );
-          })}
+                  return (
+                    <button
+                      key={date}
+                      onClick={() => setSelectedDate(date)}
+                      className={`px-3 py-1.5 text-sm rounded-md whitespace-nowrap transition-colors ${
+                        selectedDate === date
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {formattedDate}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 右側: 開始時刻とクール数 */}
+            <div className="flex items-center gap-4">
+              {/* 開始時刻 */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="startTime" className="text-sm text-gray-400 whitespace-nowrap">
+                  開始時刻:
+                </label>
+                <input
+                  id="startTime"
+                  type="time"
+                  value={currentTimetable.startTime}
+                  onChange={(e) => handleStartTimeChange(e.target.value)}
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm"
+                />
+              </div>
+
+              {/* クール数 */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="coolCount" className="text-sm text-gray-400 whitespace-nowrap">
+                  クール数:
+                </label>
+                <input
+                  id="coolCount"
+                  type="number"
+                  min="0"
+                  max="20"
+                  value={inputCoolCount}
+                  onChange={(e) => setInputCoolCount(e.target.value)}
+                  onBlur={() => handleCoolCountChange(Number(inputCoolCount))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleCoolCountChange(Number(inputCoolCount));
+                    }
+                  }}
+                  disabled={isReadOnly}
+                  className={`w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-center ${
+                    isReadOnly ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* メインコンテンツエリア */}
-        <div className="flex-1 overflow-hidden px-6 pb-6">
+        <div className="flex-1 overflow-hidden px-6 pb-6 pt-4">
           <div className="flex gap-4 h-full relative">
             {/* 制約違反サマリーパネル - スライドメニュー */}
             {violations.length > 0 && (
               <>
                 {/* スライドパネル */}
                 <div 
-                  className={`fixed left-0 top-auto h-[calc(100vh-12rem)] bg-gray-800 rounded-r-lg p-4 overflow-y-auto shadow-xl border-r border-t border-b border-gray-700 transition-transform duration-300 ease-in-out z-30 ${
+                  className={`fixed left-0 bg-gray-800 rounded-r-lg p-4 overflow-y-auto shadow-xl border-r border-t border-b border-gray-700 transition-transform duration-300 ease-in-out z-30 ${
                     isViolationPanelOpen ? 'translate-x-0' : '-translate-x-full'
                   }`}
-                  style={{ width: '320px' }}
+                  style={{ 
+                    width: '320px',
+                    top: '8.5rem', // グローバルヘッダー(4rem) + コンテキストバー(約4.5rem)
+                    height: 'calc(100vh - 8.5rem - 1.5rem)' // 画面高さ - 上部 - 下部マージン
+                  }}
                 >
                 <h3 className="text-lg font-bold mb-3 flex items-center gap-2 whitespace-nowrap">
                   <span className="text-yellow-400">⚠️</span>
@@ -580,9 +634,12 @@ export const TimetableEditing = ({
               {/* 取っ手部分 - パネル右上に小さく配置 */}
               <button
                 onClick={() => setIsViolationPanelOpen(!isViolationPanelOpen)}
-                className={`fixed top-auto bg-yellow-900/70 hover:bg-yellow-900/90 transition-all duration-300 ease-in-out rounded-r-lg shadow-lg border-r-2 border-t-2 border-b-2 border-yellow-700 z-30 ${
+                className={`fixed bg-yellow-900/70 hover:bg-yellow-900/90 transition-all duration-300 ease-in-out rounded-r-lg shadow-lg border-r-2 border-t-2 border-b-2 border-yellow-700 z-30 ${
                   isViolationPanelOpen ? 'left-[320px]' : 'left-0'
                 }`}
+                style={{ 
+                  top: '9rem' // グローバルヘッダー + コンテキストバー + 少しマージン
+                }}
                 title={isViolationPanelOpen ? "制約違反を閉じる" : "制約違反を表示"}
               >
                 <div className="px-1.5 py-2 flex flex-col items-center gap-1">
@@ -615,51 +672,8 @@ export const TimetableEditing = ({
           <div className="flex gap-4 flex-1 min-w-0" style={{ marginLeft: violations.length > 0 ? '36px' : '0' }}>
             {/* 中央ペイン: タイムテーブル */}
             <div className="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto min-w-0">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">タイムテーブル</h3>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-400">開始時刻:</label>
-                  <input
-                    type="time"
-                    value={currentTimetable.startTime}
-                    onChange={(e) => handleStartTimeChange(e.target.value)}
-                    className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-400">クール数:</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={inputCoolCount}
-                    onChange={(e) => setInputCoolCount(e.target.value)}
-                    onBlur={(e) => {
-                      const newCount = parseInt(e.target.value) || 1;
-                      handleCoolCountChange(newCount);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const newCount = parseInt(inputCoolCount) || 1;
-                        handleCoolCountChange(newCount);
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    disabled={isReadOnly}
-                    className={`w-16 px-2 py-1 border rounded text-sm ${
-                      isReadOnly 
-                        ? 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed' 
-                        : 'bg-gray-700 border-gray-600 text-white'
-                    }`}
-                    title={isReadOnly ? 'クール直前リハーサルではクール数を変更できません' : ''}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* タイムテーブル表示 */}
-            {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
+              {/* タイムテーブル表示 */}
+              {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
               <SortableContext
                 items={allEntryIds}
                 strategy={verticalListSortingStrategy}

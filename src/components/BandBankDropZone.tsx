@@ -43,8 +43,6 @@ export const BandBankDropZone = ({
 
   return (
     <div ref={setNodeRef} className="w-80 bg-gray-800 rounded-lg p-4 overflow-y-auto">
-      <h3 className="text-lg font-bold mb-4">バンドバンク</h3>
-      
       {/* カスタムイベント追加ボタン */}
       <button
         onClick={() => setShowModal(true)}
