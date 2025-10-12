@@ -16,15 +16,12 @@ export const BandBankItem = ({
   timetableType = 'performance',
   rehearsalDuration = 0 
 }: BandBankItemProps) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id,
   });
 
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
-    : undefined;
+  // ドラッグ中はtransformを適用せず、元の位置に固定表示
+  const style = undefined;
 
   return (
     <div
@@ -33,7 +30,7 @@ export const BandBankItem = ({
       {...listeners}
       {...attributes}
       className={`bg-gray-700 border border-gray-600 rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all ${
-        isDragging ? 'opacity-50' : 'hover:bg-gray-600'
+        isDragging ? 'opacity-30' : 'hover:bg-gray-600'
       }`}
     >
       <div className="flex items-start justify-between">

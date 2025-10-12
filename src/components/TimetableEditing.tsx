@@ -9,6 +9,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  defaultDropAnimationSideEffects,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent } from '../types';
@@ -44,6 +45,7 @@ export const TimetableEditing = ({
   const [inputCoolCount, setInputCoolCount] = useState<string>('1');
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
+  const [dropSucceeded, setDropSucceeded] = useState(false);
 
   // カスタムイベントが変更されたらeventSettingsを更新
   useEffect(() => {
@@ -323,14 +325,21 @@ export const TimetableEditing = ({
   // ドラッグ開始
   const handleDragStart = (event: DragStartEvent) => {
     setActiveDragId(event.active.id as string);
+    setDropSucceeded(false); // ドラッグ開始時にリセット
   };
 
   // ドラッグ中
   const handleDragOver = (event: DragOverEvent) => {
     const { over } = event;
     
-    if (over && (over.id as string).startsWith('entry-')) {
-      setOverEntryId(over.id as string);
+    if (over) {
+      const overId = over.id as string;
+      // エントリーの前、またはクール全体（空のクールや最後の位置）にドロップできる
+      if (overId.startsWith('entry-') || overId.startsWith('cool-droppable-')) {
+        setOverEntryId(overId);
+      } else {
+        setOverEntryId(null);
+      }
     } else {
       setOverEntryId(null);
     }
@@ -358,6 +367,9 @@ export const TimetableEditing = ({
       const band = bands.find((b) => b.id === bandId);
       if (!band) return;
 
+      // ドロップ成功
+      setDropSucceeded(true);
+
       // クール分けされている場合
       if (currentTimetable.cools && currentTimetable.cools.length > 0) {
         handleBandDropToCool(bandId, overId);
@@ -380,6 +392,9 @@ export const TimetableEditing = ({
       const customEventId = activeId.replace('custom-', '');
       const customEvent = customEvents.find((ce) => ce.id === customEventId);
       if (!customEvent) return;
+
+      // ドロップ成功
+      setDropSucceeded(true);
 
       // クール分けされている場合
       if (currentTimetable.cools && currentTimetable.cools.length > 0) {
@@ -420,6 +435,7 @@ export const TimetableEditing = ({
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      autoScroll={false}
     >
       <div className="flex flex-col h-full">
         {/* コンテキストバー */}
@@ -750,7 +766,23 @@ export const TimetableEditing = ({
         </div>
 
       {/* ドラッグオーバーレイ */}
-      <DragOverlay>
+      <DragOverlay
+        dropAnimation={
+          dropSucceeded
+            ? null // ドロップ成功時はアニメーションなし
+            : {
+                duration: 250,
+                easing: 'ease',
+                sideEffects: defaultDropAnimationSideEffects({
+                  styles: {
+                    active: {
+                      opacity: '0.5',
+                    },
+                  },
+                }),
+              }
+        }
+      >
         {activeBand && (
           <div className="bg-blue-600 text-white px-4 py-3 rounded shadow-lg">
             <div className="font-semibold">{activeBand.name}</div>

@@ -12,15 +12,12 @@ export const CustomEventBankItem = ({
   customEvent,
   onDelete 
 }: CustomEventBankItemProps) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id,
   });
 
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
-    : undefined;
+  // ドラッグ中はtransformを適用せず、元の位置に固定表示
+  const style = undefined;
 
   return (
     <div
@@ -29,7 +26,7 @@ export const CustomEventBankItem = ({
       {...listeners}
       {...attributes}
       className={`bg-purple-700 border border-purple-600 rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all ${
-        isDragging ? 'opacity-50' : 'hover:bg-purple-600'
+        isDragging ? 'opacity-30' : 'hover:bg-purple-600'
       }`}
     >
       <div className="flex items-start justify-between">

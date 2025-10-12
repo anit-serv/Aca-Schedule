@@ -268,11 +268,21 @@ export const CoolSection = ({
           </thead>
           <tbody>
             {cool.entries.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  バンドをドラッグ＆ドロップで配置
-                </td>
-              </tr>
+              <>
+                {/* 空のクールの場合のドロップターゲット */}
+                {overEntryId === `cool-droppable-${coolIndex}` && (
+                  <tr className="h-1">
+                    <td colSpan={6} className="p-0">
+                      <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+                    </td>
+                  </tr>
+                )}
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                    バンドをドラッグ＆ドロップで配置
+                  </td>
+                </tr>
+              </>
             ) : (
               <>
                 {cool.entries.map((entry) => {
@@ -304,6 +314,14 @@ export const CoolSection = ({
                     />
                   );
                 })}
+                {/* クールの最後にドロップできるようにする */}
+                {overEntryId === `cool-droppable-${coolIndex}` && (
+                  <tr className="h-1">
+                    <td colSpan={6} className="p-0">
+                      <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+                    </td>
+                  </tr>
+                )}
               </>
             )}
           </tbody>
