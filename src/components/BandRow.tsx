@@ -169,7 +169,7 @@ export const BandRow = ({
       <td className="px-4 py-3">
         <button
           onClick={onOpenAvailability}
-          className="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded transition-colors"
+          className="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded transition-colors whitespace-nowrap"
         >
           {band.availableTimeSlots.length > 0
             ? `設定済み (${band.availableTimeSlots.reduce((sum, slot) => sum + slot.timeRanges.length, 0)}範囲)`
@@ -181,7 +181,7 @@ export const BandRow = ({
       <td className="px-4 py-3">
         <button
           onClick={onDelete}
-          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors whitespace-nowrap"
         >
           削除
         </button>

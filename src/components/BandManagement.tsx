@@ -43,8 +43,8 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-200 w-32">演奏時間</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-200 w-24">出演回数</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-200 min-w-[300px]">メンバー</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-200 w-32">出演可能時間帯</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-200 w-20">操作</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-200 w-44 whitespace-nowrap">出演可能時間帯</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-200 w-24">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">

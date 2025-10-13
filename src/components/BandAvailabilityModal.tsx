@@ -15,6 +15,8 @@ const generateTimeSlots = (): string[] => {
     slots.push(`${hour.toString().padStart(2, '0')}:00`);
     slots.push(`${hour.toString().padStart(2, '0')}:30`);
   }
+  // 終了時刻として24:00を追加（表示はしないが、範囲計算に必要）
+  slots.push('24:00');
   return slots;
 };
 
@@ -52,9 +54,11 @@ export const BandAvailabilityModal = ({
   const [timeSlots, setTimeSlots] = useState(band.availableTimeSlots);
   const [selectedDate, setSelectedDate] = useState(allDates[0]?.date || '');
   
-  // ドラッグ選択の状態
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragMode, setDragMode] = useState<'select' | 'deselect'>('select');
+  // 範囲選択の状態
+  const [selectionStart, setSelectionStart] = useState<string | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<string | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<'add' | 'remove'>('add'); // 追加または削除モード
   
   const allTimeSlots = useMemo(() => generateTimeSlots(), []);
 
@@ -67,6 +71,10 @@ export const BandAvailabilityModal = ({
     slot.timeRanges.forEach(range => {
       const startIdx = allTimeSlots.indexOf(range.startTime);
       const endIdx = allTimeSlots.indexOf(range.endTime);
+      
+      // インデックスが見つからない場合はスキップ
+      if (startIdx === -1 || endIdx === -1) return;
+      
       for (let i = startIdx; i < endIdx; i++) {
         selectedSet.add(allTimeSlots[i]);
       }
@@ -93,7 +101,7 @@ export const BandAvailabilityModal = ({
         const endIdx = allTimeSlots.indexOf(prevSlot) + 1;
         ranges.push({
           startTime: rangeStart,
-          endTime: allTimeSlots[endIdx] || '23:59',
+          endTime: allTimeSlots[endIdx],
         });
         rangeStart = currentSlot;
       }
@@ -104,21 +112,29 @@ export const BandAvailabilityModal = ({
     const endIdx = allTimeSlots.indexOf(prevSlot) + 1;
     ranges.push({
       startTime: rangeStart,
-      endTime: allTimeSlots[endIdx] || '23:59',
+      endTime: allTimeSlots[endIdx],
     });
     
     return ranges;
   };
 
-  // 時間スロットのトグル
-  const toggleTimeSlot = (time: string, forceMode?: 'select' | 'deselect') => {
+  // 時間スロットの範囲選択（追加）
+  const selectTimeRange = (startTime: string, endTime: string) => {
     const selectedSlots = getSelectedSlotsForDate(selectedDate);
-    const mode = forceMode || dragMode;
+    const startIdx = allTimeSlots.indexOf(startTime);
+    const endIdx = allTimeSlots.indexOf(endTime);
     
-    if (mode === 'select') {
-      selectedSlots.add(time);
-    } else {
-      selectedSlots.delete(time);
+    // インデックスが見つからない場合は何もしない
+    if (startIdx === -1 || endIdx === -1) return;
+    
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+    
+    // 範囲内のすべてのスロットを選択（24:00は除外）
+    for (let i = minIdx; i <= maxIdx; i++) {
+      if (i < allTimeSlots.length - 1) { // 24:00（最後の要素）は選択対象外
+        selectedSlots.add(allTimeSlots[i]);
+      }
     }
     
     const newTimeRanges = slotsSetToTimeRanges(selectedSlots);
@@ -127,12 +143,10 @@ export const BandAvailabilityModal = ({
     const newSlots = [...timeSlots];
     
     if (newTimeRanges.length === 0) {
-      // 選択がない場合は削除
       if (existingIndex >= 0) {
         newSlots.splice(existingIndex, 1);
       }
     } else {
-      // 選択がある場合は更新または追加
       if (existingIndex >= 0) {
         newSlots[existingIndex] = { date: selectedDate, timeRanges: newTimeRanges };
       } else {
@@ -143,25 +157,132 @@ export const BandAvailabilityModal = ({
     setTimeSlots(newSlots);
   };
 
-  // ドラッグ開始
-  const handleMouseDown = (time: string) => {
-    setIsDragging(true);
+  // 時間スロットの範囲削除
+  const deselectTimeRange = (startTime: string, endTime: string) => {
     const selectedSlots = getSelectedSlotsForDate(selectedDate);
-    const mode = selectedSlots.has(time) ? 'deselect' : 'select';
-    setDragMode(mode);
-    toggleTimeSlot(time, mode);
+    const startIdx = allTimeSlots.indexOf(startTime);
+    const endIdx = allTimeSlots.indexOf(endTime);
+    
+    // インデックスが見つからない場合は何もしない
+    if (startIdx === -1 || endIdx === -1) return;
+    
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+    
+    // 範囲内のすべてのスロットを削除（24:00は選択対象外なので削除の必要もなし）
+    for (let i = minIdx; i <= maxIdx; i++) {
+      if (i < allTimeSlots.length - 1) { // 24:00（最後の要素）は選択対象外
+        selectedSlots.delete(allTimeSlots[i]);
+      }
+    }
+    
+    const newTimeRanges = slotsSetToTimeRanges(selectedSlots);
+    
+    const existingIndex = timeSlots.findIndex(slot => slot.date === selectedDate);
+    const newSlots = [...timeSlots];
+    
+    if (newTimeRanges.length === 0) {
+      if (existingIndex >= 0) {
+        newSlots.splice(existingIndex, 1);
+      }
+    } else {
+      if (existingIndex >= 0) {
+        newSlots[existingIndex] = { date: selectedDate, timeRanges: newTimeRanges };
+      } else {
+        newSlots.push({ date: selectedDate, timeRanges: newTimeRanges });
+      }
+    }
+    
+    setTimeSlots(newSlots);
   };
 
-  // ドラッグ中
+  // 単一スロットのトグル
+  const toggleSingleSlot = (time: string) => {
+    const selectedSlots = getSelectedSlotsForDate(selectedDate);
+    
+    if (selectedSlots.has(time)) {
+      selectedSlots.delete(time);
+    } else {
+      selectedSlots.add(time);
+    }
+    
+    const newTimeRanges = slotsSetToTimeRanges(selectedSlots);
+    
+    const existingIndex = timeSlots.findIndex(slot => slot.date === selectedDate);
+    const newSlots = [...timeSlots];
+    
+    if (newTimeRanges.length === 0) {
+      if (existingIndex >= 0) {
+        newSlots.splice(existingIndex, 1);
+      }
+    } else {
+      if (existingIndex >= 0) {
+        newSlots[existingIndex] = { date: selectedDate, timeRanges: newTimeRanges };
+      } else {
+        newSlots.push({ date: selectedDate, timeRanges: newTimeRanges });
+      }
+    }
+    
+    setTimeSlots(newSlots);
+  };
+
+  // 選択開始
+  const handleMouseDown = (time: string) => {
+    const selectedSlots = getSelectedSlotsForDate(selectedDate);
+    const isAlreadySelected = selectedSlots.has(time);
+    
+    // 既に選択されている場合は削除モード、そうでない場合は追加モード
+    setSelectionMode(isAlreadySelected ? 'remove' : 'add');
+    setSelectionStart(time);
+    setSelectionEnd(time);
+    setIsSelecting(true);
+  };
+
+  // 選択範囲の更新
   const handleMouseEnter = (time: string) => {
-    if (isDragging) {
-      toggleTimeSlot(time, dragMode);
+    if (isSelecting && selectionStart) {
+      setSelectionEnd(time);
     }
   };
 
-  // ドラッグ終了
+  // 選択確定
   const handleMouseUp = () => {
-    setIsDragging(false);
+    if (isSelecting && selectionStart && selectionEnd) {
+      // クリックのみ（ドラッグなし）の場合はトグル
+      if (selectionStart === selectionEnd) {
+        toggleSingleSlot(selectionStart);
+      } else {
+        // ドラッグした場合は範囲選択/削除
+        if (selectionMode === 'add') {
+          selectTimeRange(selectionStart, selectionEnd);
+        } else {
+          deselectTimeRange(selectionStart, selectionEnd);
+        }
+      }
+    }
+    setIsSelecting(false);
+    setSelectionStart(null);
+    setSelectionEnd(null);
+  };
+
+  // 現在の選択プレビュー範囲を取得
+  const getPreviewRange = (): Set<string> => {
+    if (!isSelecting || !selectionStart || !selectionEnd) {
+      return new Set();
+    }
+    
+    const startIdx = allTimeSlots.indexOf(selectionStart);
+    const endIdx = allTimeSlots.indexOf(selectionEnd);
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+    
+    const previewSet = new Set<string>();
+    for (let i = minIdx; i <= maxIdx; i++) {
+      if (i < allTimeSlots.length) {
+        previewSet.add(allTimeSlots[i]);
+      }
+    }
+    return previewSet;
   };
 
   const handleSave = () => {
@@ -169,6 +290,7 @@ export const BandAvailabilityModal = ({
   };
 
   const selectedSlotsForDate = getSelectedSlotsForDate(selectedDate);
+  const previewRange = getPreviewRange();
 
   return (
     <div 
@@ -181,7 +303,7 @@ export const BandAvailabilityModal = ({
             出演可能時間帯設定: {band.name || '(未設定)'}
           </h3>
           <p className="text-gray-400 text-sm mt-1">
-            ドラッグで時間帯を選択してください（複数範囲選択可）
+            クリックで選択/解除、ドラッグで範囲選択（選択済みから開始すると削除モード）
           </p>
         </div>
 
@@ -224,9 +346,22 @@ export const BandAvailabilityModal = ({
                 if (index >= 48) return null;
                 
                 const isSelected = selectedSlotsForDate.has(time);
+                const isInPreview = previewRange.has(time);
                 const hour = parseInt(time.split(':')[0]);
                 const minute = time.split(':')[1];
                 const isHourMark = minute === '00';
+                
+                // プレビュー中の色を決定
+                let bgColor = 'bg-gray-600 border-gray-500 hover:bg-gray-500';
+                if (isSelected) {
+                  bgColor = 'bg-blue-600 border-blue-500 hover:bg-blue-500';
+                }
+                if (isInPreview) {
+                  // 削除モードの場合は赤系、追加モードの場合は青系
+                  bgColor = selectionMode === 'remove' 
+                    ? 'bg-red-400 border-red-300' 
+                    : 'bg-blue-400 border-blue-300';
+                }
                 
                 return (
                   <div
@@ -235,10 +370,7 @@ export const BandAvailabilityModal = ({
                     onMouseEnter={() => handleMouseEnter(time)}
                     className={`
                       h-10 rounded cursor-pointer transition-colors border
-                      ${isSelected 
-                        ? 'bg-blue-600 border-blue-500 hover:bg-blue-500' 
-                        : 'bg-gray-600 border-gray-500 hover:bg-gray-500'
-                      }
+                      ${bgColor}
                       ${isHourMark ? 'border-2 border-gray-400' : ''}
                     `}
                     title={time}
