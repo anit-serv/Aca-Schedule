@@ -5,11 +5,12 @@ import {
   DragOverlay,
   type DragStartEvent,
   type DragOverEvent,
-  closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
   defaultDropAnimationSideEffects,
+  type CollisionDetection,
+  pointerWithin,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent } from '../types';
@@ -82,6 +83,26 @@ export const TimetableEditing = ({
       },
     })
   );
+
+  // カスタム衝突検出: タイムテーブル関連とバンドバンクのみを検出
+  const customCollisionDetection: CollisionDetection = (args) => {
+    // まずpointerWithinで大まかに候補を絞る
+    const pointerCollisions = pointerWithin(args);
+    
+    // ドロップ可能な要素のIDパターン
+    const validDropTargetPatterns = [
+      /^entry-/,                    // エントリーの前
+      /^cool-droppable-/,          // クールの最後
+      /^timetable-droppable$/,     // フラット構造の空タイムテーブル
+      /^band-bank-droppable$/,     // バンドバンク（キャンセル用）
+    ];
+    
+    // パターンに一致するもののみを返す
+    return pointerCollisions.filter(collision => {
+      const id = String(collision.id);
+      return validDropTargetPatterns.some(pattern => pattern.test(id));
+    });
+  };
 
   // 現在選択されている日のタイムテーブルを取得
   const currentTimetable = useMemo(() => {
@@ -352,16 +373,30 @@ export const TimetableEditing = ({
     setOverEntryId(null);
 
     const activeId = active.id as string;
+    
+    // デバッグ: ドロップ先のIDをコンソールに出力
+    console.log('Drag ended:', { activeId, overId: over?.id });
 
     // バンドバンクからタイムテーブルへの追加
     if (activeId.startsWith('band-')) {
+      // ドロップ先がない、またはバンドバンクの場合はキャンセル
       if (!over) return;
       
       const overId = over.id as string;
       
-      if (!overId.startsWith('entry-') && !overId.startsWith('cool-droppable-') && overId !== 'timetable-droppable') {
-        return;
-      }
+      // バンドバンクへのドロップはキャンセル
+      if (overId === 'band-bank-droppable') return;
+      
+      // タイムテーブル関連のIDのみ許可
+      // - entry-*: 既存エントリーの前に挿入
+      // - cool-droppable-*: クールの最後に追加
+      // - timetable-droppable: フラット構造の空タイムテーブルに追加（これのみ例外的に許可）
+      const isValidDropTarget = 
+        overId.startsWith('entry-') || 
+        overId.startsWith('cool-droppable-') ||
+        (overId === 'timetable-droppable' && (!currentTimetable.cools || currentTimetable.cools.length === 0) && currentTimetable.entries.length === 0);
+      
+      if (!isValidDropTarget) return;
 
       const bandId = activeId.replace('band-', '');
       const band = bands.find((b) => b.id === bandId);
@@ -381,13 +416,21 @@ export const TimetableEditing = ({
 
     // カスタムイベントをタイムテーブルへ追加
     if (activeId.startsWith('custom-')) {
+      // ドロップ先がない、またはバンドバンクの場合はキャンセル
       if (!over) return;
       
       const overId = over.id as string;
       
-      if (!overId.startsWith('entry-') && !overId.startsWith('cool-droppable-') && overId !== 'timetable-droppable') {
-        return;
-      }
+      // バンドバンクへのドロップはキャンセル
+      if (overId === 'band-bank-droppable') return;
+      
+      // タイムテーブル関連のIDのみ許可
+      const isValidDropTarget = 
+        overId.startsWith('entry-') || 
+        overId.startsWith('cool-droppable-') ||
+        (overId === 'timetable-droppable' && (!currentTimetable.cools || currentTimetable.cools.length === 0) && currentTimetable.entries.length === 0);
+      
+      if (!isValidDropTarget) return;
 
       const customEventId = activeId.replace('custom-', '');
       const customEvent = customEvents.find((ce) => ce.id === customEventId);
@@ -431,7 +474,7 @@ export const TimetableEditing = ({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={customCollisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}

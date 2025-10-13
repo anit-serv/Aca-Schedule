@@ -254,7 +254,7 @@ export const CoolSection = ({
           </div>
         </div>
       )}
-      <div ref={setNodeRef} className="min-h-[100px]">
+      <div className="min-h-[100px]">
         <table className="w-full">
           <thead className="bg-gray-650">
             <tr>
@@ -266,7 +266,7 @@ export const CoolSection = ({
               <th className="px-4 py-2 text-left text-sm font-semibold w-20">操作</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody ref={setNodeRef}>
             {cool.entries.length === 0 ? (
               <>
                 {/* 空のクールの場合のドロップターゲット */}

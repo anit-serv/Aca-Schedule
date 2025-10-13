@@ -40,8 +40,8 @@ export const TimetableDropZone = ({
   }, [bands, entries]);
 
   return (
-    <div ref={setNodeRef} className="bg-gray-700 rounded-lg overflow-hidden min-h-[400px]">
-      <table className="w-full">
+    <div className="bg-gray-700 rounded-lg overflow-hidden min-h-[400px]">
+      <table className="w-full" ref={setNodeRef}>
         <thead className="bg-gray-600 sticky top-0">
           <tr>
             <th className="px-3 py-3 text-center text-sm font-semibold w-16">#</th>
@@ -54,11 +54,21 @@ export const TimetableDropZone = ({
         </thead>
         <tbody>
           {entries.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
-                右のバンドバンクからドラッグ＆ドロップでバンドを配置してください
-              </td>
-            </tr>
+            <>
+              {/* 空のタイムテーブルの場合のドロップターゲット */}
+              {overEntryId === 'timetable-droppable' && (
+                <tr className="h-1">
+                  <td colSpan={6} className="p-0">
+                    <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+                  </td>
+                </tr>
+              )}
+              <tr>
+                <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+                  右のバンドバンクからドラッグ＆ドロップでバンドを配置してください
+                </td>
+              </tr>
+            </>
           ) : (
             <SortableContext
               items={entries.map((e) => `entry-${e.id}`)}
