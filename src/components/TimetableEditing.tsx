@@ -467,6 +467,10 @@ export const TimetableEditing = ({
     ? bands.find((b) => `band-${b.id}` === activeDragId)
     : null;
 
+  const activeCustomEvent = activeDragId?.startsWith('custom-')
+    ? customEvents.find((ce) => `custom-${ce.id}` === activeDragId)
+    : null;
+
   const activeEntry = activeDragId?.startsWith('entry-')
     ? currentTimetable.entries.find((e) => `entry-${e.id}` === activeDragId)
     : null;
@@ -830,6 +834,12 @@ export const TimetableEditing = ({
           <div className="bg-blue-600 text-white px-4 py-3 rounded shadow-lg">
             <div className="font-semibold">{activeBand.name}</div>
             <div className="text-sm">{activeBand.performanceDuration}分</div>
+          </div>
+        )}
+        {activeCustomEvent && (
+          <div className="bg-purple-600 text-white px-4 py-3 rounded shadow-lg">
+            <div className="font-semibold">{activeCustomEvent.name}</div>
+            <div className="text-sm">{activeCustomEvent.duration}分</div>
           </div>
         )}
         {activeEntry && (
