@@ -865,7 +865,7 @@ export const TimetableEditing = ({
           )}
           
           {/* タイムテーブルとバンドバンクのコンテナ */}
-          <div className="flex gap-4 flex-1 min-w-0" style={{ marginLeft: violations.length > 0 ? '36px' : '0' }}>
+          <div className="flex gap-4 flex-1 min-w-0 ml-9">
             {/* 中央ペイン: タイムテーブル（上下のパディングを削除、左右は維持） */}
             <div className="flex-1 bg-gray-800 rounded-lg px-6 overflow-y-auto min-w-0">
               {/* タイムテーブル表示 */}
