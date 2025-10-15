@@ -220,32 +220,22 @@ export const eventService = {
   async updateEvent(eventId: string, updates: Partial<EventSettings>): Promise<void> {
     const eventRef = doc(db, 'events', eventId);
     
-    // 完全なEventSettingsオブジェクトを作成（idは仮の値）
-    const fullSettings: EventSettings = {
-      id: eventId,
-      name: updates.name || '',
-      year: updates.year || 0,
-      venue: updates.venue || '',
-      goal: updates.goal || '',
-      performanceDates: updates.performanceDates || [],
-      rehearsalType: updates.rehearsalType || 'none',
-      rehearsalDates: updates.rehearsalDates,
-      rehearsalDuration: updates.rehearsalDuration,
-      presetDurations: updates.presetDurations || [],
-      customEvents: updates.customEvents,
-    };
-    
-    // Firestore形式に変換
-    const firestoreData = eventSettingsToFirestore(fullSettings);
-    
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData = firestoreData as any;
+    const updateData: any = {};
     
-    // idとcreatedAtは更新しない
-    delete updateData.id;
-    delete updateData.createdAt;
+    // 指定されたフィールドのみを更新データに含める
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.year !== undefined) updateData.year = updates.year;
+    if (updates.venue !== undefined) updateData.venue = updates.venue;
+    if (updates.goal !== undefined) updateData.goal = updates.goal;
+    if (updates.performanceDates !== undefined) updateData.performanceDates = updates.performanceDates;
+    if (updates.rehearsalType !== undefined) updateData.rehearsalType = updates.rehearsalType;
+    if (updates.rehearsalDates !== undefined) updateData.rehearsalDates = updates.rehearsalDates;
+    if (updates.rehearsalDuration !== undefined) updateData.rehearsalDuration = updates.rehearsalDuration;
+    if (updates.presetDurations !== undefined) updateData.presetDurations = updates.presetDurations;
+    if (updates.customEvents !== undefined) updateData.customEvents = updates.customEvents;
     
-    // updatedAtは更新時刻を設定
+    // updatedAtは常に更新
     updateData.updatedAt = Timestamp.now();
     
     await updateDoc(eventRef, updateData);

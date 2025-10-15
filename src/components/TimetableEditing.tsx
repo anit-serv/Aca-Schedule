@@ -18,6 +18,7 @@ import { useConstraintCheck } from '../hooks/useConstraintCheck';
 import { useDragHandlers } from '../hooks/useDragHandlers';
 import { createTimetableCollisionDetection } from '../utils/timetableCollisionDetection';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
+import { eventService } from '../services/firestore';
 
 interface TimetableEditingProps {
   bands: Band[];
@@ -42,11 +43,24 @@ export const TimetableEditing = ({
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
 
-  // カスタムイベントが変更されたらeventSettingsを更新
+  // カスタムイベントが変更されたらFirestoreのeventSettingsを更新
   useEffect(() => {
-    // TODO: eventSettingsの更新処理をここに追加
-    // 現時点ではローカルステートのみで管理
-  }, [customEvents]);
+    const updateCustomEvents = async () => {
+      try {
+        await eventService.updateEvent(eventSettings.id, {
+          customEvents: customEvents,
+        });
+        console.log('カスタムイベントを保存しました:', customEvents);
+      } catch (error) {
+        console.error('カスタムイベントの保存に失敗しました:', error);
+      }
+    };
+
+    // 初回レンダリング時は更新しない（eventSettings.customEventsと同じ内容のため）
+    if (JSON.stringify(customEvents) !== JSON.stringify(eventSettings.customEvents || [])) {
+      updateCustomEvents();
+    }
+  }, [customEvents, eventSettings.id, eventSettings.customEvents]);
 
 
   // タイムテーブルタイプが切り替わったときに日付を適切に設定
