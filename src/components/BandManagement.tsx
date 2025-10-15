@@ -22,8 +22,8 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
   } = useBandManagement(bands, eventSettings, onBandsChange);
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-6 h-full flex flex-col overflow-hidden">
+      <div className="flex justify-between items-center mb-6 flex-shrink-0">
         <h2 className="text-2xl font-bold">バンド管理</h2>
         <button
           onClick={handleAddBand}
@@ -33,8 +33,8 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
         </button>
       </div>
 
-      <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
+        <div className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full">
             <thead className="bg-gray-700 sticky top-0 z-10">
               <tr>
