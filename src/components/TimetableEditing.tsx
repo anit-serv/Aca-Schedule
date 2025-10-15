@@ -17,6 +17,7 @@ import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent } from
 import { CoolSection } from './CoolSection';
 import { TimetableDropZone } from './TimetableDropZone';
 import { BandBankDropZone } from './BandBankDropZone';
+import { CoolGapDropZone } from './CoolGapDropZone';
 import { useCoolManagement } from '../hooks/useCoolManagement';
 import { useTimetableDragDrop } from '../hooks/useTimetableDragDrop';
 import { useTimetableHelpers } from '../hooks/useTimetableHelpers';
@@ -47,6 +48,21 @@ export const TimetableEditing = ({
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
   const [dropSucceeded, setDropSucceeded] = useState(false);
+  const [currentMouseY, setCurrentMouseY] = useState<number>(0);
+
+  // バンドバンクからのドラッグの場合のみマウス位置をトラッキング
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (activeDragId && (activeDragId.startsWith('band-') || activeDragId.startsWith('custom-'))) {
+        setCurrentMouseY(e.clientY);
+      }
+    };
+
+    if (activeDragId) {
+      window.addEventListener('mousemove', handleMouseMove);
+      return () => window.removeEventListener('mousemove', handleMouseMove);
+    }
+  }, [activeDragId]);
 
   // カスタムイベントが変更されたらeventSettingsを更新
   useEffect(() => {
@@ -86,18 +102,22 @@ export const TimetableEditing = ({
 
   // カスタム衝突検出: タイムテーブル関連とバンドバンクのみを検出
   const customCollisionDetection: CollisionDetection = (args) => {
-    // まずpointerWithinで大まかに候補を絞る
+    // まずpointerWithinで正確なポインタ位置を使った衝突を検出
     const pointerCollisions = pointerWithin(args);
     
     // ドロップ可能な要素のIDパターン
     const validDropTargetPatterns = [
       /^entry-/,                    // エントリーの前
       /^cool-droppable-/,          // クールの最後
+      /^cool-header-/,             // クールのヘッダー（先頭に追加）
+      /^cool-column-header-/,      // 列ヘッダー（先頭に追加）
+      /^cool-gap-before-/,         // クールの前のギャップ
+      /^cool-gap-after-/,          // クールの後のギャップ
       /^timetable-droppable$/,     // フラット構造の空タイムテーブル
       /^band-bank-droppable$/,     // バンドバンク（キャンセル用）
     ];
     
-    // パターンに一致するもののみを返す
+    // パターンに一致するもののみを返す（上半分・下半分の判定は後で行う）
     return pointerCollisions.filter(collision => {
       const id = String(collision.id);
       return validDropTargetPatterns.some(pattern => pattern.test(id));
@@ -351,13 +371,71 @@ export const TimetableEditing = ({
 
   // ドラッグ中
   const handleDragOver = (event: DragOverEvent) => {
-    const { over } = event;
+    const { over, active } = event;
     
     if (over) {
       const overId = over.id as string;
-      // エントリーの前、またはクール全体（空のクールや最後の位置）にドロップできる
-      if (overId.startsWith('entry-') || overId.startsWith('cool-droppable-')) {
-        setOverEntryId(overId);
+      const activeId = active.id as string;
+      
+      // エントリーの場合、ドラッグ元に応じて判定方法を変える
+      if (overId.startsWith('entry-')) {
+        const overRect = over.rect;
+        
+        // バンドバンクからのドラッグの場合：マウス位置で判定
+        if (activeId.startsWith('band-') || activeId.startsWith('custom-')) {
+          if (overRect && currentMouseY > 0) {
+            const overCenter = overRect.top + overRect.height / 2;
+            
+            if (currentMouseY > overCenter) {
+              setOverEntryId(`${overId}-after`);
+            } else {
+              setOverEntryId(overId);
+            }
+          } else {
+            setOverEntryId(overId);
+          }
+        } 
+        // タイムテーブル内での並び替えの場合：要素の中心位置で判定
+        else if (activeId.startsWith('entry-')) {
+          const activeRect = active.rect.current.translated;
+          
+          if (overRect && activeRect) {
+            const activeCenter = activeRect.top + activeRect.height / 2;
+            const overCenter = overRect.top + overRect.height / 2;
+            
+            if (activeCenter > overCenter) {
+              setOverEntryId(`${overId}-after`);
+            } else {
+              setOverEntryId(overId);
+            }
+          } else {
+            setOverEntryId(overId);
+          }
+        } else {
+          setOverEntryId(overId);
+        }
+      } else if (
+        overId.startsWith('cool-droppable-') ||
+        overId.startsWith('cool-header-') ||
+        overId.startsWith('cool-column-header-') ||
+        overId.startsWith('cool-gap-before-') ||
+        overId.startsWith('cool-gap-after-')
+      ) {
+        // cool-droppableまたはcool-gap-afterの場合、そのクールに最後のエントリーがあれば、
+        // そのエントリーの-afterに変換する
+        if (overId.startsWith('cool-droppable-') || overId.startsWith('cool-gap-after-')) {
+          const coolIndex = parseInt(overId.replace(/^cool-(droppable|gap-after)-/, ''));
+          const cool = currentTimetable.cools?.[coolIndex];
+          
+          if (cool && cool.entries.length > 0) {
+            const lastEntry = cool.entries[cool.entries.length - 1];
+            setOverEntryId(`entry-${lastEntry.id}-after`);
+          } else {
+            setOverEntryId(overId);
+          }
+        } else {
+          setOverEntryId(overId);
+        }
       } else {
         setOverEntryId(null);
       }
@@ -371,6 +449,7 @@ export const TimetableEditing = ({
     const { active, over } = event;
     setActiveDragId(null);
     setOverEntryId(null);
+    setCurrentMouseY(0);
 
     const activeId = active.id as string;
     
@@ -390,10 +469,18 @@ export const TimetableEditing = ({
       // タイムテーブル関連のIDのみ許可
       // - entry-*: 既存エントリーの前に挿入
       // - cool-droppable-*: クールの最後に追加
-      // - timetable-droppable: フラット構造の空タイムテーブルに追加（これのみ例外的に許可）
+      // - cool-header-*: クールのヘッダー（そのクールの最初に追加）
+      // - cool-column-header-*: 列ヘッダー（そのクールの最初に追加）
+      // - cool-gap-before-*: クールの前のギャップ（そのクールの最初に追加）
+      // - cool-gap-after-*: クールの後のギャップ（そのクールの最後に追加）
+      // - timetable-droppable: フラット構造の空タイムテーブルに追加
       const isValidDropTarget = 
         overId.startsWith('entry-') || 
         overId.startsWith('cool-droppable-') ||
+        overId.startsWith('cool-header-') ||
+        overId.startsWith('cool-column-header-') ||
+        overId.startsWith('cool-gap-before-') ||
+        overId.startsWith('cool-gap-after-') ||
         (overId === 'timetable-droppable' && (!currentTimetable.cools || currentTimetable.cools.length === 0) && currentTimetable.entries.length === 0);
       
       if (!isValidDropTarget) return;
@@ -405,11 +492,37 @@ export const TimetableEditing = ({
       // ドロップ成功
       setDropSucceeded(true);
 
+      // クールヘッダー、列ヘッダー、またはギャップにドロップした場合の変換
+      // handleDragOverと同じロジックで変換
+      let targetDropId = overId;
+      
+      // cool-droppableまたはcool-gap-afterの場合、そのクールの最後のエントリーの後に変換
+      if (overId.startsWith('cool-droppable-') || overId.startsWith('cool-gap-after-')) {
+        const coolIndex = parseInt(overId.replace(/^cool-(droppable|gap-after)-/, ''));
+        const cool = currentTimetable.cools![coolIndex];
+        if (cool && cool.entries.length > 0) {
+          const lastEntry = cool.entries[cool.entries.length - 1];
+          targetDropId = `entry-${lastEntry.id}-after`;
+        } else {
+          // 空のクールの場合はそのまま
+          targetDropId = `cool-droppable-${coolIndex}`;
+        }
+      } else if (overId.startsWith('cool-header-') || overId.startsWith('cool-column-header-') || overId.startsWith('cool-gap-before-')) {
+        // クールヘッダー、列ヘッダー、またはクールの前のギャップにドロップ → そのクールの最初のエントリーの前
+        const coolIndex = parseInt(overId.replace(/^cool-(header|column-header|gap-before)-/, ''));
+        const cool = currentTimetable.cools![coolIndex];
+        if (cool.entries.length > 0) {
+          targetDropId = `entry-${cool.entries[0].id}`;
+        } else {
+          targetDropId = `cool-droppable-${coolIndex}`;
+        }
+      }
+
       // クール分けされている場合
       if (currentTimetable.cools && currentTimetable.cools.length > 0) {
-        handleBandDropToCool(bandId, overId);
+        handleBandDropToCool(bandId, targetDropId);
       } else {
-        handleBandDropToFlat(bandId, overId);
+        handleBandDropToFlat(bandId, targetDropId);
       }
       return;
     }
@@ -428,6 +541,10 @@ export const TimetableEditing = ({
       const isValidDropTarget = 
         overId.startsWith('entry-') || 
         overId.startsWith('cool-droppable-') ||
+        overId.startsWith('cool-header-') ||
+        overId.startsWith('cool-column-header-') ||
+        overId.startsWith('cool-gap-before-') ||
+        overId.startsWith('cool-gap-after-') ||
         (overId === 'timetable-droppable' && (!currentTimetable.cools || currentTimetable.cools.length === 0) && currentTimetable.entries.length === 0);
       
       if (!isValidDropTarget) return;
@@ -439,11 +556,37 @@ export const TimetableEditing = ({
       // ドロップ成功
       setDropSucceeded(true);
 
+      // クールヘッダー、列ヘッダー、またはギャップにドロップした場合の変換
+      // handleDragOverと同じロジックで変換
+      let targetDropId = overId;
+      
+      // cool-droppableまたはcool-gap-afterの場合、そのクールの最後のエントリーの後に変換
+      if (overId.startsWith('cool-droppable-') || overId.startsWith('cool-gap-after-')) {
+        const coolIndex = parseInt(overId.replace(/^cool-(droppable|gap-after)-/, ''));
+        const cool = currentTimetable.cools![coolIndex];
+        if (cool && cool.entries.length > 0) {
+          const lastEntry = cool.entries[cool.entries.length - 1];
+          targetDropId = `entry-${lastEntry.id}-after`;
+        } else {
+          // 空のクールの場合はそのまま
+          targetDropId = `cool-droppable-${coolIndex}`;
+        }
+      } else if (overId.startsWith('cool-header-') || overId.startsWith('cool-column-header-') || overId.startsWith('cool-gap-before-')) {
+        // クールヘッダー、列ヘッダー、またはクールの前のギャップにドロップ → そのクールの最初のエントリーの前
+        const coolIndex = parseInt(overId.replace(/^cool-(header|column-header|gap-before)-/, ''));
+        const cool = currentTimetable.cools![coolIndex];
+        if (cool.entries.length > 0) {
+          targetDropId = `entry-${cool.entries[0].id}`;
+        } else {
+          targetDropId = `cool-droppable-${coolIndex}`;
+        }
+      }
+
       // クール分けされている場合
       if (currentTimetable.cools && currentTimetable.cools.length > 0) {
-        handleCustomEventDropToCool(customEventId, overId);
+        handleCustomEventDropToCool(customEventId, targetDropId);
       } else {
-        handleCustomEventDropToFlat(customEventId, overId);
+        handleCustomEventDropToFlat(customEventId, targetDropId);
       }
       return;
     }
@@ -733,15 +876,16 @@ export const TimetableEditing = ({
           
           {/* タイムテーブルとバンドバンクのコンテナ */}
           <div className="flex gap-4 flex-1 min-w-0" style={{ marginLeft: violations.length > 0 ? '36px' : '0' }}>
-            {/* 中央ペイン: タイムテーブル */}
-            <div className="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto min-w-0">
+            {/* 中央ペイン: タイムテーブル（上下のパディングを削除、左右は維持） */}
+            <div className="flex-1 bg-gray-800 rounded-lg px-6 overflow-y-auto min-w-0">
               {/* タイムテーブル表示 */}
+              <div>
               {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
               <SortableContext
                 items={allEntryIds}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-6">
+                <div>
                   {currentTimetable.cools.map((cool, coolIndex) => {
                     // 前のクールの終了時刻を取得（デフォルト値として使用）
                     // 第1クールの場合は本番/リハーサル開始時刻を使用
@@ -761,27 +905,53 @@ export const TimetableEditing = ({
                       ? currentTimetable.cools![coolIndex + 1].startTime
                       : undefined;
 
+                    const isFirstCool = coolIndex === 0;
+                    const isLastCool = coolIndex === currentTimetable.cools!.length - 1;
+
                     return (
-                      <CoolSection
-                        key={cool.id}
-                        cool={cool}
-                        coolIndex={coolIndex}
-                        totalCools={currentTimetable.cools!.length}
-                        bands={bands}
-                        overEntryId={overEntryId}
-                        onRemoveEntry={(entryId) => handleRemoveEntry(entryId, coolIndex)}
-                        onDeleteCool={handleDeleteCool}
-                        onMoveCoolUp={handleMoveCoolUp}
-                        onMoveCoolDown={handleMoveCoolDown}
-                        isReadOnly={isReadOnly}
-                        onTransitionTimeChange={handleTransitionTimeChange}
-                        onCoolStartTimeChange={handleCoolStartTimeChange}
-                        previousCoolEndTime={previousCoolEndTime}
-                        nextCoolStartTime={nextCoolStartTime}
-                        dailyStartTime={currentTimetable.startTime}
-                        violations={violations.filter(v => v.coolId === cool.id)}
-                        bandNumbers={bandNumbers}
-                      />
+                      <div key={cool.id}>
+                        {/* クールの前のギャップ（最初のクールのみ、上部パディング付き） */}
+                        {isFirstCool && (
+                          <div className="pt-6">
+                            <CoolGapDropZone
+                              id={`cool-gap-before-${coolIndex}`}
+                            />
+                          </div>
+                        )}
+
+                        <CoolSection
+                          cool={cool}
+                          coolIndex={coolIndex}
+                          totalCools={currentTimetable.cools!.length}
+                          bands={bands}
+                          overEntryId={overEntryId}
+                          onRemoveEntry={(entryId) => handleRemoveEntry(entryId, coolIndex)}
+                          onDeleteCool={handleDeleteCool}
+                          onMoveCoolUp={handleMoveCoolUp}
+                          onMoveCoolDown={handleMoveCoolDown}
+                          isReadOnly={isReadOnly}
+                          onTransitionTimeChange={handleTransitionTimeChange}
+                          onCoolStartTimeChange={handleCoolStartTimeChange}
+                          previousCoolEndTime={previousCoolEndTime}
+                          nextCoolStartTime={nextCoolStartTime}
+                          dailyStartTime={currentTimetable.startTime}
+                          violations={violations.filter(v => v.coolId === cool.id)}
+                          bandNumbers={bandNumbers}
+                        />
+
+                        {/* クールの後のギャップ */}
+                        {!isLastCool ? (
+                          <CoolGapDropZone
+                            id={`cool-gap-after-${coolIndex}`}
+                          />
+                        ) : (
+                          <div className="pb-6">
+                            <CoolGapDropZone
+                              id={`cool-gap-after-${coolIndex}`}
+                            />
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -797,7 +967,8 @@ export const TimetableEditing = ({
                 bandNumbers={bandNumbers}
               />
             )}
-          </div>
+              </div>
+            </div>
 
           {/* 右ペイン: バンドバンク */}
           <BandBankDropZone 

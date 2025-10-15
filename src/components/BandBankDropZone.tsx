@@ -42,10 +42,8 @@ export const BandBankDropZone = ({
   };
 
   return (
-    <div 
-      ref={setNodeRef} 
-      className="w-80 bg-gray-800 rounded-lg p-4 overflow-y-auto"
-    >
+    <div className="w-80 bg-gray-800 rounded-lg overflow-y-auto">
+      <div ref={setNodeRef} className="p-4">
       {/* カスタムイベント追加ボタン */}
       <button
         onClick={() => setShowModal(true)}
@@ -146,6 +144,7 @@ export const BandBankDropZone = ({
             />
           ))
         )}
+      </div>
       </div>
     </div>
   );

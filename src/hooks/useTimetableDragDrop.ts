@@ -44,19 +44,24 @@ export const useTimetableDragDrop = ({
         entries: [...updatedCools[coolIndex].entries, newEntry],
       };
     } else if (overId.startsWith('entry-')) {
+      // entry-{id}-afterの場合の処理
+      const isAfter = overId.includes('-after');
+      const entryId = isAfter ? overId.replace('-after', '') : overId;
+      
       // 既存エントリーの位置にドロップ
       for (let coolIndex = 0; coolIndex < updatedCools.length; coolIndex++) {
-        const targetIndex = updatedCools[coolIndex].entries.findIndex((e) => `entry-${e.id}` === overId);
+        const targetIndex = updatedCools[coolIndex].entries.findIndex((e) => `entry-${e.id}` === entryId);
         if (targetIndex !== -1) {
           const newEntry: TimetableEntry = {
             id: crypto.randomUUID(),
             type: 'band',
             bandId: band.id,
-            order: targetIndex,
+            order: isAfter ? targetIndex + 1 : targetIndex,
           };
           
           const entries = [...updatedCools[coolIndex].entries];
-          entries.splice(targetIndex, 0, newEntry);
+          // -afterの場合は次の位置に挿入
+          entries.splice(isAfter ? targetIndex + 1 : targetIndex, 0, newEntry);
           updatedCools[coolIndex] = {
             ...updatedCools[coolIndex],
             entries,
@@ -122,6 +127,10 @@ export const useTimetableDragDrop = ({
   const handleEntryReorderInCools = useCallback((activeId: string, overId: string) => {
     const updatedCools = [...currentTimetable.cools!];
     
+    // -afterサフィックスの処理
+    const isAfter = overId.includes('-after');
+    const targetIdWithoutAfter = isAfter ? overId.replace('-after', '') : overId;
+    
     // 両方のエントリーがどのクールにあるか検索
     let sourceCoolIndex = -1;
     let sourceEntryIndex = -1;
@@ -131,7 +140,7 @@ export const useTimetableDragDrop = ({
     for (let i = 0; i < updatedCools.length; i++) {
       const cool = updatedCools[i];
       const sourceIdx = cool.entries.findIndex((e) => `entry-${e.id}` === activeId);
-      const targetIdx = cool.entries.findIndex((e) => `entry-${e.id}` === overId);
+      const targetIdx = cool.entries.findIndex((e) => `entry-${e.id}` === targetIdWithoutAfter);
       
       if (sourceIdx !== -1) {
         sourceCoolIndex = i;
@@ -150,10 +159,20 @@ export const useTimetableDragDrop = ({
       return;
     }
 
+    // -afterの場合は次の位置に調整
+    let adjustedTargetIndex = targetEntryIndex;
+    if (isAfter) {
+      adjustedTargetIndex = targetEntryIndex + 1;
+    }
+    
     // 同じクール内での並び替え
     if (sourceCoolIndex === targetCoolIndex) {
       const entries = [...updatedCools[sourceCoolIndex].entries];
-      const reordered = arrayMove(entries, sourceEntryIndex, targetEntryIndex);
+      // 同じクール内で後ろに移動する場合、インデックス調整
+      if (sourceEntryIndex < adjustedTargetIndex) {
+        adjustedTargetIndex -= 1;
+      }
+      const reordered = arrayMove(entries, sourceEntryIndex, adjustedTargetIndex);
       updatedCools[sourceCoolIndex] = {
         ...updatedCools[sourceCoolIndex],
         entries: reordered,
@@ -164,7 +183,7 @@ export const useTimetableDragDrop = ({
       const targetEntries = [...updatedCools[targetCoolIndex].entries];
       
       const [movedEntry] = sourceEntries.splice(sourceEntryIndex, 1);
-      targetEntries.splice(targetEntryIndex, 0, movedEntry);
+      targetEntries.splice(adjustedTargetIndex, 0, movedEntry);
       
       updatedCools[sourceCoolIndex] = {
         ...updatedCools[sourceCoolIndex],
@@ -222,19 +241,24 @@ export const useTimetableDragDrop = ({
         entries: [...updatedCools[coolIndex].entries, newEntry],
       };
     } else if (overId.startsWith('entry-')) {
+      // entry-{id}-afterの場合の処理
+      const isAfter = overId.includes('-after');
+      const entryId = isAfter ? overId.replace('-after', '') : overId;
+      
       // 既存エントリーの位置にドロップ
       for (let coolIndex = 0; coolIndex < updatedCools.length; coolIndex++) {
-        const targetIndex = updatedCools[coolIndex].entries.findIndex((e) => `entry-${e.id}` === overId);
+        const targetIndex = updatedCools[coolIndex].entries.findIndex((e) => `entry-${e.id}` === entryId);
         if (targetIndex !== -1) {
           const newEntry: TimetableEntry = {
             id: crypto.randomUUID(),
             type: 'custom',
             customEvent,
-            order: targetIndex,
+            order: isAfter ? targetIndex + 1 : targetIndex,
           };
           
           const entries = [...updatedCools[coolIndex].entries];
-          entries.splice(targetIndex, 0, newEntry);
+          // -afterの場合は次の位置に挿入
+          entries.splice(isAfter ? targetIndex + 1 : targetIndex, 0, newEntry);
           updatedCools[coolIndex] = {
             ...updatedCools[coolIndex],
             entries,

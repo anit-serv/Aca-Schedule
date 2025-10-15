@@ -7,7 +7,8 @@ interface SortableTimetableRowProps {
   id: string;
   entry: TimetableEntry;
   band: Band | null | undefined;
-  isDropTarget?: boolean;
+  isDropTarget?: boolean; // 行の前（上）にドロップ
+  isDropTargetAfter?: boolean; // 行の後（下）にドロップ
   onRemove: () => void;
   isReadOnly?: boolean; // クール直前リハーサルなどで編集を制限
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
@@ -20,6 +21,7 @@ export const SortableTimetableRow = ({
   entry,
   band,
   isDropTarget = false,
+  isDropTargetAfter = false,
   onRemove,
   isReadOnly = false,
   onTransitionTimeChange,
@@ -296,6 +298,14 @@ export const SortableTimetableRow = ({
               </div>
             </div>
           </div>
+        </td>
+      </tr>
+    )}
+    {/* 行の後ろ（下）にドロップする場合のハイライト */}
+    {isDropTargetAfter && (
+      <tr className="h-1">
+        <td colSpan={6} className="p-0">
+          <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
         </td>
       </tr>
     )}

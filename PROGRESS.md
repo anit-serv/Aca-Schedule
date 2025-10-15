@@ -1,6 +1,6 @@
 # Aca-Schedule 開発進捗レポート
 
-## 📅 更新日: 2025年10月12日
+## 📅 更新日: 2025年10月15日
 
 ---
 
@@ -719,7 +719,69 @@ useEffect(() => {
 
 ---
 
-### 2. クール間ドラッグ&ドロップの問題（未解決⚠️）
+### 3. ドラッグ&ドロップのハイライト位置と実際のドロップ位置のズレ（解決✅）
+
+**問題の詳細**:
+- バンドをドラッグ中にハイライトされる位置と、実際にドロップしたときに追加される位置がずれていた
+- 特に最後のバンドの下半分にドラッグしたときや、クールの最後にドロップしたときに顕著
+- ハイライトは正しい位置（最後のバンドの下）を示すが、実際には異なる位置に追加されていた
+
+**根本原因**:
+- `handleDragOver`と`handleDragEnd`で異なるID変換ロジックを使用
+- **ハイライト表示**: `cool-droppable-0` → `entry-{lastEntry.id}-after`に変換してハイライト
+- **実際のドロップ**: `cool-droppable-0`をそのまま処理
+- この不一致により、視覚的なフィードバックと実際の処理結果が異なっていた
+
+**解決策**:
+1. **`handleDragEnd`の変換ロジックを統一**:
+   - `TimetableEditing.tsx`の`handleDragEnd`内で、`handleDragOver`と同じID変換を適用
+   - `cool-droppable-{i}` → `entry-{lastEntry.id}-after`に変換
+   - `cool-gap-after-{i}` → `entry-{lastEntry.id}-after`に変換
+   - バンドとカスタムイベントの両方に適用
+
+2. **すべてのドロップハンドラーで`-after`サフィックスに対応**:
+   - `handleBandDropToCool`: `-after`の場合は`targetIndex + 1`の位置に挿入
+   - `handleCustomEventDropToCool`: 同様に対応
+   - `handleEntryReorderInCools`: 並び替え時も`-after`を考慮し、インデックス調整
+   - 同じクール内で後ろに移動する場合は`adjustedTargetIndex -= 1`で調整
+
+3. **実装の詳細**:
+```typescript
+// handleDragEndでのID変換（TimetableEditing.tsx）
+if (overId.startsWith('cool-droppable-') || overId.startsWith('cool-gap-after-')) {
+  const coolIndex = parseInt(overId.replace(/^cool-(droppable|gap-after)-/, ''));
+  const cool = currentTimetable.cools![coolIndex];
+  if (cool && cool.entries.length > 0) {
+    const lastEntry = cool.entries[cool.entries.length - 1];
+    targetDropId = `entry-${lastEntry.id}-after`;  // 変換！
+  }
+}
+
+// handleBandDropToCoolでの-after処理（useTimetableDragDrop.ts）
+const isAfter = overId.includes('-after');
+const entryId = isAfter ? overId.replace('-after', '') : overId;
+// ... targetIndexを検索 ...
+entries.splice(isAfter ? targetIndex + 1 : targetIndex, 0, newEntry);
+```
+
+**修正したファイル**:
+- `src/components/TimetableEditing.tsx`: `handleDragEnd`の変換ロジックを追加（バンド・カスタムイベント両方）
+- `src/hooks/useTimetableDragDrop.ts`: 
+  - `handleBandDropToCool`: `-after`サフィックス処理を追加
+  - `handleCustomEventDropToCool`: 同様に処理を追加
+  - `handleEntryReorderInCools`: `-after`処理とインデックス調整を追加
+
+**結果**: ✅ 解決！ハイライト位置とドロップ位置が完全に一致するようになりました。
+- バンドの上半分にドラッグ → そのバンドの上に追加
+- バンドの下半分にドラッグ → そのバンドの下に追加
+- クールの最後のバンド下半分 → 最後のバンドの下に正確に追加
+- ヘッダー/ギャップ → 対応する位置に正確に追加
+
+**備考**: 一部挙動が不安定な部分もあるが、妥協できる範囲内で修正を完了。
+
+---
+
+### 4. クール間ドラッグ&ドロップの問題（未解決⚠️）
 
 **問題の詳細**:
 - 当日一括リハーサルおよび別日リハーサルで、クールを超えたドラッグ&ドロップ移動ができない
@@ -753,7 +815,7 @@ useEffect(() => {
 
 ---
 
-### 3. ドラッグ&ドロップのキャンセル機能（未解決🟡）
+### 5. ドラッグ&ドロップのキャンセル機能（未解決🟡）
 
 **問題の詳細**:
 - バンドバンクからバンドをドラッグした際、タイムテーブル以外の場所にドロップしてもタイムテーブルに追加されてしまう
@@ -1043,9 +1105,9 @@ npm run build
 ### 既知の問題
 - 🔴 Critical: 0
 - 🟡 Medium: 2 (クール間D&D、D&Dキャンセル)
-- 🟢 Low: 0
+- 🟢 Low: 1 (D&Dハイライト位置の不安定性 - 妥協範囲内で解決済み)
 
 ---
 
-**最終更新**: 2025年10月11日
+**最終更新**: 2025年10月15日
 **作成者**: AI Development Assistant

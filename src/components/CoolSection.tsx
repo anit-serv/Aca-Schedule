@@ -49,6 +49,16 @@ export const CoolSection = ({
     id: `cool-droppable-${coolIndex}`,
   });
 
+  // クールヘッダー全体をドロップ可能に（先頭に追加）
+  const { setNodeRef: setHeaderRef } = useDroppable({
+    id: `cool-header-${coolIndex}`,
+  });
+
+  // 列ヘッダーをドロップ可能に
+  const { setNodeRef: setColumnHeaderRef } = useDroppable({
+    id: `cool-column-header-${coolIndex}`,
+  });
+
   // coolの開始時刻が変更されたら入力フィールドも更新
   useEffect(() => {
     setStartTimeInput(cool.startTime || '');
@@ -173,7 +183,9 @@ export const CoolSection = ({
   return (
     <div className={`bg-gray-700 rounded-lg overflow-hidden ${showWarning ? 'ring-2 ring-red-500' : ''}`}>
       {totalCools > 1 && !isReadOnly && (
-        <div className="bg-gray-600 px-4 py-2 flex justify-between items-center">
+        <div className="relative">
+          {/* クール名ヘッダーの上に表示する線は削除（ドロップ可能だがハイライトなし） */}
+          <div ref={setHeaderRef} className="bg-gray-600 px-4 py-2 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <div className="font-semibold">第{cool.number}クール</div>
             <div className="flex items-center gap-2 text-sm">
@@ -253,10 +265,11 @@ export const CoolSection = ({
             )}
           </div>
         </div>
+        </div>
       )}
-      <div className="min-h-[100px]">
+      <div className={cool.entries.length === 0 ? "min-h-[100px]" : ""}>
         <table className="w-full">
-          <thead className="bg-gray-650">
+          <thead ref={setColumnHeaderRef} className="bg-gray-650">
             <tr>
               <th className="px-3 py-2 text-center text-sm font-semibold w-16">#</th>
               <th className="px-4 py-2 text-left text-sm font-semibold w-24">開始</th>
@@ -270,7 +283,11 @@ export const CoolSection = ({
             {cool.entries.length === 0 ? (
               <>
                 {/* 空のクールの場合のドロップターゲット */}
-                {overEntryId === `cool-droppable-${coolIndex}` && (
+                {(overEntryId === `cool-droppable-${coolIndex}` ||
+                  overEntryId === `cool-header-${coolIndex}` ||
+                  overEntryId === `cool-column-header-${coolIndex}` ||
+                  overEntryId === `cool-gap-before-${coolIndex}` ||
+                  overEntryId === `cool-gap-after-${coolIndex}`) && (
                   <tr className="h-1">
                     <td colSpan={6} className="p-0">
                       <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
@@ -285,10 +302,25 @@ export const CoolSection = ({
               </>
             ) : (
               <>
-                {cool.entries.map((entry) => {
+                {cool.entries.map((entry, entryIndex) => {
                   const band = entry.bandId ? bands.find((b) => b.id === entry.bandId) : null;
                   const entryId = `entry-${entry.id}`;
                   const isDropTarget = overEntryId === entryId;
+                  const isDropTargetAfter = overEntryId === `${entryId}-after`;
+                  
+                  // クールヘッダーまたは列ヘッダー、または前のギャップにドロップした場合、最初のエントリーの前をハイライト
+                  const isFirstEntryAndHeaderDrop = entryIndex === 0 && (
+                    overEntryId === `cool-header-${coolIndex}` || 
+                    overEntryId === `cool-column-header-${coolIndex}` ||
+                    overEntryId === `cool-gap-before-${coolIndex}`
+                  );
+                  
+                  // 最後のエントリーで、cool-droppableまたはcool-gap-afterが検出された場合、最後のエントリーの後ろをハイライト
+                  const isLastEntryAndCoolEnd = entryIndex === cool.entries.length - 1 && (
+                    overEntryId === `cool-droppable-${coolIndex}` ||
+                    overEntryId === `cool-gap-after-${coolIndex}`
+                  );
+                  
                   // バンド情報が更新されたときに確実に再レンダリングするため、keyにbandsSignatureを含める
                   // これにより、バンド情報が変更されるとkeyが変わり、コンポーネントが再マウントされる
                   const rowKey = `${entry.id}-${bandsSignature}`;
@@ -305,7 +337,8 @@ export const CoolSection = ({
                       id={entryId}
                       entry={entry}
                       band={band}
-                      isDropTarget={isDropTarget}
+                      isDropTarget={isDropTarget || isFirstEntryAndHeaderDrop}
+                      isDropTargetAfter={isDropTargetAfter || isLastEntryAndCoolEnd}
                       onRemove={() => onRemoveEntry(entry.id)}
                       isReadOnly={isReadOnly}
                       onTransitionTimeChange={onTransitionTimeChange}
@@ -314,8 +347,10 @@ export const CoolSection = ({
                     />
                   );
                 })}
-                {/* クールの最後にドロップできるようにする */}
-                {overEntryId === `cool-droppable-${coolIndex}` && (
+                {/* クールの最後にドロップできるようにする（エントリーがない場合のみ表示） */}
+                {/* エントリーがある場合は最後のエントリーの-afterとして表示される */}
+                {cool.entries.length === 0 && (overEntryId === `cool-droppable-${coolIndex}` ||
+                  overEntryId === `cool-gap-after-${coolIndex}`) && (
                   <tr className="h-1">
                     <td colSpan={6} className="p-0">
                       <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
