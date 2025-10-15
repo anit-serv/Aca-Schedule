@@ -110,7 +110,7 @@ export const TimetableContextBar = ({
             <input
               id="coolCount"
               type="number"
-              min="0"
+              min="1"
               max="20"
               value={inputCoolCount}
               onChange={(e) => onCoolCountInputChange(e.target.value)}

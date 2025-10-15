@@ -105,7 +105,11 @@ export const TimetableEditing = ({
       return {
         date: selectedDate,
         startTime: '10:00',
-        cools: [],
+        cools: [{
+          id: `cool-1-${selectedDate}`,
+          number: 1,
+          entries: [],
+        }],
         entries: [],
       };
     }
@@ -123,7 +127,7 @@ export const TimetableEditing = ({
   // coolCountが変わったらinputCoolCountも同期（ただし、ユーザー入力中でない場合のみ）
   useEffect(() => {
     // 入力値が数値として同じ場合は更新しない（ユーザーが編集中の可能性）
-    const currentInputValue = parseInt(inputCoolCount) || 0;
+    const currentInputValue = parseInt(inputCoolCount) || 1;
     if (currentInputValue !== coolCount) {
       setInputCoolCount(coolCount.toString());
     }
