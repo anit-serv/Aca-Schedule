@@ -178,13 +178,16 @@ export const useTimetableDragDrop = ({
         entries: reordered,
       };
     } else {
-      // 異なるクール間での移動
+      // 異なるクール間での移動 → 元のクールから削除して、ターゲットクールに追加
       const sourceEntries = [...updatedCools[sourceCoolIndex].entries];
       const targetEntries = [...updatedCools[targetCoolIndex].entries];
       
+      // 元のクールから削除
       const [movedEntry] = sourceEntries.splice(sourceEntryIndex, 1);
+      // ターゲットクールに追加
       targetEntries.splice(adjustedTargetIndex, 0, movedEntry);
       
+      // 両方のクールを更新
       updatedCools[sourceCoolIndex] = {
         ...updatedCools[sourceCoolIndex],
         entries: sourceEntries,

@@ -12,7 +12,6 @@ import {
   type CollisionDetection,
   pointerWithin,
 } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent } from '../types';
 import { CoolSection } from './CoolSection';
 import { TimetableDropZone } from './TimetableDropZone';
@@ -234,16 +233,6 @@ export const TimetableEditing = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bands, selectedDate]); // bandsの変更と日付の切り替えを監視
 
-
-  // すべてのエントリーIDを取得（クール間ドラッグ＆ドロップのため）
-  const allEntryIds = useMemo(() => {
-    if (!currentTimetable.cools || currentTimetable.cools.length === 0) {
-      return currentTimetable.entries.map(e => `entry-${e.id}`);
-    }
-    return currentTimetable.cools.flatMap(cool => 
-      cool.entries.map(e => `entry-${e.id}`)
-    );
-  }, [currentTimetable]);
 
   // 開始時刻の変更
   const handleStartTimeChange = (newStartTime: string) => {
@@ -594,13 +583,14 @@ export const TimetableEditing = ({
     // タイムテーブル内での並び替え
     if (!over) return;
     
-    const overId = over.id as string;
+    // overEntryIdを使用して、-afterサフィックスを反映
+    const targetId = overEntryId || (over.id as string);
     
-    if (activeId.startsWith('entry-') && overId.startsWith('entry-')) {
+    if (activeId.startsWith('entry-') && targetId.startsWith('entry-')) {
       if (currentTimetable.cools && currentTimetable.cools.length > 0) {
-        handleEntryReorderInCools(activeId, overId);
+        handleEntryReorderInCools(activeId, targetId);
       } else {
-        handleEntryReorderFlat(activeId, overId);
+        handleEntryReorderFlat(activeId, targetId);
       }
     }
   };
@@ -881,10 +871,6 @@ export const TimetableEditing = ({
               {/* タイムテーブル表示 */}
               <div>
               {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
-              <SortableContext
-                items={allEntryIds}
-                strategy={verticalListSortingStrategy}
-              >
                 <div>
                   {currentTimetable.cools.map((cool, coolIndex) => {
                     // 前のクールの終了時刻を取得（デフォルト値として使用）
@@ -955,7 +941,6 @@ export const TimetableEditing = ({
                     );
                   })}
                 </div>
-              </SortableContext>
             ) : (
               <TimetableDropZone
                 entries={currentTimetable.entries}
@@ -1014,12 +999,28 @@ export const TimetableEditing = ({
           </div>
         )}
         {activeEntry && (
-          <div className="bg-gray-700 text-white px-4 py-3 rounded shadow-lg">
-            <div className="font-semibold">
-              {activeEntry.bandId
-                ? bands.find((b) => b.id === activeEntry.bandId)?.name
-                : activeEntry.customEvent?.name}
-            </div>
+          <div className="bg-gray-700 text-white px-4 py-3 rounded shadow-lg min-w-[300px]">
+            {activeEntry.type === 'band' && activeEntry.bandId ? (
+              <>
+                <div className="font-semibold">
+                  {bands.find((b) => b.id === activeEntry.bandId)?.name || '(不明)'}
+                </div>
+                <div className="text-sm text-gray-300">
+                  {bands.find((b) => b.id === activeEntry.bandId)?.performanceDuration || 0}分
+                </div>
+              </>
+            ) : activeEntry.type === 'custom' && activeEntry.customEvent ? (
+              <>
+                <div className="font-semibold text-purple-300">
+                  {activeEntry.customEvent.name}
+                </div>
+                <div className="text-sm text-gray-300">
+                  {activeEntry.customEvent.duration}分
+                </div>
+              </>
+            ) : (
+              <div className="font-semibold">(不明)</div>
+            )}
           </div>
         )}
       </DragOverlay>

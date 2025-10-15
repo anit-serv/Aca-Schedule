@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTimetableRow } from './SortableTimetableRow';
 import type { Cool, Band, ConstraintViolation } from '../types';
 
@@ -279,6 +280,10 @@ export const CoolSection = ({
               <th className="px-4 py-2 text-left text-sm font-semibold w-20">操作</th>
             </tr>
           </thead>
+          <SortableContext
+            items={cool.entries.map(e => `entry-${e.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
           <tbody ref={setNodeRef}>
             {cool.entries.length === 0 ? (
               <>
@@ -360,6 +365,7 @@ export const CoolSection = ({
               </>
             )}
           </tbody>
+          </SortableContext>
         </table>
       </div>
     </div>
