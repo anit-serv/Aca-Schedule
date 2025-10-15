@@ -216,7 +216,12 @@ export const CoolSection = ({
                   </button>
                 )}
               </div>
-              {!startTimeInput && (
+              {!startTimeInput && previousCoolEndTime && (
+                <span className="text-gray-400 text-xs">
+                  ({previousCoolEndTime} から継続)
+                </span>
+              )}
+              {!startTimeInput && !previousCoolEndTime && (
                 <span className="text-gray-400 text-xs">(前のクールから継続)</span>
               )}
               {showWarning && (

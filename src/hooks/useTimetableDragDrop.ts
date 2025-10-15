@@ -129,26 +129,57 @@ export const useTimetableDragDrop = ({
     
     // -afterサフィックスの処理
     const isAfter = overId.includes('-after');
-    const targetIdWithoutAfter = isAfter ? overId.replace('-after', '') : overId;
+    let targetIdWithoutAfter = isAfter ? overId.replace('-after', '') : overId;
+    
+    // cool-droppable-、cool-header-などの特殊なIDの処理
+    let targetCoolIndex = -1;
+    let targetEntryIndex = -1;
+    let isEmptyTarget = false;
+    
+    if (targetIdWithoutAfter.startsWith('cool-droppable-') || targetIdWithoutAfter.startsWith('cool-gap-after-')) {
+      // 空のクールの最後、またはクールの最後のギャップ
+      targetCoolIndex = parseInt(targetIdWithoutAfter.replace(/^cool-(droppable|gap-after)-/, ''));
+      const cool = updatedCools[targetCoolIndex];
+      if (cool.entries.length > 0) {
+        // エントリーがある場合は最後のエントリーの後に追加
+        targetEntryIndex = cool.entries.length - 1;
+        targetIdWithoutAfter = `entry-${cool.entries[cool.entries.length - 1].id}`;
+        // 強制的にafterモードに
+        isEmptyTarget = false;
+      } else {
+        // 空のクールの場合
+        targetEntryIndex = 0;
+        isEmptyTarget = true;
+      }
+    } else if (targetIdWithoutAfter.startsWith('cool-header-') || 
+               targetIdWithoutAfter.startsWith('cool-column-header-') || 
+               targetIdWithoutAfter.startsWith('cool-gap-before-')) {
+      // クールヘッダーまたはクールの前のギャップ → そのクールの最初に追加
+      targetCoolIndex = parseInt(targetIdWithoutAfter.replace(/^cool-(header|column-header|gap-before)-/, ''));
+      targetEntryIndex = 0;
+      isEmptyTarget = updatedCools[targetCoolIndex].entries.length === 0;
+    }
     
     // 両方のエントリーがどのクールにあるか検索
     let sourceCoolIndex = -1;
     let sourceEntryIndex = -1;
-    let targetCoolIndex = -1;
-    let targetEntryIndex = -1;
 
     for (let i = 0; i < updatedCools.length; i++) {
       const cool = updatedCools[i];
       const sourceIdx = cool.entries.findIndex((e) => `entry-${e.id}` === activeId);
-      const targetIdx = cool.entries.findIndex((e) => `entry-${e.id}` === targetIdWithoutAfter);
       
       if (sourceIdx !== -1) {
         sourceCoolIndex = i;
         sourceEntryIndex = sourceIdx;
       }
-      if (targetIdx !== -1) {
-        targetCoolIndex = i;
-        targetEntryIndex = targetIdx;
+      
+      // targetCoolIndexが未設定の場合のみentry-から検索
+      if (targetCoolIndex === -1 && targetIdWithoutAfter.startsWith('entry-')) {
+        const targetIdx = cool.entries.findIndex((e) => `entry-${e.id}` === targetIdWithoutAfter);
+        if (targetIdx !== -1) {
+          targetCoolIndex = i;
+          targetEntryIndex = targetIdx;
+        }
       }
     }
 
@@ -159,19 +190,21 @@ export const useTimetableDragDrop = ({
       return;
     }
 
-    // -afterの場合は次の位置に調整
+    // -afterの場合、または空のクールにドロップした場合の位置調整
     let adjustedTargetIndex = targetEntryIndex;
-    if (isAfter) {
+    if (isEmptyTarget) {
+      // 空のクールの場合は0番目
+      adjustedTargetIndex = 0;
+    } else if (isAfter || targetIdWithoutAfter.startsWith('cool-droppable-') || targetIdWithoutAfter.startsWith('cool-gap-after-')) {
+      // -afterまたはクールの最後の場合は次の位置
       adjustedTargetIndex = targetEntryIndex + 1;
     }
     
     // 同じクール内での並び替え
     if (sourceCoolIndex === targetCoolIndex) {
       const entries = [...updatedCools[sourceCoolIndex].entries];
-      // 同じクール内で後ろに移動する場合、インデックス調整
-      if (sourceEntryIndex < adjustedTargetIndex) {
-        adjustedTargetIndex -= 1;
-      }
+      // arrayMoveは削除前のインデックスを基準にするため、
+      // 後ろに移動する場合は調整不要
       const reordered = arrayMove(entries, sourceEntryIndex, adjustedTargetIndex);
       updatedCools[sourceCoolIndex] = {
         ...updatedCools[sourceCoolIndex],

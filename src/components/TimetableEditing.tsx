@@ -370,29 +370,12 @@ export const TimetableEditing = ({
       if (overId.startsWith('entry-')) {
         const overRect = over.rect;
         
-        // バンドバンクからのドラッグの場合：マウス位置で判定
-        if (activeId.startsWith('band-') || activeId.startsWith('custom-')) {
+        // バンドバンクからのドラッグ、またはタイムテーブル内での並び替え：マウス位置で判定
+        if (activeId.startsWith('band-') || activeId.startsWith('custom-') || activeId.startsWith('entry-')) {
           if (overRect && currentMouseY > 0) {
             const overCenter = overRect.top + overRect.height / 2;
             
             if (currentMouseY > overCenter) {
-              setOverEntryId(`${overId}-after`);
-            } else {
-              setOverEntryId(overId);
-            }
-          } else {
-            setOverEntryId(overId);
-          }
-        } 
-        // タイムテーブル内での並び替えの場合：要素の中心位置で判定
-        else if (activeId.startsWith('entry-')) {
-          const activeRect = active.rect.current.translated;
-          
-          if (overRect && activeRect) {
-            const activeCenter = activeRect.top + activeRect.height / 2;
-            const overCenter = overRect.top + overRect.height / 2;
-            
-            if (activeCenter > overCenter) {
               setOverEntryId(`${overId}-after`);
             } else {
               setOverEntryId(overId);
@@ -586,11 +569,21 @@ export const TimetableEditing = ({
     // overEntryIdを使用して、-afterサフィックスを反映
     const targetId = overEntryId || (over.id as string);
     
-    if (activeId.startsWith('entry-') && targetId.startsWith('entry-')) {
-      if (currentTimetable.cools && currentTimetable.cools.length > 0) {
-        handleEntryReorderInCools(activeId, targetId);
-      } else {
-        handleEntryReorderFlat(activeId, targetId);
+    if (activeId.startsWith('entry-')) {
+      // entry-で始まる場合、またはcool関連のドロップゾーンの場合に処理
+      const isValidTarget = targetId.startsWith('entry-') ||
+        targetId.startsWith('cool-droppable-') ||
+        targetId.startsWith('cool-header-') ||
+        targetId.startsWith('cool-column-header-') ||
+        targetId.startsWith('cool-gap-before-') ||
+        targetId.startsWith('cool-gap-after-');
+      
+      if (isValidTarget) {
+        if (currentTimetable.cools && currentTimetable.cools.length > 0) {
+          handleEntryReorderInCools(activeId, targetId);
+        } else {
+          handleEntryReorderFlat(activeId, targetId);
+        }
       }
     }
   };
@@ -615,7 +608,13 @@ export const TimetableEditing = ({
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      autoScroll={false}
+      autoScroll={{
+        threshold: {
+          x: 0, // 横スクロールは無効
+          y: 0.15, // 画面端から15%の範囲でスクロール開始
+        },
+        acceleration: 5, // スクロール速度（デフォルトは10、少し遅めに）
+      }}
     >
       <div className="flex flex-col h-full">
         {/* コンテキストバー */}
