@@ -1,6 +1,53 @@
 # Aca-Schedule 開発進捗レポート
 
-## 📅 更新日: 2025年10月15日
+## 📅 更新日: 2025年10月16日
+
+---
+
+## 🆕 最新の更新 (2025年10月16日)
+
+### CSV出力機能の実装
+
+#### 実装内容
+- **タイムテーブルのCSVエクスポート機能**: 作成したタイムテーブル（本番/リハーサル）をCSVファイルとして出力できる機能を実装
+- **日本語対応**: BOM付きUTF-8エンコーディングにより、Excelで開いた際も日本語が正しく表示される
+- **設定メニューからの出力**: タイムテーブル画面の設定ボタンから、本番・リハーサルそれぞれのタイムテーブルをエクスポート可能
+
+#### 主要機能の詳細
+
+**1. CSV出力ユーティリティ**
+- **ファイル**: `src/utils/timetableExport.ts`
+- **機能**:
+  - `timetableToCSV()`: タイムテーブルデータをCSV形式に変換
+  - `downloadCSV()`: BOM付きUTF-8でCSVファイルをダウンロード
+- **CSV構造**: 
+  - 日付 | クール | 開始時刻 | 終了時刻 | バンド名/イベント名 | 演奏時間
+  - 複数日程・複数クールに対応
+
+**2. UI統合**
+- **変更ファイル**: `src/pages/EventEditorPage.tsx`
+- タイムテーブル編集モード時の設定メニューに以下を追加:
+  - 「本番タイムテーブルをCSV出力」ボタン
+  - 「リハーサルタイムテーブルをCSV出力」ボタン
+- エラーハンドリング: タイムテーブルが存在しない場合の警告表示
+
+### クールヘッダー表示ロジックの改善
+
+#### 実装内容
+- **別日リハーサルイベント対応**: `rehearsalType === 'rehearsal-day'`のイベントでは、本番・リハーサル共に全クールでクール名を表示
+- **通常イベントの動作**: 従来通り、複数クールが存在する日のみクール名を表示
+
+#### 変更ファイル
+- `src/components/CoolSection.tsx`: 
+  - `rehearsalType`プロパティを追加
+  - 表示ロジック: `shouldShowCoolHeader = rehearsalType === 'rehearsal-day' || (totalCools > 1 && !isReadOnly)`
+- `src/components/TimetableContent.tsx`: `rehearsalType`をCoolSectionに渡す
+- `src/components/TimetableEditing.tsx`: `eventSettings.rehearsalType`をTimetableContentに渡す
+
+#### 技術的改善
+- プロパティドリリングによる`rehearsalType`の伝達
+- TypeScript型安全性の維持
+- 不要になった`timetableType`プロパティの削除とクリーンアップ
 
 ---
 
