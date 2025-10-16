@@ -3,6 +3,7 @@ import type { Band, EventSettings } from '../types';
 import { useBandManagement } from '../hooks/useBandManagement';
 import { BandRow } from './BandRow';
 import { BandAvailabilityModal } from './BandAvailabilityModal';
+import { BandImportCSV } from './BandImportCSV';
 
 interface BandManagementProps {
   bands: Band[];
@@ -13,6 +14,7 @@ interface BandManagementProps {
 export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandManagementProps) => {
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+  const [showImportInfo, setShowImportInfo] = useState(false);
 
   const {
     handleAddBand,
@@ -25,13 +27,55 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
     <div className="p-6 h-full flex flex-col overflow-hidden">
       <div className="flex justify-between items-center mb-6 flex-shrink-0">
         <h2 className="text-2xl font-bold">バンド管理</h2>
-        <button
-          onClick={handleAddBand}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors"
-        >
-          + バンドを追加
-        </button>
+        <div className="flex items-center gap-3">
+          {/* CSVインポート機能 */}
+          <BandImportCSV 
+            eventSettings={eventSettings}
+            onImportComplete={() => {
+              // インポート完了後、必要に応じて追加処理
+            }}
+          />
+          
+          {/* 情報アイコン */}
+          <div className="relative">
+            <button
+              onMouseEnter={() => setShowImportInfo(true)}
+              onMouseLeave={() => setShowImportInfo(false)}
+              className="p-2 text-gray-400 hover:text-gray-200 transition-colors"
+              aria-label="CSVインポートの注意点"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            
+            {/* ツールチップ */}
+            {showImportInfo && (
+              <div className="absolute right-0 top-full mt-2 w-80 bg-gray-700 border border-gray-600 rounded-lg shadow-xl p-4 z-50 text-sm">
+                <h4 className="font-semibold mb-2 text-white">CSVファイルの注意点</h4>
+                <ul className="space-y-1 text-gray-300">
+                  <li>• ファイルはUTF-8エンコーディングで保存してください</li>
+                  <li>• ヘッダー行は必須です（バンド名,演奏時間,出演回数,メンバー）</li>
+                  <li>• バンド名と演奏時間は必須項目です</li>
+                  <li>• 出演回数を省略した場合、デフォルトで1回になります</li>
+                  <li>• メンバーは複数の場合、セミコロン(;)で区切ってください</li>
+                  <li className="mt-2 pt-2 border-t border-gray-600">例: 田中太郎;山田花子;佐藤次郎</li>
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* バンド追加ボタン */}
+          <button
+            onClick={handleAddBand}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors"
+          >
+            + バンドを追加
+          </button>
+        </div>
       </div>
+
+      {/* CSVインポート機能は上部に移動したため削除 */}
 
       <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
         <div className="overflow-x-auto overflow-y-auto flex-1">
