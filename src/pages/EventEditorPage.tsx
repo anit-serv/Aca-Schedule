@@ -4,6 +4,7 @@ import { BandManagement } from '../components/BandManagement';
 import { TimetableEditing } from '../components/TimetableEditing';
 import { EventSettingsModal } from '../components/EventSettingsModal';
 import { bandService, timetableService, eventService } from '../services/firestore';
+import { timetableToCSV, downloadCSV } from '../utils/timetableExport';
 import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry } from '../types';
 
 // モードを定義するための型
@@ -915,12 +916,47 @@ export const EventEditorPage = () => {
               {/* ドロップダウンメニュー */}
               {showSettingsMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg border border-gray-700 z-50">
+                  {/* エクスポート機能（タイムテーブル編集モードのみ） */}
+                  {mode === 'timetable-editing' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setShowSettingsMenu(false);
+                          if (performanceTimetable) {
+                            const csvContent = timetableToCSV(performanceTimetable, bands, eventSettings?.name || 'イベント');
+                            const filename = `${eventSettings?.name || 'イベント'}_本番タイムテーブル.csv`;
+                            downloadCSV(csvContent, filename);
+                          }
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
+                      >
+                        📥 本番タイムテーブルをCSV出力
+                      </button>
+                      {eventSettings?.rehearsalType !== 'none' && (
+                        <button
+                          onClick={() => {
+                            setShowSettingsMenu(false);
+                            if (rehearsalTimetable) {
+                              const csvContent = timetableToCSV(rehearsalTimetable, bands, eventSettings?.name || 'イベント');
+                              const filename = `${eventSettings?.name || 'イベント'}_リハーサルタイムテーブル.csv`;
+                              downloadCSV(csvContent, filename);
+                            }
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
+                        >
+                          📥 リハーサルタイムテーブルをCSV出力
+                        </button>
+                      )}
+                      <div className="border-t border-gray-700" />
+                    </>
+                  )}
+                  
                   <button
                     onClick={() => {
                       setShowSettingsMenu(false);
                       setShowSettingsModal(true);
                     }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-t-md transition-colors duration-200"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
                   >
                     イベント設定
                   </button>
