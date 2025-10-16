@@ -15,6 +15,7 @@ interface CoolSectionProps {
   onMoveCoolUp: (coolIndex: number) => void;
   onMoveCoolDown: (coolIndex: number) => void;
   isReadOnly?: boolean; // クール直前リハーサルなどで編集を制限
+  rehearsalType?: 'rehearsal-day' | 'cool-pre-rehearsal' | 'day-start-rehearsal' | 'none'; // リハーサルのタイプ
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
   onCoolStartTimeChange?: (coolIndex: number, startTime: string | undefined) => void;
   previousCoolEndTime?: string; // 前のクールの終了時刻（デフォルト値として使用）
@@ -35,6 +36,7 @@ export const CoolSection = ({
   onMoveCoolUp,
   onMoveCoolDown,
   isReadOnly = false,
+  rehearsalType = 'none',
   onTransitionTimeChange,
   onCoolStartTimeChange,
   previousCoolEndTime,
@@ -181,14 +183,18 @@ export const CoolSection = ({
 
   const showWarning = isTimeExceeded();
 
+  // 別日リハーサルイベントの場合は常にクール名を表示、それ以外は複数クールかつ編集可能な場合のみ表示
+  const shouldShowCoolHeader = rehearsalType === 'rehearsal-day' || (totalCools > 1 && !isReadOnly);
+
   return (
     <div className={`bg-gray-700 rounded-lg overflow-hidden ${showWarning ? 'ring-2 ring-red-500' : ''}`}>
-      {totalCools > 1 && !isReadOnly && (
+      {shouldShowCoolHeader && (
         <div className="relative">
           {/* クール名ヘッダーの上に表示する線は削除（ドロップ可能だがハイライトなし） */}
           <div ref={setHeaderRef} className="bg-gray-600 px-4 py-2 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <div className="font-semibold">第{cool.number}クール</div>
+            {!isReadOnly && (
             <div className="flex items-center gap-2 text-sm">
               <label htmlFor={`cool-start-time-${coolIndex}`} className="text-gray-300">
                 開始時刻:
@@ -230,7 +236,9 @@ export const CoolSection = ({
                 </span>
               )}
             </div>
+            )}
           </div>
+          {!isReadOnly && (
           <div className="relative">
             <button
               onClick={handleMenuToggle}
@@ -270,7 +278,8 @@ export const CoolSection = ({
               </div>
             )}
           </div>
-        </div>
+          )}
+          </div>
         </div>
       )}
       <div className={cool.entries.length === 0 ? "min-h-[100px]" : ""}>

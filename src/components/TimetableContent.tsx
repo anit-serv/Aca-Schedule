@@ -10,6 +10,7 @@ interface TimetableContentProps {
   violations: ConstraintViolation[];
   bandNumbers: Map<string, number>;
   isReadOnly: boolean;
+  rehearsalType: 'rehearsal-day' | 'cool-pre-rehearsal' | 'day-start-rehearsal' | 'none';
   onRemoveEntry: (entryId: string, coolIndex?: number) => void;
   onDeleteCool: (coolIndex: number) => void;
   onMoveCoolUp: (coolIndex: number) => void;
@@ -25,6 +26,7 @@ export const TimetableContent = ({
   violations,
   bandNumbers,
   isReadOnly,
+  rehearsalType,
   onRemoveEntry,
   onDeleteCool,
   onMoveCoolUp,
@@ -81,6 +83,7 @@ export const TimetableContent = ({
                     onMoveCoolUp={onMoveCoolUp}
                     onMoveCoolDown={onMoveCoolDown}
                     isReadOnly={isReadOnly}
+                    rehearsalType={rehearsalType}
                     onTransitionTimeChange={onTransitionTimeChange}
                     onCoolStartTimeChange={onCoolStartTimeChange}
                     previousCoolEndTime={previousCoolEndTime}

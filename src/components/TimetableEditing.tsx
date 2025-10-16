@@ -374,6 +374,7 @@ export const TimetableEditing = ({
               violations={violations}
               bandNumbers={bandNumbers}
               isReadOnly={isReadOnly}
+              rehearsalType={eventSettings.rehearsalType}
               onRemoveEntry={handleRemoveEntry}
               onDeleteCool={handleDeleteCool}
               onMoveCoolUp={handleMoveCoolUp}
