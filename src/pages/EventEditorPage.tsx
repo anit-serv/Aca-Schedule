@@ -52,7 +52,7 @@ export const EventEditorPage = () => {
   // イベント設定の読み込み
   useEffect(() => {
     if (!eventId) {
-      setError('イベントIDが指定されていません');
+      setError('not-found');
       setIsLoading(false);
       return;
     }
@@ -65,7 +65,7 @@ export const EventEditorPage = () => {
         
         if (!settings) {
           console.error('[EventEditorPage] イベントが見つかりません:', eventId);
-          setError('イベントが見つかりません');
+          setError('not-found');
           setIsLoading(false);
           return;
         }
@@ -75,7 +75,15 @@ export const EventEditorPage = () => {
         console.log('[EventEditorPage] イベント読み込み成功');
       } catch (err) {
         console.error('[EventEditorPage] イベント読み込みエラー:', err);
-        setError('イベント情報の読み込みに失敗しました');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const errorCode = (err as any)?.code;
+        
+        // permission-deniedとnot-foundは同じエラーとして扱う（セキュリティのため）
+        if (errorCode === 'permission-denied' || errorCode === 'not-found') {
+          setError('not-found');
+        } else {
+          setError('unknown');
+        }
         setIsLoading(false);
       }
     };
@@ -850,7 +858,8 @@ export const EventEditorPage = () => {
     return (
       <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="text-2xl mb-4">読み込み中...</div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-400">イベントを読み込んでいます...</p>
         </div>
       </div>
     );
@@ -858,11 +867,32 @@ export const EventEditorPage = () => {
 
   // エラー表示
   if (error || !eventSettings) {
+    const errorConfig = error === 'not-found' 
+      ? {
+          icon: '🔍',
+          title: 'イベントが見つかりませんでした',
+          message: 'このイベントは存在しないか、アクセス権限がありません。',
+        }
+      : {
+          icon: '⚠️',
+          title: '読み込みエラー',
+          message: 'イベント情報の読み込みに失敗しました。もう一度お試しください。',
+        };
+
     return (
       <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-2xl mb-4 text-red-500">エラー</div>
-          <p className="text-gray-400">{error || 'イベント情報の読み込みに失敗しました'}</p>
+        <div className="max-w-md w-full mx-auto p-6">
+          <div className="text-center">
+            <div className="text-6xl mb-4">{errorConfig.icon}</div>
+            <h1 className="text-2xl font-bold mb-2">{errorConfig.title}</h1>
+            <p className="text-gray-400 mb-6">{errorConfig.message}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
+            >
+              マイイベントに戻る
+            </button>
+          </div>
         </div>
       </div>
     );
