@@ -874,9 +874,18 @@ export const EventEditorPage = () => {
       {/* ヘッダーセクション */}
       <header className="bg-gray-800 shadow-lg flex-shrink-0">
         <nav className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-bold">{eventSettings.name}</h1>
-            <p className="text-sm text-gray-400">{eventSettings.year}年 @ {eventSettings.venue}</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/')}
+              className="text-gray-400 hover:text-white transition-colors text-sm"
+              title="マイイベントに戻る"
+            >
+              ← 戻る
+            </button>
+            <div>
+              <h1 className="text-xl font-bold">{eventSettings.name}</h1>
+              <p className="text-sm text-gray-400">{eventSettings.year}年 @ {eventSettings.venue}</p>
+            </div>
           </div>
           <div className="flex items-center space-x-2">
             <button

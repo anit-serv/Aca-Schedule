@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { EventSettings } from '../types';
 import { eventService } from '../services/firestore';
+import { useAuth } from '../hooks/useAuth';
 
 export const EventCreationWizard = () => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // フォームの状態管理
@@ -114,6 +116,7 @@ export const EventCreationWizard = () => {
           : undefined,
         rehearsalDuration: formData.rehearsalType !== 'none' ? formData.rehearsalDuration : undefined,
         presetDurations: formData.presetDurations,
+        ownerId: currentUser?.uid || '',
       };
       
       console.log('[イベント作成] 開始:', eventData);
@@ -135,7 +138,13 @@ export const EventCreationWizard = () => {
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
       <header className="bg-gray-800 shadow-lg">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
+          <button
+            onClick={() => navigate('/')}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            ← 戻る
+          </button>
           <h1 className="text-2xl font-bold">新規イベント作成</h1>
         </div>
       </header>

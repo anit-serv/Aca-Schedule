@@ -1,3 +1,12 @@
+// アプリユーザー情報
+export interface AppUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  createdAt: Date;
+}
+
 // イベント全体の設定情報
 export interface EventSettings {
   id: string;
@@ -11,6 +20,7 @@ export interface EventSettings {
   rehearsalDuration?: number; // 全バンド共通のリハーサル時間（分）
   presetDurations: number[]; // よく使う演奏時間のプリセット（分）
   customEvents?: CustomEvent[]; // カスタムイベント（休憩、MCなど）
+  ownerId: string; // イベント作成者のユーザーID
 }
 
 // 時間範囲（30分単位）

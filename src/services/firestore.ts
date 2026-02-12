@@ -2,19 +2,47 @@ import {
   collection,
   doc,
   getDoc,
+  setDoc,
   addDoc,
   updateDoc,
   deleteDoc,
   getDocs,
   query,
   where,
+  orderBy,
   onSnapshot,
   Timestamp,
   QuerySnapshot,
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Band, EventSettings, Timetable, DailyTimetable } from '../types';
+import type { AppUser, Band, EventSettings, Timetable, DailyTimetable } from '../types';
+
+// ユーザー管理のFirestore操作
+export const userService = {
+  // ユーザー情報を保存/更新
+  async saveUser(user: AppUser): Promise<void> {
+    const userRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      await setDoc(userRef, {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+    } else {
+      await updateDoc(userRef, {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        updatedAt: Timestamp.now(),
+      });
+    }
+  },
+};
 
 // Firestore用のBand型（Dateの代わりにTimestampを使用）
 interface BandFirestore extends Omit<Band, 'createdAt' | 'updatedAt'> {
@@ -134,6 +162,7 @@ const eventSettingsToFirestore = (settings: EventSettings): Partial<EventSetting
     performanceDates: settings.performanceDates,
     rehearsalType: settings.rehearsalType,
     presetDurations: settings.presetDurations,
+    ownerId: settings.ownerId,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   };
@@ -169,6 +198,7 @@ const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings
   rehearsalDuration: data.rehearsalDuration,
   presetDurations: data.presetDurations || [10, 15, 20],
   customEvents: data.customEvents || [],
+  ownerId: data.ownerId || '',
 });
 
 // イベント設定のFirestore操作
@@ -239,6 +269,19 @@ export const eventService = {
     updateData.updatedAt = Timestamp.now();
     
     await updateDoc(eventRef, updateData);
+  },
+
+  // ユーザーのイベント一覧を取得
+  async getEventsByOwner(ownerId: string): Promise<EventSettings[]> {
+    try {
+      const eventsRef = collection(db, 'events');
+      const q = query(eventsRef, where('ownerId', '==', ownerId), orderBy('updatedAt', 'desc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => firestoreToEventSettings(doc.id, doc.data()));
+    } catch (error) {
+      console.error('[eventService.getEventsByOwner] エラー:', error);
+      throw error;
+    }
   },
 
   // イベントを削除(関連する全てのデータも削除)
