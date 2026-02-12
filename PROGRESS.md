@@ -1,10 +1,153 @@
 # Aca-Schedule 開発進捗レポート
 
-## 📅 更新日: 2025年10月16日
+## 📅 更新日: 2026年2月12日
 
 ---
 
-## 🆕 最新の更新 (2025年10月16日)
+## 🆕 最新の更新 (2026年2月12日)
+
+### ログイン機能の実装（v2.0の一部完了）
+
+#### 実装内容
+- **Firebase Authentication統合**: メール/パスワード認証とGoogleアカウント連携の2パターンでログイン可能
+- **ユーザーアカウント管理**: ユーザー情報をFirestoreに保存し、個人データを安全に管理
+- **イベント所有権管理**: イベントに`ownerId`フィールドを追加し、作成者のみがアクセス・編集可能
+- **マイイベント一覧**: ログイン後、自分が作成したイベントのみを一覧表示
+- **セキュリティ強化**: Firestoreのセキュリティルールで、ownerのみがアクセス可能に制限
+
+#### 主要機能の詳細
+
+**1. 認証システム**
+- **ファイル**: 
+  - `src/contexts/AuthContext.tsx`: 認証状態管理のProvider
+  - `src/hooks/useAuth.ts`: 認証フックfF
+  - `src/components/AuthGuard.tsx`: 未ログインユーザーのリダイレクト
+- **機能**:
+  - メール/パスワードでのログイン・新規登録
+  - Googleアカウントでのソーシャルログイン
+  - ログアウト機能
+  - 認証状態のリアルタイム監視
+
+**2. ログイン/新規登録ページ**
+- **ファイル**: `src/pages/LoginPage.tsx`
+- **UI**:
+  - タブ切り替え（ログイン/新規登録）
+  - メールアドレス・パスワード入力
+  - Googleアカウントログインボタン
+  - わかりやすいエラーメッセージ表示
+- **バリデーション**:
+  - メールアドレス形式チェック
+  - パスワード6文字以上
+  - 新規登録時のパスワード確認
+
+**3. マイイベント一覧ページ**
+- **ファイル**: `src/pages/MyEventsPage.tsx`
+- **機能**:
+  - 自分が作成したイベントをカード形式で表示
+  - 最終更新日時で自動ソート
+  - イベント作成ボタン
+  - ログアウトボタン
+  - ユーザーアイコン・名前表示
+
+**4. データモデルの拡張**
+- **型定義** (`src/types.ts`):
+  - `AppUser`: ユーザー情報（uid, email, displayName, photoURL, createdAt）
+  - `EventSettings`に`ownerId`フィールド追加
+- **Firestoreサービス** (`src/services/firestore.ts`):
+  - `userService.saveUser()`: ユーザー情報の保存・更新
+  - `eventService.getEventsByOwner()`: ユーザーのイベント一覧取得
+  - イベント作成時に`ownerId`を自動付与
+
+**5. セキュリティとアクセス制御**
+- **Firestoreセキュリティルール**:
+  ```javascript
+  // イベント: 自分が作成したイベントのみアクセス可能
+  match /events/{eventId} {
+    allow read: if request.auth != null && 
+                   resource.data.ownerId == request.auth.uid;
+    allow create: if request.auth != null && 
+                     request.resource.data.ownerId == request.auth.uid;
+    allow update, delete: if request.auth != null && 
+                             resource.data.ownerId == request.auth.uid;
+  }
+  
+  // バンド・タイムテーブル: 紐付いたイベントのownerのみアクセス可能
+  ```
+- **エラーハンドリング** (`src/pages/EventEditorPage.tsx`):
+  - アクセス権限なし・イベント不存在を同じエラーとして扱う（セキュリティのため）
+  - わかりやすいエラー画面表示
+  - 「マイイベントに戻る」ボタン
+
+**6. ルーティングの更新**
+- **ファイル**: `src/App.tsx`
+- **ルート構成**:
+  - `/login`: ログイン/新規登録ページ
+  - `/`: マイイベント一覧（認証必須）
+  - `/events/new`: イベント作成（認証必須）
+  - `/events/:eventId`: イベント編集（認証必須）
+- すべてのページ（ログイン以外）に`AuthGuard`を適用
+
+**7. UI改善**
+- **ローディング画面**: スピナーアニメーション付き
+- **エラー表示**: アイコン・メッセージ・アクションボタン
+- **ナビゲーション**: 各ページに「戻る」ボタンを追加
+
+#### 実装ファイル
+- `src/firebase.ts` - Firebase Auth初期化
+- `src/contexts/AuthContext.tsx` - 認証コンテキスト
+- `src/hooks/useAuth.ts` - 認証フック
+- `src/components/AuthGuard.tsx` - 認証ガード
+- `src/pages/LoginPage.tsx` - ログイン/新規登録画面
+- `src/pages/MyEventsPage.tsx` - マイイベント一覧
+- `src/types.ts` - AppUser型、ownerId追加
+- `src/services/firestore.ts` - userService追加
+- `src/App.tsx` - ルーティング更新
+- `src/components/EventCreationWizard.tsx` - ownerId付与
+- `src/pages/EventEditorPage.tsx` - エラーハンドリング改善
+
+#### 技術的な実装詳細
+
+**認証状態管理**:
+```typescript
+const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const appUser: AppUser = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        createdAt: new Date(user.metadata.creationTime || Date.now()),
+      };
+      setCurrentUser(appUser);
+      await userService.saveUser(appUser);
+    } else {
+      setCurrentUser(null);
+    }
+  });
+  return () => unsubscribe();
+}, []);
+```
+
+**イベント所有者フィルタリング**:
+```typescript
+async getEventsByOwner(ownerId: string): Promise<EventSettings[]> {
+  const eventsRef = collection(db, 'events');
+  const q = query(
+    eventsRef, 
+    where('ownerId', '==', ownerId), 
+    orderBy('updatedAt', 'desc')
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => firestoreToEventSettings(doc.id, doc.data()));
+}
+```
+
+---
+
+## 🆕 過去の更新 (2025年10月16日)
 
 ### CSV出力機能の実装
 
