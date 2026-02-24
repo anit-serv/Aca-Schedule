@@ -22,6 +22,7 @@ export interface EventSettings {
   customEvents?: CustomEvent[]; // カスタムイベント（休憩、MCなど）
   ownerId: string; // イベント作成者のユーザーID
   customFields?: CustomFieldsSettings; // カスタムフィールド設定
+  isPublic?: boolean; // 閲覧用の共有ページを公開するかどうか
 }
 
 // 時間範囲（30分単位）

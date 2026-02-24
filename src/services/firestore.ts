@@ -188,6 +188,12 @@ const eventSettingsToFirestore = (settings: EventSettings): Partial<EventSetting
     (firestoreData as any).customFields = settings.customFields;
   }
 
+  // isPublicがundefinedでない場合のみ含める
+  if (settings.isPublic !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (firestoreData as any).isPublic = settings.isPublic;
+  }
+
   return firestoreData as EventSettingsFirestore;
 };
 
@@ -206,6 +212,7 @@ const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings
   customEvents: data.customEvents || [],
   ownerId: data.ownerId || '',
   customFields: data.customFields,
+  isPublic: data.isPublic || false,
 });
 
 // イベント設定のFirestore操作
@@ -272,6 +279,7 @@ export const eventService = {
     if (updates.presetDurations !== undefined) updateData.presetDurations = updates.presetDurations;
     if (updates.customEvents !== undefined) updateData.customEvents = updates.customEvents;
     if (updates.customFields !== undefined) updateData.customFields = updates.customFields;
+    if (updates.isPublic !== undefined) updateData.isPublic = updates.isPublic;
     
     // updatedAtは常に更新
     updateData.updatedAt = Timestamp.now();

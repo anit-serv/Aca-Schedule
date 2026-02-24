@@ -31,15 +31,19 @@ export const EventEditorPage = () => {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  // 共有パネルの表示状態
+  const [showSharePanel, setShowSharePanel] = useState(false);
+  const [shareUrlCopied, setShareUrlCopied] = useState(false);
 
   // 設定メニューの外側をクリックしたときに閉じる
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showSettingsMenu) {
-        const target = event.target as HTMLElement;
-        if (!target.closest('.settings-menu-container')) {
-          setShowSettingsMenu(false);
-        }
+      const target = event.target as HTMLElement;
+      if (showSettingsMenu && !target.closest('.settings-menu-container')) {
+        setShowSettingsMenu(false);
+      }
+      if (showSharePanel && !target.closest('.share-panel-container')) {
+        setShowSharePanel(false);
       }
     };
 
@@ -47,7 +51,7 @@ export const EventEditorPage = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showSettingsMenu]);
+  }, [showSettingsMenu, showSharePanel]);
 
   // イベント設定の読み込み
   useEffect(() => {
@@ -938,6 +942,94 @@ export const EventEditorPage = () => {
             >
               タイムテーブル編集
             </button>
+            
+            {/* 共有ボタン */}
+            <div className="relative share-panel-container">
+              <button
+                onClick={() => setShowSharePanel(!showSharePanel)}
+                className={`p-2 rounded-md transition-colors duration-200 ${
+                  eventSettings.isPublic
+                    ? 'bg-green-700 text-green-100 hover:bg-green-600'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title="共有設定"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+              </button>
+              
+              {/* 共有パネル */}
+              {showSharePanel && (
+                <div className="absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-50 p-4">
+                  <h3 className="text-sm font-bold text-white mb-3">共有設定</h3>
+                  
+                  {/* 公開トグル */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm text-gray-300">閲覧用ページを公開</p>
+                      <p className="text-xs text-gray-500 mt-0.5">リンクを知っている人が閲覧できます</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const newValue = !eventSettings.isPublic;
+                        try {
+                          await eventService.updateEvent(eventSettings.id, { isPublic: newValue });
+                          setEventSettings(prev => prev ? { ...prev, isPublic: newValue } : null);
+                        } catch (error) {
+                          console.error('共有設定の更新に失敗:', error);
+                          alert('共有設定の更新に失敗しました。');
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        eventSettings.isPublic ? 'bg-green-600' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          eventSettings.isPublic ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  
+                  {/* 注意書き */}
+                  {eventSettings.isPublic && (
+                    <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-md px-3 py-2 mb-3">
+                      <p className="text-xs text-yellow-300">
+                        ⚠️ バンド名を含むタイムテーブル情報が公開されます
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* URL表示・コピー */}
+                  {eventSettings.isPublic && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1.5">共有URL</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={`${window.location.origin}/share/${eventSettings.id}`}
+                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-gray-300 font-mono truncate"
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/share/${eventSettings.id}`);
+                            setShareUrlCopied(true);
+                            setTimeout(() => setShareUrlCopied(false), 2000);
+                          }}
+                          className="px-3 py-1.5 rounded text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors whitespace-nowrap"
+                        >
+                          {shareUrlCopied ? '✓ コピー済' : 'コピー'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             
             {/* 設定メニュー */}
             <div className="relative settings-menu-container">

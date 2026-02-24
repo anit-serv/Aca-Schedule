@@ -18,6 +18,7 @@ interface CustomFieldsTableProps {
   timetableType: 'performance' | 'rehearsal';
   selectedDate: string;
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
+  readOnly?: boolean;
 }
 
 // 範囲選択の状態
@@ -41,7 +42,11 @@ export const CustomFieldsTable = ({
   timetableType,
   selectedDate,
   onCustomFieldsChange,
+  readOnly,
 }: CustomFieldsTableProps) => {
+  // 読み取り専用モード
+  const isReadOnly = readOnly ?? false;
+
   // セル入力値のローカルバッファ（キー: "seq:colId"）
   const [cellValues, setCellValues] = useState<Record<string, string>>({});
   // フォーカス中のセル座標
@@ -267,6 +272,7 @@ export const CustomFieldsTable = ({
   // マウスダウン（範囲選択開始）
   const handleMouseDown = useCallback(
     (seq: number, colId: string, col: CustomColumn, e: React.MouseEvent) => {
+      if (isReadOnly) return;
       if (col.bindingType !== 'sequence') return; // sequence型のみ範囲選択可能
       
       // 結合セルかチェック
@@ -303,7 +309,7 @@ export const CustomFieldsTable = ({
       dragStartRef.current = { seq, colId, mergedEndSeq };
       setIsDragging(true);
     },
-    [selection, focusedCell, columns, isSameCool, customFields, timetableType, selectedDate]
+    [isReadOnly, selection, focusedCell, columns, isSameCool, customFields, timetableType, selectedDate]
   );
 
   // マウスムーブ（ドラッグ選択拡張）
@@ -473,6 +479,7 @@ export const CustomFieldsTable = ({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, seq: number, colId: string) => {
       e.preventDefault();
+      if (isReadOnly) return;
       // 結合セルかチェック
       const col = columns.find(c => c.id === colId);
       if (!col || !customFields) return;
@@ -481,7 +488,7 @@ export const CustomFieldsTable = ({
         setContextMenu({ x: e.clientX, y: e.clientY, seq, colId });
       }
     },
-    [columns, customFields, timetableType, selectedDate]
+    [isReadOnly, columns, customFields, timetableType, selectedDate]
   );
 
   // メニュー外クリックで閉じる
@@ -717,8 +724,8 @@ export const CustomFieldsTable = ({
         </div>
       )}
 
-      {/* フローティングツールバー（範囲選択時に表示） */}
-      {selection && selectionSize > 1 && (
+      {/* フローティングツールバー（範囲選択時に表示、readOnly時は非表示） */}
+      {!isReadOnly && selection && selectionSize > 1 && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-gray-800 border border-gray-600 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-blue-400 font-bold text-lg">{selectionSize}</span>
@@ -762,7 +769,7 @@ export const CustomFieldsTable = ({
       )}
 
       {/* 確認ダイアログ */}
-      {mergeConfirmDialog?.show && (
+      {!isReadOnly && mergeConfirmDialog?.show && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl p-6 max-w-md">
             <h3 className="text-lg font-bold text-white mb-3">結合の確認</h3>
@@ -788,7 +795,7 @@ export const CustomFieldsTable = ({
       )}
 
       {/* 右クリックメニュー */}
-      {contextMenu && (
+      {!isReadOnly && contextMenu && (
         <div
           className="fixed bg-gray-800 border border-gray-600 rounded-md shadow-xl py-1 z-50"
           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -855,6 +862,7 @@ export const CustomFieldsTable = ({
                 handleCellFocus={handleCellFocus}
                 handleContextMenu={handleContextMenu}
                 registerInputRef={registerInputRef}
+                readOnly={isReadOnly}
               />
             ))}
           </tbody>
@@ -887,6 +895,7 @@ interface CoolGroupProps {
   handleCellFocus: (seq: number, colIndex: number) => void;
   handleContextMenu: (e: React.MouseEvent, seq: number, colId: string) => void;
   registerInputRef: (key: string, el: HTMLInputElement | null) => void;
+  readOnly: boolean;
 }
 
 const CoolGroup = ({
@@ -910,6 +919,7 @@ const CoolGroup = ({
   handleCellFocus,
   handleContextMenu,
   registerInputRef,
+  readOnly: isReadOnly,
 }: CoolGroupProps) => {
   const cellKey = (seq: number, colId: string) => `${seq}:${colId}`;
 
@@ -1016,6 +1026,8 @@ const CoolGroup = ({
                       }`}
                       placeholder="-"
                       maxLength={100}
+                      readOnly={isReadOnly}
+                      tabIndex={isReadOnly ? -1 : undefined}
                     />
                   </div>
                 </td>
