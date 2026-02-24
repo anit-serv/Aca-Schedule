@@ -182,6 +182,12 @@ const eventSettingsToFirestore = (settings: EventSettings): Partial<EventSetting
     (firestoreData as EventSettingsFirestore).customEvents = settings.customEvents;
   }
 
+  // customFieldsがundefinedでない場合のみ含める
+  if (settings.customFields !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (firestoreData as any).customFields = settings.customFields;
+  }
+
   return firestoreData as EventSettingsFirestore;
 };
 
@@ -199,6 +205,7 @@ const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings
   presetDurations: data.presetDurations || [10, 15, 20],
   customEvents: data.customEvents || [],
   ownerId: data.ownerId || '',
+  customFields: data.customFields,
 });
 
 // イベント設定のFirestore操作
@@ -264,6 +271,7 @@ export const eventService = {
     if (updates.rehearsalDuration !== undefined) updateData.rehearsalDuration = updates.rehearsalDuration;
     if (updates.presetDurations !== undefined) updateData.presetDurations = updates.presetDurations;
     if (updates.customEvents !== undefined) updateData.customEvents = updates.customEvents;
+    if (updates.customFields !== undefined) updateData.customFields = updates.customFields;
     
     // updatedAtは常に更新
     updateData.updatedAt = Timestamp.now();

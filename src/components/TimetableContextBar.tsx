@@ -1,4 +1,5 @@
 import type { EventSettings, DailyTimetable } from '../types';
+import { ToggleSwitch } from './ToggleSwitch';
 
 interface TimetableContextBarProps {
   timetableType: 'performance' | 'rehearsal';
@@ -7,11 +8,13 @@ interface TimetableContextBarProps {
   currentTimetable: DailyTimetable;
   inputCoolCount: string;
   isReadOnly: boolean;
+  isCustomMode: boolean;
   onTimetableTypeChange: (type: 'performance' | 'rehearsal') => void;
   onDateChange: (date: string) => void;
   onStartTimeChange: (time: string) => void;
   onCoolCountChange: (count: number) => void;
   onCoolCountInputChange: (value: string) => void;
+  onCustomModeChange: (enabled: boolean) => void;
 }
 
 export const TimetableContextBar = ({
@@ -21,11 +24,13 @@ export const TimetableContextBar = ({
   currentTimetable,
   inputCoolCount,
   isReadOnly,
+  isCustomMode,
   onTimetableTypeChange,
   onDateChange,
   onStartTimeChange,
   onCoolCountChange,
   onCoolCountInputChange,
+  onCustomModeChange,
 }: TimetableContextBarProps) => {
   // 現在のタイムテーブルタイプに応じた日付リストを取得
   const dates = timetableType === 'performance'
@@ -86,7 +91,7 @@ export const TimetableContextBar = ({
           </div>
         </div>
 
-        {/* 右側: 開始時刻とクール数 */}
+        {/* 右側: 開始時刻、クール数、カスタムモード */}
         <div className="flex items-center gap-4">
           {/* 開始時刻 */}
           <div className="flex items-center gap-2">
@@ -98,34 +103,52 @@ export const TimetableContextBar = ({
               type="time"
               value={currentTimetable.startTime}
               onChange={(e) => onStartTimeChange(e.target.value)}
-              className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm"
-            />
-          </div>
-
-          {/* クール数 */}
-          <div className="flex items-center gap-2">
-            <label htmlFor="coolCount" className="text-sm text-gray-400 whitespace-nowrap">
-              クール数:
-            </label>
-            <input
-              id="coolCount"
-              type="number"
-              min="1"
-              max="20"
-              value={inputCoolCount}
-              onChange={(e) => onCoolCountInputChange(e.target.value)}
-              onBlur={() => onCoolCountChange(Number(inputCoolCount))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  onCoolCountChange(Number(inputCoolCount));
-                }
-              }}
-              disabled={isReadOnly}
-              className={`w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-center ${
-                isReadOnly ? 'opacity-50 cursor-not-allowed' : ''
+              disabled={isCustomMode}
+              className={`px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm ${
+                isCustomMode ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             />
           </div>
+
+          {/* クール数（カスタムモード時は非表示） */}
+          {!isCustomMode && (
+            <div className="flex items-center gap-2">
+              <label htmlFor="coolCount" className="text-sm text-gray-400 whitespace-nowrap">
+                クール数:
+              </label>
+              <input
+                id="coolCount"
+                type="number"
+                min="1"
+                max="20"
+                value={inputCoolCount}
+                onChange={(e) => onCoolCountInputChange(e.target.value)}
+                onBlur={() => onCoolCountChange(Number(inputCoolCount))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    onCoolCountChange(Number(inputCoolCount));
+                  }
+                }}
+                disabled={isReadOnly}
+                className={`w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-center ${
+                  isReadOnly ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              />
+            </div>
+          )}
+
+          {/* カスタムモードトグル */}
+          <ToggleSwitch
+            enabled={isCustomMode}
+            onChange={onCustomModeChange}
+            label="カスタム"
+            icon={
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M3 10h18M3 14h18M3 6h18M3 18h18M10 3v18M14 3v18" />
+              </svg>
+            }
+          />
         </div>
       </div>
     </div>

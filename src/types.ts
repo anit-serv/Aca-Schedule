@@ -21,6 +21,7 @@ export interface EventSettings {
   presetDurations: number[]; // よく使う演奏時間のプリセット（分）
   customEvents?: CustomEvent[]; // カスタムイベント（休憩、MCなど）
   ownerId: string; // イベント作成者のユーザーID
+  customFields?: CustomFieldsSettings; // カスタムフィールド設定
 }
 
 // 時間範囲（30分単位）
@@ -96,6 +97,43 @@ export interface Timetable {
   dailyTimetables: DailyTimetable[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ========== カスタムフィールド関連 ==========
+
+// カスタム列の紐付け方式
+export type CustomColumnBindingType = 'sequence' | 'entity';
+
+// カスタム列定義
+export interface CustomColumn {
+  id: string;
+  name: string;
+  bindingType: CustomColumnBindingType; // 'sequence': 位置固定, 'entity': エントリー追従
+  order: number;
+}
+
+// カスタムセルデータ
+export interface CustomCellData {
+  value: string;
+  rowSpan?: number; // sequence型のみ使用（セル結合）。1=通常、2以上=結合の先頭セル
+}
+
+// 日付ごとのカスタムデータ
+export interface DailyCustomData {
+  bySequence: { [sequenceNumber: number]: { [columnId: string]: CustomCellData } };
+  byEntity: { [entryId: string]: { [columnId: string]: CustomCellData } };
+}
+
+// タイムテーブルタイプ別のカスタムフィールド設定
+export interface CustomFieldsTypeData {
+  columns: CustomColumn[];
+  dailyData: { [date: string]: DailyCustomData };
+}
+
+// カスタムフィールド設定全体
+export interface CustomFieldsSettings {
+  performance: CustomFieldsTypeData;
+  rehearsal: CustomFieldsTypeData;
 }
 
 // 制約違反の種類

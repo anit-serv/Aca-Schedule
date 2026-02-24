@@ -1,16 +1,19 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   DndContext,
   PointerSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent } from '../types';
+import type { DragStartEvent } from '@dnd-kit/core';
+import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent, CustomFieldsSettings } from '../types';
 import { TimetableDragOverlay } from './TimetableDragOverlay';
 import { ViolationPanel } from './ViolationPanel';
 import { TimetableContextBar } from './TimetableContextBar';
 import { TimetableContent } from './TimetableContent';
 import { BandBankDropZone } from './BandBankDropZone';
+import { CustomFieldsTable } from './CustomFieldsTable';
+import { CustomColumnManager } from './CustomColumnManager';
 import { useCoolManagement } from '../hooks/useCoolManagement';
 import { useTimetableDragDrop } from '../hooks/useTimetableDragDrop';
 import { useTimetableHelpers } from '../hooks/useTimetableHelpers';
@@ -19,6 +22,18 @@ import { useDragHandlers } from '../hooks/useDragHandlers';
 import { createTimetableCollisionDetection } from '../utils/timetableCollisionDetection';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 import { eventService } from '../services/firestore';
+import {
+  hasCustomFieldsDataForEntry,
+  cleanupCustomFieldsForEntry,
+  hasAnySequenceData,
+  hasSequenceDataAtPosition,
+  getSequenceMergeInfoAtPosition,
+  getSequenceNumberForEntry,
+  renumberSequenceDataForDeletion,
+  shiftSequenceDataForInsertion,
+  adjustSequenceDataForReorder,
+  getEntriesWithCoolInfo,
+} from '../utils/customFieldsUtils';
 
 interface TimetableEditingProps {
   bands: Band[];
@@ -27,6 +42,7 @@ interface TimetableEditingProps {
   rehearsalTimetable: Timetable | null;
   onPerformanceTimetableChange: (timetable: DailyTimetable) => void;
   onRehearsalTimetableChange: (timetable: DailyTimetable) => void;
+  onEventSettingsChange?: (updates: Partial<EventSettings>) => void;
 }
 
 export const TimetableEditing = ({
@@ -36,12 +52,27 @@ export const TimetableEditing = ({
   rehearsalTimetable,
   onPerformanceTimetableChange,
   onRehearsalTimetableChange,
+  onEventSettingsChange,
 }: TimetableEditingProps) => {
   const [timetableType, setTimetableType] = useState<'performance' | 'rehearsal'>('performance');
   const [selectedDate, setSelectedDate] = useState(eventSettings.performanceDates[0] || '');
   const [inputCoolCount, setInputCoolCount] = useState<string>('1');
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  // ドラッグ中のエントリーIDを追跡（reorder時にどのエントリーが移動されたか特定するため）
+  const lastDraggedEntryIdRef = useRef<string | null>(null);
+  // 削除確認ダイアログ
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    entryId: string;
+    coolIndex?: number;
+    entryName: string;
+    hasEntityData: boolean;
+    hasSeqData: boolean;
+    seqMergeAffected: boolean;
+  } | null>(null);
+  // 挿入時の通知
+  const [insertionNotification, setInsertionNotification] = useState<string | null>(null);
 
   // カスタムイベントが変更されたらFirestoreのeventSettingsを更新
   useEffect(() => {
@@ -90,6 +121,21 @@ export const TimetableEditing = ({
         distance: 8,
       },
     })
+  );
+
+  // カスタムフィールド変更ハンドラー
+  const handleCustomFieldsChange = useCallback(
+    async (customFields: CustomFieldsSettings) => {
+      try {
+        await eventService.updateEvent(eventSettings.id, { customFields });
+        if (onEventSettingsChange) {
+          onEventSettingsChange({ customFields });
+        }
+      } catch (error) {
+        console.error('カスタムフィールドの保存に失敗しました:', error);
+      }
+    },
+    [eventSettings.id, onEventSettingsChange]
   );
 
   // カスタム衝突検出を作成
@@ -152,7 +198,7 @@ export const TimetableEditing = ({
   const violations = useConstraintCheck(currentTimetable, bands, bandNumbers);
 
   // 読み取り専用モード判定（クール直前リハーサルの場合、リハーサル編集は読み取り専用）
-  const isReadOnly = timetableType === 'rehearsal' && eventSettings.rehearsalType === 'cool-pre-rehearsal';
+  const isReadOnly = (timetableType === 'rehearsal' && eventSettings.rehearsalType === 'cool-pre-rehearsal') || isCustomMode;
 
   // バンドの演奏時間が変更されたら、タイムテーブルの時刻を再計算
   // または日付が切り替わったときも再計算
@@ -268,6 +314,60 @@ export const TimetableEditing = ({
     recalculateTimes,
   });
 
+  // 挿入・reorder検知付きのtimetable変更ハンドラー
+  const onTimetableChangeWithInsertionTracking = useCallback((newDailyTimetable: DailyTimetable) => {
+    if (!eventSettings.customFields || !hasAnySequenceData(eventSettings.customFields, timetableType, selectedDate)) {
+      onTimetableChange(newDailyTimetable);
+      return;
+    }
+
+    const oldEntries = getEntriesWithCoolInfo(currentTimetable);
+    const newEntries = getEntriesWithCoolInfo(newDailyTimetable);
+    let updatedCustomFields = eventSettings.customFields;
+    let didAdjust = false;
+
+    if (newEntries.length > oldEntries.length) {
+      // 新規挿入: 新しいentryIdが増えた場合
+      const oldIds = new Set(oldEntries.map(e => e.entryId));
+      const insertedEntry = newEntries.find(e => !oldIds.has(e.entryId));
+
+      if (insertedEntry) {
+        const insertedSeq = insertedEntry.sequenceNumber;
+        updatedCustomFields = shiftSequenceDataForInsertion(
+          updatedCustomFields,
+          timetableType,
+          selectedDate,
+          insertedSeq
+        );
+        didAdjust = true;
+      }
+    } else if (newEntries.length === oldEntries.length && lastDraggedEntryIdRef.current) {
+      // reorder検知: ドラッグされたエントリーのoldSeq/newSeqを特定し、削除+挿入で処理
+      const movedEntryId = lastDraggedEntryIdRef.current;
+      const oldEntry = oldEntries.find(e => e.entryId === movedEntryId);
+      const newEntry = newEntries.find(e => e.entryId === movedEntryId);
+
+      if (oldEntry && newEntry && oldEntry.sequenceNumber !== newEntry.sequenceNumber) {
+        updatedCustomFields = adjustSequenceDataForReorder(
+          updatedCustomFields,
+          timetableType,
+          selectedDate,
+          oldEntry.sequenceNumber,
+          newEntry.sequenceNumber
+        );
+        didAdjust = true;
+      }
+    }
+
+    if (didAdjust && onEventSettingsChange) {
+      onEventSettingsChange({ customFields: updatedCustomFields });
+      setInsertionNotification('位置固定のカスタム項目データが自動調整されました');
+      setTimeout(() => setInsertionNotification(null), 3000);
+    }
+
+    onTimetableChange(newDailyTimetable);
+  }, [currentTimetable, eventSettings.customFields, timetableType, selectedDate, onEventSettingsChange, onTimetableChange]);
+
   // ドラッグ&ドロップフック
   const {
     handleBandDropToCool,
@@ -281,7 +381,7 @@ export const TimetableEditing = ({
     bands,
     customEvents,
     currentTimetable,
-    onTimetableChange,
+    onTimetableChange: onTimetableChangeWithInsertionTracking,
     calculateTimes,
     recalculateCoolTimes: recalculateTimes,
     isReadOnly,
@@ -310,6 +410,15 @@ export const TimetableEditing = ({
   // アクティブアイテム取得
   const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
 
+  // ドラッグ開始時にエントリーIDを記録するラッパー
+  const wrappedHandleDragStart = useCallback((event: DragStartEvent) => {
+    const activeId = event.active.id as string;
+    lastDraggedEntryIdRef.current = activeId.startsWith('entry-')
+      ? activeId.replace('entry-', '')
+      : null;
+    handleDragStart(event);
+  }, [handleDragStart]);
+
   // カスタムイベント管理
   const handleAddCustomEvent = (customEvent: Omit<CustomEvent, 'id'>) => {
     const newEvent: CustomEvent = {
@@ -323,11 +432,107 @@ export const TimetableEditing = ({
     setCustomEvents(customEvents.filter((e) => e.id !== id));
   };
 
+  // カスタムフィールドデータがあるエントリーの削除確認
+  const handleRemoveEntryWithConfirm = useCallback((entryId: string, coolIndex?: number) => {
+    // エントリーを探す
+    let entry = null;
+    if (currentTimetable.cools && currentTimetable.cools.length > 0) {
+      if (coolIndex !== undefined) {
+        entry = currentTimetable.cools[coolIndex]?.entries.find(e => e.id === entryId);
+      } else {
+        for (const cool of currentTimetable.cools) {
+          entry = cool.entries.find(e => e.id === entryId);
+          if (entry) break;
+        }
+      }
+    } else {
+      entry = currentTimetable.entries.find(e => e.id === entryId);
+    }
+
+    if (!entry) {
+      handleRemoveEntry(entryId, coolIndex);
+      return;
+    }
+
+    // entity型のカスタムフィールドデータがあるかチェック
+    const hasEntityData = hasCustomFieldsDataForEntry(
+      eventSettings.customFields,
+      timetableType,
+      selectedDate,
+      entryId
+    );
+
+    // sequence型のデータ影響チェック
+    const seq = getSequenceNumberForEntry(currentTimetable, entryId);
+    const hasSeqData = seq !== undefined && hasSequenceDataAtPosition(
+      eventSettings.customFields, timetableType, selectedDate, seq
+    );
+    const mergeInfo = seq !== undefined
+      ? getSequenceMergeInfoAtPosition(eventSettings.customFields, timetableType, selectedDate, seq)
+      : { isInMerge: false, isParent: false };
+    const hasAnySeqDataForDate = hasAnySequenceData(eventSettings.customFields, timetableType, selectedDate);
+
+    if (hasEntityData || hasSeqData || mergeInfo.isInMerge || hasAnySeqDataForDate) {
+      // 確認ダイアログを表示
+      const entryName = entry.type === 'band'
+        ? bands.find(b => b.id === entry.bandId)?.name || '不明なバンド'
+        : entry.customEvent?.name || 'カスタムイベント';
+      setDeleteConfirmDialog({
+        entryId,
+        coolIndex,
+        entryName,
+        hasEntityData,
+        hasSeqData,
+        seqMergeAffected: mergeInfo.isInMerge,
+      });
+    } else {
+      // データがなければそのまま削除
+      handleRemoveEntry(entryId, coolIndex);
+    }
+  }, [currentTimetable, eventSettings.customFields, timetableType, selectedDate, bands, handleRemoveEntry]);
+
+  // 削除確認後の実際の削除処理
+  const executeRemoveEntry = useCallback(() => {
+    if (!deleteConfirmDialog) return;
+    const { entryId, coolIndex } = deleteConfirmDialog;
+
+    if (eventSettings.customFields && onEventSettingsChange) {
+      let updatedCustomFields = eventSettings.customFields;
+
+      // 1. entity型データのクリーンアップ
+      if (deleteConfirmDialog.hasEntityData) {
+        updatedCustomFields = cleanupCustomFieldsForEntry(
+          updatedCustomFields,
+          timetableType,
+          selectedDate,
+          entryId
+        );
+      }
+
+      // 2. sequence型データのリナンバリング（マージ自動調整含む）
+      const seq = getSequenceNumberForEntry(currentTimetable, entryId);
+      if (seq !== undefined && hasAnySequenceData(updatedCustomFields, timetableType, selectedDate)) {
+        updatedCustomFields = renumberSequenceDataForDeletion(
+          updatedCustomFields,
+          timetableType,
+          selectedDate,
+          seq
+        );
+      }
+
+      onEventSettingsChange({ customFields: updatedCustomFields });
+    }
+
+    // エントリーを削除
+    handleRemoveEntry(entryId, coolIndex);
+    setDeleteConfirmDialog(null);
+  }, [deleteConfirmDialog, eventSettings.customFields, timetableType, selectedDate, currentTimetable, onEventSettingsChange, handleRemoveEntry]);
+
   return (
     <DndContext
-      sensors={sensors}
+      sensors={isCustomMode ? [] : sensors}
       collisionDetection={customCollisionDetection}
-      onDragStart={handleDragStart}
+      onDragStart={wrappedHandleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       autoScroll={{
@@ -347,63 +552,135 @@ export const TimetableEditing = ({
           currentTimetable={currentTimetable}
           inputCoolCount={inputCoolCount}
           isReadOnly={isReadOnly}
+          isCustomMode={isCustomMode}
           onTimetableTypeChange={handleTimetableTypeChange}
           onDateChange={setSelectedDate}
           onStartTimeChange={handleStartTimeChange}
           onCoolCountChange={handleCoolCountChange}
           onCoolCountInputChange={setInputCoolCount}
+          onCustomModeChange={setIsCustomMode}
         />
 
         {/* メインコンテンツエリア */}
         <div className="flex-1 overflow-hidden px-6 pb-6 pt-4">
           <div className="flex gap-4 h-full relative">
-            {/* 制約違反サマリーパネル - スライドメニュー */}
-            <ViolationPanel
-              violations={violations}
-              isOpen={isViolationPanelOpen}
-              onToggle={() => setIsViolationPanelOpen(!isViolationPanelOpen)}
-            />
+            {/* 制約違反サマリーパネル - カスタムモード時は非表示 */}
+            {!isCustomMode && (
+              <ViolationPanel
+                violations={violations}
+                isOpen={isViolationPanelOpen}
+                onToggle={() => setIsViolationPanelOpen(!isViolationPanelOpen)}
+              />
+            )}
           
-          {/* タイムテーブルとバンドバンクのコンテナ */}
-          <div className="flex gap-4 flex-1 min-w-0 ml-9">
-            {/* 中央ペイン: タイムテーブル */}
-            <TimetableContent
-              currentTimetable={currentTimetable}
-              bands={bands}
-              overEntryId={overEntryId}
-              violations={violations}
-              bandNumbers={bandNumbers}
-              isReadOnly={isReadOnly}
-              rehearsalType={eventSettings.rehearsalType}
-              onRemoveEntry={handleRemoveEntry}
-              onDeleteCool={handleDeleteCool}
-              onMoveCoolUp={handleMoveCoolUp}
-              onMoveCoolDown={handleMoveCoolDown}
-              onTransitionTimeChange={handleTransitionTimeChange}
-              onCoolStartTimeChange={handleCoolStartTimeChange}
-            />
+          {/* タイムテーブルとバンドバンク/列管理のコンテナ */}
+          <div className={`flex gap-4 flex-1 min-w-0 ${isCustomMode ? '' : 'ml-9'}`}>
+            {/* 中央ペイン */}
+            {isCustomMode ? (
+              <CustomFieldsTable
+                currentTimetable={currentTimetable}
+                bands={bands}
+                timetable={timetable}
+                eventSettings={eventSettings}
+                timetableType={timetableType}
+                selectedDate={selectedDate}
+                onCustomFieldsChange={handleCustomFieldsChange}
+              />
+            ) : (
+              <TimetableContent
+                currentTimetable={currentTimetable}
+                bands={bands}
+                overEntryId={overEntryId}
+                violations={violations}
+                bandNumbers={bandNumbers}
+                isReadOnly={isReadOnly}
+                rehearsalType={eventSettings.rehearsalType}
+                onRemoveEntry={handleRemoveEntryWithConfirm}
+                onDeleteCool={handleDeleteCool}
+                onMoveCoolUp={handleMoveCoolUp}
+                onMoveCoolDown={handleMoveCoolDown}
+                onTransitionTimeChange={handleTransitionTimeChange}
+                onCoolStartTimeChange={handleCoolStartTimeChange}
+              />
+            )}
 
-          {/* 右ペイン: バンドバンク */}
-          <BandBankDropZone 
-            unplacedBands={unplacedBands} 
-            timetableType={timetableType}
-            rehearsalDuration={eventSettings.rehearsalDuration}
-            customEvents={customEvents}
-            onAddCustomEvent={handleAddCustomEvent}
-            onDeleteCustomEvent={handleDeleteCustomEvent}
-          />
+          {/* 右ペイン: カスタムモード時は列管理、通常時はバンドバンク */}
+          {isCustomMode ? (
+            <CustomColumnManager
+              customFields={eventSettings.customFields}
+              timetableType={timetableType}
+              onCustomFieldsChange={handleCustomFieldsChange}
+            />
+          ) : (
+            <BandBankDropZone 
+              unplacedBands={unplacedBands} 
+              timetableType={timetableType}
+              rehearsalDuration={eventSettings.rehearsalDuration}
+              customEvents={customEvents}
+              onAddCustomEvent={handleAddCustomEvent}
+              onDeleteCustomEvent={handleDeleteCustomEvent}
+            />
+          )}
           </div>
         </div>
         </div>
 
       {/* ドラッグオーバーレイ */}
-      <TimetableDragOverlay
-        activeBand={activeBand}
-        activeCustomEvent={activeCustomEvent}
-        activeEntry={activeEntry}
-        bands={bands}
-        dropSucceeded={dropSucceeded}
-      />
+      {!isCustomMode && (
+        <TimetableDragOverlay
+          activeBand={activeBand}
+          activeCustomEvent={activeCustomEvent}
+          activeEntry={activeEntry}
+          bands={bands}
+          dropSucceeded={dropSucceeded}
+        />
+      )}
+
+      {/* 挿入時の通知バナー */}
+      {insertionNotification && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-5 py-2.5 rounded-lg shadow-lg text-sm font-medium animate-fade-in">
+          {insertionNotification}
+        </div>
+      )}
+
+      {/* 削除確認ダイアログ */}
+      {deleteConfirmDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl p-6 max-w-md">
+            <h3 className="text-lg font-bold text-white mb-3">削除の確認</h3>
+            <div className="text-gray-300 text-sm mb-4 space-y-1">
+              <p>「{deleteConfirmDialog.entryName}」を削除します。</p>
+              {deleteConfirmDialog.hasEntityData && (
+                <p className="text-amber-400">• エントリー追従のカスタム項目データが失われます</p>
+              )}
+              {deleteConfirmDialog.hasSeqData && (
+                <p className="text-amber-400">• この位置の位置固定カスタム項目データが失われます</p>
+              )}
+              {deleteConfirmDialog.seqMergeAffected && (
+                <p className="text-amber-400">• セル結合が自動的に調整されます</p>
+              )}
+              {!deleteConfirmDialog.hasEntityData && !deleteConfirmDialog.hasSeqData && !deleteConfirmDialog.seqMergeAffected && (
+                <p className="text-amber-400">• 位置固定のカスタム項目データが繰り上がります</p>
+              )}
+              <p className="mt-2">削除しますか？</p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeleteConfirmDialog(null)}
+                className="px-4 py-2 text-sm font-medium rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={executeRemoveEntry}
+                className="px-4 py-2 text-sm font-medium rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors"
+              >
+                削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </DndContext>
   );

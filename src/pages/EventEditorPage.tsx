@@ -1033,6 +1033,9 @@ export const EventEditorPage = () => {
               rehearsalTimetable={rehearsalTimetable}
               onPerformanceTimetableChange={handlePerformanceTimetableChange}
               onRehearsalTimetableChange={handleRehearsalTimetableChange}
+              onEventSettingsChange={(updates) => {
+                setEventSettings(prev => prev ? { ...prev, ...updates } : null);
+              }}
             />
           )}
         </div>
