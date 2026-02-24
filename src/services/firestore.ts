@@ -103,15 +103,23 @@ export const bandService = {
   // バンド一覧をリアルタイム監視
   subscribeToBands(
     eventId: string,
-    callback: (bands: Band[]) => void
+    callback: (bands: Band[]) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const bandsRef = collection(db, 'bands');
     const q = query(bandsRef, where('eventId', '==', eventId));
     
-    return onSnapshot(q, (snapshot: QuerySnapshot) => {
-      const bands = snapshot.docs.map(doc => firestoreToBand(doc.id, doc.data()));
-      callback(bands);
-    });
+    return onSnapshot(
+      q,
+      (snapshot: QuerySnapshot) => {
+        const bands = snapshot.docs.map(doc => firestoreToBand(doc.id, doc.data()));
+        callback(bands);
+      },
+      (error) => {
+        console.error('[bandService.subscribeToBands] エラー:', error);
+        if (onError) onError(error);
+      }
+    );
   },
 
   // バンドを追加
@@ -451,7 +459,8 @@ export const timetableService = {
   subscribeTimetable(
     eventId: string,
     type: 'performance' | 'rehearsal',
-    callback: (timetable: Timetable | null) => void
+    callback: (timetable: Timetable | null) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const timetablesRef = collection(db, 'timetables');
     const q = query(
@@ -460,14 +469,21 @@ export const timetableService = {
       where('type', '==', type)
     );
     
-    return onSnapshot(q, (snapshot: QuerySnapshot) => {
-      if (snapshot.empty) {
-        callback(null);
-        return;
+    return onSnapshot(
+      q,
+      (snapshot: QuerySnapshot) => {
+        if (snapshot.empty) {
+          callback(null);
+          return;
+        }
+        
+        const timetableDoc = snapshot.docs[0];
+        callback(firestoreToTimetable(timetableDoc.id, timetableDoc.data()));
+      },
+      (error) => {
+        console.error('[timetableService.subscribeTimetable] エラー:', error);
+        if (onError) onError(error);
       }
-      
-      const timetableDoc = snapshot.docs[0];
-      callback(firestoreToTimetable(timetableDoc.id, timetableDoc.data()));
-    });
+    );
   },
 };

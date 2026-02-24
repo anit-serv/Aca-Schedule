@@ -42,8 +42,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           createdAt: new Date(user.metadata.creationTime || Date.now()),
         };
         setCurrentUser(appUser);
-        // Firestoreにユーザー情報を保存/更新
-        await userService.saveUser(appUser);
+        // Firestoreにユーザー情報を保存/更新（失敗してもloadingを解除する）
+        try {
+          await userService.saveUser(appUser);
+        } catch (err) {
+          console.error('[AuthContext] ユーザー情報の保存に失敗しました:', err);
+        }
       } else {
         setCurrentUser(null);
       }

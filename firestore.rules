@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ヘルパー関数
+    function eventData(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data;
+    }
+
+    function isEventOwner(eventId) {
+      return request.auth != null && eventData(eventId).ownerId == request.auth.uid;
+    }
+
+    function isEventPublic(eventId) {
+      return eventData(eventId).isPublic == true;
+    }
+
+    // ユーザー情報: 本人のみ読み書き可能
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // イベント
+    // - オーナーのみ読み書き可能
+    // - isPublic=true の場合は認証なしでも読み取り可能（共有URL用）
+    match /events/{eventId} {
+      allow read: if (request.auth != null && resource.data.ownerId == request.auth.uid)
+                   || resource.data.isPublic == true;
+      allow create: if request.auth != null
+                     && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if request.auth != null
+                             && resource.data.ownerId == request.auth.uid;
+    }
+
+    // バンド
+    // - 関連するイベントのオーナーのみ読み書き可能
+    // - 関連するイベントが公開の場合は認証なしでも読み取り可能
+    match /bands/{bandId} {
+      allow read: if isEventOwner(resource.data.eventId)
+                   || isEventPublic(resource.data.eventId);
+      allow create: if isEventOwner(request.resource.data.eventId);
+      allow update, delete: if isEventOwner(resource.data.eventId);
+    }
+
+    // タイムテーブル
+    // - 関連するイベントのオーナーのみ読み書き可能
+    // - 関連するイベントが公開の場合は認証なしでも読み取り可能
+    match /timetables/{timetableId} {
+      allow read: if isEventOwner(resource.data.eventId)
+                   || isEventPublic(resource.data.eventId);
+      allow create: if isEventOwner(request.resource.data.eventId);
+      allow update, delete: if isEventOwner(resource.data.eventId);
+    }
+
+  }
+}
