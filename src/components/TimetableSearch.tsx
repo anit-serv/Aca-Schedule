@@ -8,7 +8,7 @@ interface TimetableSearchProps {
 }
 
 export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: TimetableSearchProps) => {
-  const [isFocused, setIsFocused] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 検索候補を生成
@@ -40,22 +40,27 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
     }).slice(0, 8);
   }, [searchQuery, bands]);
 
-  // Escキーでクリア
+  // Escキーでクリア、Enterでサジェスト非表示
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && searchQuery) {
         onSearchChange('');
+        setShowSuggestions(false);
+        inputRef.current?.blur();
+      }
+      if (e.key === 'Enter' && showSuggestions) {
+        setShowSuggestions(false);
         inputRef.current?.blur();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [searchQuery, onSearchChange]);
+  }, [searchQuery, onSearchChange, showSuggestions]);
 
   return (
     <div className="relative">
       <div className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-1.5 transition-colors ${
-        isFocused ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-300'
+        showSuggestions ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-300'
       }`}>
         {/* 検索アイコン */}
         <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -65,9 +70,12 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
           ref={inputRef}
           type="text"
           value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+          onChange={(e) => {
+            onSearchChange(e.target.value);
+            setShowSuggestions(true);
+          }}
+          onFocus={() => setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           placeholder="バンド名・メンバー名で検索"
           className="bg-transparent outline-none text-sm text-gray-900 placeholder-gray-400 w-full sm:w-40"
         />
@@ -84,7 +92,7 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
       </div>
 
       {/* サジェスト */}
-      {isFocused && suggestions.length > 0 && (
+      {showSuggestions && suggestions.length > 0 && (
         <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
           {suggestions.map((s, idx) => (
             <button
@@ -93,6 +101,8 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
               onMouseDown={(e) => {
                 e.preventDefault();
                 onSearchChange(s.label);
+                setShowSuggestions(false);
+                inputRef.current?.blur();
               }}
             >
               <span className={`text-xs px-1.5 py-0.5 rounded ${
