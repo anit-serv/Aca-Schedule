@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BandManagement } from '../components/BandManagement';
 import { TimetableEditing } from '../components/TimetableEditing';
@@ -31,6 +31,8 @@ export const EventEditorPage = () => {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  // 初回モード自動判定用
+  const initialModeSetRef = useRef(false);
   // 共有パネルの表示状態
   const [showSharePanel, setShowSharePanel] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
@@ -102,6 +104,13 @@ export const EventEditorPage = () => {
     // リアルタイム監視を設定
     const unsubscribe = bandService.subscribeToBands(eventId, (fetchedBands) => {
       setBands(fetchedBands);
+      // 初回読み込み時: バンドが1つ以上あればタイムテーブル編集画面を開く
+      if (!initialModeSetRef.current) {
+        initialModeSetRef.current = true;
+        if (fetchedBands.length > 0) {
+          setMode('timetable-editing');
+        }
+      }
     });
 
     // クリーンアップ
@@ -211,6 +220,8 @@ export const EventEditorPage = () => {
     if (!eventId) return;
     
     // リアルタイム監視を設定
+    // Firestoreは書き込み時にローカルキャッシュを即座に更新するため、
+    // onSnapshotが即座に発火し、UIは瞬時に更新される
     const unsubscribe = timetableService.subscribeTimetable(
       eventId,
       'performance',
@@ -224,8 +235,10 @@ export const EventEditorPage = () => {
   }, [eventId]);
 
   // リハーサルタイムテーブルデータの読み込み
+  // 注意: eventSettingsを依存配列に入れるとサブスクリプションが再作成されるため、hasEventSettingsのみ使用
+  const hasEventSettings = !!eventSettings;
   useEffect(() => {
-    if (!eventId || !eventSettings) return;
+    if (!eventId || !hasEventSettings) return;
     
     // リアルタイム監視を設定
     const unsubscribe = timetableService.subscribeTimetable(
@@ -238,7 +251,8 @@ export const EventEditorPage = () => {
 
     // クリーンアップ
     return () => unsubscribe();
-  }, [eventId, eventSettings]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, hasEventSettings]);
 
   // タイムテーブルが存在しない場合は作成
   useEffect(() => {
@@ -294,7 +308,24 @@ export const EventEditorPage = () => {
         return;
       }
       
+      // 当日一括リハーサルの場合は自動追加しない（ユーザーが手動でリハ順を編集する）
+      if (eventSettings.rehearsalType === 'day-start-rehearsal') {
+        return;
+      }
+      
       console.log('[リハーサル自動追加] バンド数:', bands.length);
+      
+      // 各日付のリハーサルタイムテーブルに新しいバンドを追加
+      const rehearsalType = eventSettings.rehearsalType;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dates = (['cool-pre-rehearsal', 'day-start-rehearsal'] as const).includes(rehearsalType as any)
+        ? eventSettings.performanceDates
+        : eventSettings.rehearsalDates || [];
+      
+      if (dates.length === 0) {
+        console.log('[リハーサル自動追加] 日付が設定されていません');
+        return;
+      }
       
       // リハーサルタイムテーブルに既に配置されているバンドIDを取得
       const placedBandIds = new Set<string>();
@@ -322,18 +353,6 @@ export const EventEditorPage = () => {
       }
       
       console.log('[リハーサル自動追加] 新しいバンド:', newBands.map(b => b.name));
-      
-      // 各日付のリハーサルタイムテーブルに新しいバンドを追加
-      const rehearsalType = eventSettings.rehearsalType;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const dates = (['cool-pre-rehearsal', 'day-start-rehearsal'] as const).includes(rehearsalType as any)
-        ? eventSettings.performanceDates
-        : eventSettings.rehearsalDates || [];
-      
-      if (dates.length === 0) {
-        console.log('[リハーサル自動追加] 日付が設定されていません');
-        return;
-      }
       
       for (const date of dates) {
         let dailyTimetable = rehearsalTimetable.dailyTimetables.find(dt => dt.date === date);
@@ -574,6 +593,57 @@ export const EventEditorPage = () => {
     setBands(updatedBands);
   };
 
+  // リハーサルの最終エントリーの終了時刻を取得
+  const getRehearsalEndTime = (dailyTimetable: DailyTimetable): string | null => {
+    // クール構造から最終エントリーの終了時刻を取得
+    if (dailyTimetable.cools && dailyTimetable.cools.length > 0) {
+      for (let i = dailyTimetable.cools.length - 1; i >= 0; i--) {
+        const cool = dailyTimetable.cools[i];
+        if (cool.entries.length > 0) {
+          const lastEntry = cool.entries[cool.entries.length - 1];
+          if (lastEntry.endTime) return lastEntry.endTime;
+        }
+      }
+    }
+    // フラット構造
+    if (dailyTimetable.entries && dailyTimetable.entries.length > 0) {
+      const lastEntry = dailyTimetable.entries[dailyTimetable.entries.length - 1];
+      if (lastEntry.endTime) return lastEntry.endTime;
+    }
+    return null;
+  };
+
+  // 本番用のエントリー時刻を再計算するヘルパー
+  const recalculatePerformanceEntryTimes = (entries: TimetableEntry[], startTime: string): TimetableEntry[] => {
+    let currentTime = startTime;
+    return entries.map((entry, index) => {
+      const band = entry.bandId ? bands.find((b) => b.id === entry.bandId) : null;
+      const duration = band?.performanceDuration || entry.customEvent?.duration || 0;
+      const transitionTime = entry.transitionTime || 0;
+      const [hours, minutes] = currentTime.split(':').map(Number);
+      const startMinutes = hours * 60 + minutes + transitionTime;
+      const endMinutes = startMinutes + duration;
+      const entryStart = `${Math.floor(startMinutes / 60).toString().padStart(2, '0')}:${(startMinutes % 60).toString().padStart(2, '0')}`;
+      const entryEnd = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
+      currentTime = entryEnd;
+      return { ...entry, startTime: entryStart, endTime: entryEnd, order: index };
+    });
+  };
+
+  const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: string): Cool[] => {
+    if (!cools || cools.length === 0) return cools;
+    let currentTime = dailyStartTime;
+    return cools.map((cool) => {
+      if (cool.startTime) currentTime = cool.startTime;
+      const updatedEntries = recalculatePerformanceEntryTimes(cool.entries, currentTime);
+      if (updatedEntries.length > 0) {
+        const lastEntry = updatedEntries[updatedEntries.length - 1];
+        currentTime = lastEntry.endTime || currentTime;
+      }
+      return { ...cool, entries: updatedEntries };
+    });
+  };
+
   // 日別タイムテーブルの変更を処理（本番用）
   const handlePerformanceTimetableChange = async (updatedDailyTimetable: DailyTimetable) => {
     if (!performanceTimetable || !eventSettings) return;
@@ -635,28 +705,18 @@ export const EventEditorPage = () => {
       dailyTimetables: updatedDailyTimetables,
     };
     
-    setPerformanceTimetable(updatedTimetable);
+    // 楽観的更新を削除：Firestoreが書き込み時にローカルキャッシュを即座に更新し、
+    // onSnapshotがトリガーされてstateが更新されるため、手動でsetStateする必要はない
+    // これによりrace conditionが完全に排除される
     
-    console.log('[本番TT変更] ローカルステート更新完了');
+    console.log('[本番TT変更] Firestore書き込み開始');
     
-    // Firestoreに保存（全体を一度に保存）
+    // Firestoreに保存（全日付を一括で保存して競合を防止）
     try {
-      await timetableService.updateDailyTimetable(performanceTimetable.id, updatedDailyTimetable);
-      console.log('[本番TT変更] Firestore保存成功:', updatedDailyTimetable.date);
-      
-      // 後続の日付も保存
-      if (changedIndex >= 0) {
-        for (let i = changedIndex + 1; i < sortedDates.length; i++) {
-          const date = sortedDates[i];
-          const dt = updatedDailyTimetables.find(d => d.date === date);
-          if (dt) {
-            await timetableService.updateDailyTimetable(performanceTimetable.id, dt);
-            console.log('[本番TT変更] 後続日付保存成功:', date);
-          }
-        }
-      }
-      
-      console.log('[本番TT変更] 全ての保存が完了');
+      await timetableService.updateTimetable(performanceTimetable.id, {
+        dailyTimetables: updatedTimetable.dailyTimetables,
+      });
+      console.log('[本番TT変更] Firestore一括保存成功');
     } catch (error) {
       console.error('タイムテーブル更新エラー:', error);
       alert('タイムテーブルの更新に失敗しました。');
@@ -734,31 +794,50 @@ export const EventEditorPage = () => {
       dailyTimetables: updatedDailyTimetables,
     };
     
-    setRehearsalTimetable(updatedTimetable);
+    // 楽観的更新を削除：onSnapshotによる自動更新に任せる
     
-    console.log('[リハTT変更] ローカルステート更新完了');
+    console.log('[リハTT変更] Firestore書き込み開始');
     
-    // Firestoreに保存（全体を一度に保存）
+    // Firestoreに保存（全日付を一括で保存して競合を防止）
     try {
-      await timetableService.updateDailyTimetable(rehearsalTimetable.id, updatedDailyTimetable);
-      console.log('[リハTT変更] Firestore保存成功:', updatedDailyTimetable.date);
-      
-      // 後続の日付も保存
-      if (changedIndex >= 0) {
-        for (let i = changedIndex + 1; i < sortedDates.length; i++) {
-          const date = sortedDates[i];
-          const dt = updatedDailyTimetables.find(d => d.date === date);
-          if (dt) {
-            await timetableService.updateDailyTimetable(rehearsalTimetable.id, dt);
-            console.log('[リハTT変更] 後続日付保存成功:', date);
-          }
-        }
-      }
-      
-      console.log('[リハTT変更] 全ての保存が完了');
+      await timetableService.updateTimetable(rehearsalTimetable.id, {
+        dailyTimetables: updatedTimetable.dailyTimetables,
+      });
+      console.log('[リハTT変更] Firestore一括保存成功');
     } catch (error) {
       console.error('タイムテーブル更新エラー:', error);
       alert('タイムテーブルの更新に失敗しました。');
+    }
+
+    // 当日一括リハーサルの場合、リハーサル終了時刻が本番開始時刻を超えるときのみ自動反映
+    if (eventSettings.rehearsalType === 'day-start-rehearsal' && performanceTimetable) {
+      const rehearsalEndTime = getRehearsalEndTime(updatedDailyTimetable);
+      if (rehearsalEndTime) {
+        const performanceDt = performanceTimetable.dailyTimetables.find(
+          dt => dt.date === updatedDailyTimetable.date
+        );
+        // リハーサル終了時刻が本番開始時刻を超える場合のみ更新（早く終わった場合は変更しない）
+        if (performanceDt && rehearsalEndTime > performanceDt.startTime) {
+          const updatedPerformanceDt: DailyTimetable = {
+            ...performanceDt,
+            startTime: rehearsalEndTime,
+            ...(performanceDt.cools && performanceDt.cools.length > 0
+              ? { cools: recalculatePerformanceCoolTimes(performanceDt.cools, rehearsalEndTime) }
+              : { entries: recalculatePerformanceEntryTimes(performanceDt.entries || [], rehearsalEndTime) }
+            ),
+          };
+          // onSnapshotによる自動更新に任せる（楽観的更新を削除）
+          // Firestoreに保存
+          try {
+            await timetableService.updateDailyTimetable(
+              performanceTimetable.id, updatedPerformanceDt
+            );
+            console.log('[リハTT変更] 本番開始時刻を自動更新:', rehearsalEndTime);
+          } catch (error) {
+            console.error('[リハTT変更] 本番開始時刻の更新エラー:', error);
+          }
+        }
+      }
     }
   };
 

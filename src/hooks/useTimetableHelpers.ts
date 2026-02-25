@@ -78,9 +78,15 @@ export const useTimetableHelpers = ({
       }
       
       // リハーサルタイムテーブル内での使用回数をカウント
+      // 当日一括リハーサル: 同日リハ→本番なので、選択中の日付のみカウント
+      // クール直前リハーサル: 本番と同期するので全日程横断でカウント
       const rehearsalUsageCount: Record<string, number> = {};
       if (rehearsalTimetable) {
-        rehearsalTimetable.dailyTimetables.forEach((dailyTimetable) => {
+        const targetDailyTimetables = eventSettings.rehearsalType === 'day-start-rehearsal'
+          ? rehearsalTimetable.dailyTimetables.filter(dt => dt.date === selectedDate)
+          : rehearsalTimetable.dailyTimetables;
+        
+        targetDailyTimetables.forEach((dailyTimetable) => {
           // クール構造からカウント
           dailyTimetable.cools?.forEach((cool) => {
             cool.entries.forEach((entry) => {
@@ -134,10 +140,12 @@ export const useTimetableHelpers = ({
   const calculateTimes = useCallback((entries: TimetableEntry[], startTime: string) => {
     // リハーサルモードの場合、全バンドが同じリハーサル時間を使用して連続配置
     if (timetableType === 'rehearsal') {
-      const duration = eventSettings.rehearsalDuration || 0;
+      const rehearsalDuration = eventSettings.rehearsalDuration || 0;
       let currentTime = startTime;
       
       return entries.map((entry, index) => {
+        // カスタムイベントは独自のdurationを使用、バンドはリハーサル時間を使用
+        const duration = entry.customEvent ? (entry.customEvent.duration || 0) : rehearsalDuration;
         // 転換時間を考慮
         const transitionTime = entry.transitionTime || 0;
         

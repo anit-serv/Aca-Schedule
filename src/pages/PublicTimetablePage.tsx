@@ -114,6 +114,33 @@ export const PublicTimetablePage = () => {
     return dt;
   }, [timetable, selectedDate]);
 
+  // 当日一括リハーサル用：本番とリハーサルの日別タイムテーブル
+  const performanceDailyTimetable: DailyTimetable = useMemo(() => {
+    const dt = performanceTimetable?.dailyTimetables.find(d => d.date === selectedDate);
+    if (!dt) {
+      return {
+        date: selectedDate,
+        startTime: '10:00',
+        cools: [],
+        entries: [],
+      };
+    }
+    return dt;
+  }, [performanceTimetable, selectedDate]);
+
+  const rehearsalDailyTimetable: DailyTimetable = useMemo(() => {
+    const dt = rehearsalTimetable?.dailyTimetables.find(d => d.date === selectedDate);
+    if (!dt) {
+      return {
+        date: selectedDate,
+        startTime: '10:00',
+        cools: [],
+        entries: [],
+      };
+    }
+    return dt;
+  }, [rehearsalTimetable, selectedDate]);
+
   // 日付フォーマット
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -174,6 +201,9 @@ export const PublicTimetablePage = () => {
   }
 
   const hasRehearsal = eventSettings.rehearsalType !== 'none';
+  
+  // 当日一括リハーサルの場合、リハと本番を1ページに表示
+  const showCombinedView = eventSettings.rehearsalType === 'day-start-rehearsal';
 
   return (
     <div className="bg-gray-900 text-white h-screen font-sans flex flex-col overflow-hidden">
@@ -197,8 +227,8 @@ export const PublicTimetablePage = () => {
       {/* コントロールバー */}
       <div className="bg-gray-800/50 border-b border-gray-700 flex-shrink-0">
         <div className="max-w-7xl mx-auto px-6 py-2 flex items-center gap-4">
-          {/* 本番/リハーサル切り替え */}
-          {hasRehearsal && (
+          {/* 本番/リハーサル切り替え - 当日一括リハーサルでは非表示（両方表示するため） */}
+          {hasRehearsal && !showCombinedView && (
             <div className="flex items-center gap-1">
               <button
                 onClick={() => handleTypeChange('performance')}
@@ -226,7 +256,7 @@ export const PublicTimetablePage = () => {
           {/* 日付セレクター */}
           {dateList.length > 0 && (
             <div className="flex items-center gap-1">
-              {dateList.map(date => (
+              {(showCombinedView ? eventSettings.performanceDates : dateList).map(date => (
                 <button
                   key={date}
                   onClick={() => setSelectedDate(date)}
@@ -246,16 +276,58 @@ export const PublicTimetablePage = () => {
 
       {/* メインコンテンツ */}
       <main className="flex-1 flex flex-col overflow-hidden p-4">
-        <CustomFieldsTable
-          currentTimetable={currentTimetable}
-          bands={bands}
-          timetable={timetable}
-          eventSettings={eventSettings}
-          timetableType={timetableType}
-          selectedDate={selectedDate}
-          onCustomFieldsChange={() => {}}
-          readOnly
-        />
+        {showCombinedView ? (
+          // 当日一括リハーサル：リハーサルと本番を縦に並べて表示
+          <div className="flex-1 flex flex-col gap-4 overflow-auto">
+            {/* リハーサルセクション */}
+            <div className="flex-shrink-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-medium text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded">
+                  リハーサル
+                </span>
+              </div>
+              <CustomFieldsTable
+                currentTimetable={rehearsalDailyTimetable}
+                bands={bands}
+                timetable={rehearsalTimetable}
+                eventSettings={eventSettings}
+                timetableType="rehearsal"
+                selectedDate={selectedDate}
+                onCustomFieldsChange={() => {}}
+                readOnly
+              />
+            </div>
+            {/* 本番セクション */}
+            <div className="flex-shrink-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-medium text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">
+                  本番
+                </span>
+              </div>
+              <CustomFieldsTable
+                currentTimetable={performanceDailyTimetable}
+                bands={bands}
+                timetable={performanceTimetable}
+                eventSettings={eventSettings}
+                timetableType="performance"
+                selectedDate={selectedDate}
+                onCustomFieldsChange={() => {}}
+                readOnly
+              />
+            </div>
+          </div>
+        ) : (
+          <CustomFieldsTable
+            currentTimetable={currentTimetable}
+            bands={bands}
+            timetable={timetable}
+            eventSettings={eventSettings}
+            timetableType={timetableType}
+            selectedDate={selectedDate}
+            onCustomFieldsChange={() => {}}
+            readOnly
+          />
+        )}
       </main>
     </div>
   );

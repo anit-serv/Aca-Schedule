@@ -13,12 +13,15 @@ interface CustomColumnManagerProps {
   customFields: CustomFieldsSettings | undefined;
   timetableType: 'performance' | 'rehearsal';
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
+  /** trueの場合、操作をperformanceとrehearsal両方に適用 */
+  applyToBoth?: boolean;
 }
 
 export const CustomColumnManager = ({
   customFields,
   timetableType,
   onCustomFieldsChange,
+  applyToBoth = false,
 }: CustomColumnManagerProps) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
@@ -37,11 +40,19 @@ export const CustomColumnManager = ({
     if (!newColumnName.trim()) return;
 
     const settings = customFields || createEmptyCustomFieldsSettings();
-    const updated = addColumn(settings, timetableType, {
-      id: crypto.randomUUID(),
+    const columnId = crypto.randomUUID();
+    const columnData = {
+      id: columnId,
       name: newColumnName.trim(),
       bindingType: newColumnType,
-    });
+    };
+    
+    let updated = addColumn(settings, timetableType, columnData);
+    // applyToBothがtrueの場合、もう一方のタイプにも追加
+    if (applyToBoth) {
+      const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
+      updated = addColumn(updated, otherType, columnData);
+    }
 
     onCustomFieldsChange(updated);
     setNewColumnName('');
@@ -53,7 +64,11 @@ export const CustomColumnManager = ({
   const handleRemoveColumn = (columnId: string) => {
     if (!customFields) return;
     if (!confirm('この列を削除しますか？データも全て削除されます。')) return;
-    const updated = removeColumn(customFields, timetableType, columnId);
+    let updated = removeColumn(customFields, timetableType, columnId);
+    if (applyToBoth) {
+      const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
+      updated = removeColumn(updated, otherType, columnId);
+    }
     onCustomFieldsChange(updated);
   };
 
@@ -69,7 +84,11 @@ export const CustomColumnManager = ({
       setEditingColumnId(null);
       return;
     }
-    const updated = renameColumn(customFields, timetableType, editingColumnId, editingName.trim());
+    let updated = renameColumn(customFields, timetableType, editingColumnId, editingName.trim());
+    if (applyToBoth) {
+      const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
+      updated = renameColumn(updated, otherType, editingColumnId, editingName.trim());
+    }
     onCustomFieldsChange(updated);
     setEditingColumnId(null);
   };
@@ -77,13 +96,21 @@ export const CustomColumnManager = ({
   // 列の移動（上下）
   const handleMoveUp = (index: number) => {
     if (!customFields || index === 0) return;
-    const updated = reorderColumns(customFields, timetableType, index, index - 1);
+    let updated = reorderColumns(customFields, timetableType, index, index - 1);
+    if (applyToBoth) {
+      const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
+      updated = reorderColumns(updated, otherType, index, index - 1);
+    }
     onCustomFieldsChange(updated);
   };
 
   const handleMoveDown = (index: number) => {
     if (!customFields || index >= columns.length - 1) return;
-    const updated = reorderColumns(customFields, timetableType, index, index + 1);
+    let updated = reorderColumns(customFields, timetableType, index, index + 1);
+    if (applyToBoth) {
+      const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
+      updated = reorderColumns(updated, otherType, index, index + 1);
+    }
     onCustomFieldsChange(updated);
   };
 
@@ -93,7 +120,7 @@ export const CustomColumnManager = ({
       <div className="px-4 py-3 border-b border-gray-700 flex-shrink-0">
         <h3 className="text-sm font-semibold text-gray-200">列管理</h3>
         <p className="text-xs text-gray-400 mt-0.5">
-          {timetableType === 'performance' ? '本番用' : 'リハ用'} · {columns.length}列
+          {applyToBoth ? '本番+リハ共通' : (timetableType === 'performance' ? '本番用' : 'リハ用')} · {columns.length}列
         </p>
       </div>
 

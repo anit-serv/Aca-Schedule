@@ -69,6 +69,8 @@ export const CustomFieldsTable = ({
   const dragStartRef = useRef<{ seq: number; colId: string; mergedEndSeq?: number } | null>(null);
   // input要素のrefマップ
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  // IME変換中フラグ（キー: "seq:colId"）
+  const isComposingRef = useRef<Map<string, boolean>>(new Map());
 
   const customFields = eventSettings.customFields;
   const typeData = getTypeData(customFields, timetableType);
@@ -206,6 +208,27 @@ export const CustomFieldsTable = ({
   const handleCellChange = useCallback(
     (seq: number, entryId: string, col: CustomColumn, value: string) => {
       const key = cellKey(seq, col.id);
+      setCellValues(prev => ({ ...prev, [key]: value }));
+      // IME変換中は保存をスキップ（compositionendで保存される）
+      if (!isComposingRef.current.get(key)) {
+        debouncedSave(seq, entryId, col, value);
+      }
+    },
+    [debouncedSave]
+  );
+
+  // IME変換開始ハンドラー
+  const handleCompositionStart = useCallback((seq: number, colId: string) => {
+    const key = cellKey(seq, colId);
+    isComposingRef.current.set(key, true);
+  }, []);
+
+  // IME変換終了ハンドラー
+  const handleCompositionEnd = useCallback(
+    (seq: number, entryId: string, col: CustomColumn, value: string) => {
+      const key = cellKey(seq, col.id);
+      isComposingRef.current.set(key, false);
+      // 変換確定後に保存
       setCellValues(prev => ({ ...prev, [key]: value }));
       debouncedSave(seq, entryId, col, value);
     },
@@ -812,7 +835,17 @@ export const CustomFieldsTable = ({
       )}
 
       <div className={`flex-1 overflow-auto ${isDragging ? 'select-none' : ''}`} ref={tableRef}>
-        <table className="w-full text-sm border-collapse">
+        <table className="w-full text-sm border-collapse table-fixed">
+          {/* 列幅固定用（結合セルのみでも幅を維持） */}
+          <colgroup>
+            <col className="w-12" />{/* # */}
+            <col className="w-20" />{/* 開始 */}
+            <col className="min-w-[120px]" />{/* 名称 */}
+            <col className="w-16" />{/* 時間 */}
+            {columns.map(col => (
+              <col key={col.id} className="min-w-[120px]" />
+            ))}
+          </colgroup>
           {/* ヘッダー */}
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-800 border-b border-gray-600">
@@ -861,6 +894,8 @@ export const CustomFieldsTable = ({
                 handleKeyDown={handleKeyDown}
                 handleCellFocus={handleCellFocus}
                 handleContextMenu={handleContextMenu}
+                handleCompositionStart={handleCompositionStart}
+                handleCompositionEnd={handleCompositionEnd}
                 registerInputRef={registerInputRef}
                 readOnly={isReadOnly}
               />
@@ -894,6 +929,8 @@ interface CoolGroupProps {
   handleKeyDown: (e: React.KeyboardEvent, seq: number, entryId: string, colIndex: number, col: CustomColumn) => void;
   handleCellFocus: (seq: number, colIndex: number) => void;
   handleContextMenu: (e: React.MouseEvent, seq: number, colId: string) => void;
+  handleCompositionStart: (seq: number, colId: string) => void;
+  handleCompositionEnd: (seq: number, entryId: string, col: CustomColumn, value: string) => void;
   registerInputRef: (key: string, el: HTMLInputElement | null) => void;
   readOnly: boolean;
 }
@@ -918,6 +955,8 @@ const CoolGroup = ({
   handleKeyDown,
   handleCellFocus,
   handleContextMenu,
+  handleCompositionStart,
+  handleCompositionEnd,
   registerInputRef,
   readOnly: isReadOnly,
 }: CoolGroupProps) => {
@@ -991,12 +1030,29 @@ const CoolGroup = ({
               const key = cellKey(entry.sequenceNumber, col.id);
               const value = getCellValue(entry.sequenceNumber, entry.entryId, col);
 
+              // 結合セルの場合、範囲内にバンド（カスタムイベント以外）が含まれているかチェック
+              // 含まれていれば紫背景を覆い隠す背景色を適用
+              let mergedCellBgClass = '';
+              if (hasMerge && cellData.rowSpan) {
+                const startSeq = entry.sequenceNumber;
+                const endSeq = entry.sequenceNumber + cellData.rowSpan - 1;
+                const hasBandInRange = group.entries.some(
+                  e => e.sequenceNumber >= startSeq && e.sequenceNumber <= endSeq && e.type !== 'custom'
+                );
+                if (hasBandInRange && isCustomEvent) {
+                  // 先頭がカスタムイベントだが範囲内にバンドがある場合、背景を上書き
+                  mergedCellBgClass = 'bg-gray-900';
+                }
+              }
+
               return (
                 <td
                   key={col.id}
                   rowSpan={hasMerge ? cellData.rowSpan : undefined}
                   className={`border-l border-gray-600 p-0 relative transition-colors ${
                     hasMerge ? 'align-middle' : ''
+                  } ${
+                    mergedCellBgClass
                   } ${
                     isSelected ? 'bg-blue-500/20 ring-1 ring-blue-400/40 ring-inset' : ''
                   } ${
@@ -1017,6 +1073,8 @@ const CoolGroup = ({
                       onBlur={() => handleCellBlur(entry.sequenceNumber, entry.entryId, col)}
                       onKeyDown={(e) => handleKeyDown(e, entry.sequenceNumber, entry.entryId, colIndex, col)}
                       onFocus={() => handleCellFocus(entry.sequenceNumber, colIndex)}
+                      onCompositionStart={() => handleCompositionStart(entry.sequenceNumber, col.id)}
+                      onCompositionEnd={(e) => handleCompositionEnd(entry.sequenceNumber, entry.entryId, col, e.currentTarget.value)}
                       className={`w-full h-full px-2 text-sm bg-transparent border-0 outline-none text-gray-300 placeholder-gray-600 transition-colors ${
                         hasMerge ? 'py-0' : 'py-1'
                       } ${

@@ -9,6 +9,7 @@ interface TimetableContextBarProps {
   inputCoolCount: string;
   isReadOnly: boolean;
   isCustomMode: boolean;
+  showCombinedView?: boolean;
   onTimetableTypeChange: (type: 'performance' | 'rehearsal') => void;
   onDateChange: (date: string) => void;
   onStartTimeChange: (time: string) => void;
@@ -25,6 +26,7 @@ export const TimetableContextBar = ({
   inputCoolCount,
   isReadOnly,
   isCustomMode,
+  showCombinedView = false,
   onTimetableTypeChange,
   onDateChange,
   onStartTimeChange,
@@ -44,7 +46,8 @@ export const TimetableContextBar = ({
       <div className="flex items-center justify-between gap-6">
         {/* 左側: タイムテーブルタイプ選択（セグメントコントロール）と日付選択 */}
         <div className="flex items-center gap-4 flex-1">
-          {/* セグメントコントロール（本番用/リハ用） */}
+          {/* セグメントコントロール（本番用/リハ用）- 当日一括リハのカスタムモードでは非表示 */}
+          {!showCombinedView && (
           <div className="inline-flex bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => onTimetableTypeChange('performance')}
@@ -67,6 +70,7 @@ export const TimetableContextBar = ({
               リハ用
             </button>
           </div>
+          )}
 
           {/* 日付選択ボタン */}
           <div className="flex gap-2 overflow-x-auto">

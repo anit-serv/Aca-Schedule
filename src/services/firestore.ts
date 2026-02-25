@@ -13,6 +13,7 @@ import {
   onSnapshot,
   Timestamp,
   QuerySnapshot,
+  runTransaction,
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -113,6 +114,8 @@ export const bandService = {
       q,
       (snapshot: QuerySnapshot) => {
         const bands = snapshot.docs.map(doc => firestoreToBand(doc.id, doc.data()));
+        // createdAt順にソート（古い順）
+        bands.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         callback(bands);
       },
       (error) => {
@@ -412,32 +415,39 @@ export const timetableService = {
     await updateDoc(timetableRef, updateData);
   },
 
-  // 日別タイムテーブルを更新
+  // 日別タイムテーブルを更新（トランザクション使用で競合安全）
   async updateDailyTimetable(
     timetableId: string,
     dailyTimetable: DailyTimetable
   ): Promise<void> {
     const timetableRef = doc(db, 'timetables', timetableId);
-    const timetable = await this.getTimetableById(timetableId);
     
-    if (!timetable) {
-      throw new Error('Timetable not found');
-    }
-    
-    const existingIndex = timetable.dailyTimetables.findIndex(
-      (dt) => dt.date === dailyTimetable.date
-    );
-    
-    const newDailyTimetables = [...timetable.dailyTimetables];
-    if (existingIndex >= 0) {
-      newDailyTimetables[existingIndex] = dailyTimetable;
-    } else {
-      newDailyTimetables.push(dailyTimetable);
-    }
-    
-    await updateDoc(timetableRef, {
-      dailyTimetables: newDailyTimetables,
-      updatedAt: Timestamp.now(),
+    await runTransaction(db, async (transaction) => {
+      const timetableDoc = await transaction.get(timetableRef);
+      
+      if (!timetableDoc.exists()) {
+        throw new Error('Timetable not found');
+      }
+      
+      const data = timetableDoc.data();
+      const dailyTimetables = data.dailyTimetables || [];
+      
+      const existingIndex = dailyTimetables.findIndex(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (dt: any) => dt.date === dailyTimetable.date
+      );
+      
+      const newDailyTimetables = [...dailyTimetables];
+      if (existingIndex >= 0) {
+        newDailyTimetables[existingIndex] = dailyTimetable;
+      } else {
+        newDailyTimetables.push(dailyTimetable);
+      }
+      
+      transaction.update(timetableRef, {
+        dailyTimetables: newDailyTimetables,
+        updatedAt: Timestamp.now(),
+      });
     });
   },
 
@@ -456,6 +466,8 @@ export const timetableService = {
   },
 
   // タイムテーブルをリアルタイム監視
+  // Firestoreは書き込み時にローカルキャッシュを即座に更新し、onSnapshotをトリガーするため
+  // 楽観的更新は不要。常にonSnapshotからのデータを受け入れる。
   subscribeTimetable(
     eventId: string,
     type: 'performance' | 'rehearsal',

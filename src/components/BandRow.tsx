@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import type { Band } from '../types';
 
 interface BandRowProps {
@@ -23,25 +23,80 @@ export const BandRow = ({
 }: BandRowProps) => {
   const [memberInput, setMemberInput] = useState('');
   const [showMemberSuggestions, setShowMemberSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const memberInputRef = useRef<HTMLInputElement>(null);
+  const searchQueryRef = useRef(''); // Tab選択中も元の検索文字列を保持
+  const [suggestionsStyle, setSuggestionsStyle] = useState<{ top?: number; bottom?: number; left: number; width: number }>({ left: 0, width: 0 });
+
+  // サジェストの位置を計算
+  const updateSuggestionsPosition = useCallback(() => {
+    if (memberInputRef.current) {
+      const rect = memberInputRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // 下に十分なスペースがない場合は上に表示
+      if (spaceBelow < 200) {
+        setSuggestionsStyle({
+          bottom: window.innerHeight - rect.top + 4,
+          left: rect.left,
+          width: rect.width,
+        });
+      } else {
+        setSuggestionsStyle({
+          top: rect.bottom + 4,
+          left: rect.left,
+          width: rect.width,
+        });
+      }
+    }
+  }, []);
+
+  // ひらがな⇔カタカナ変換ヘルパー
+  const toKatakana = (str: string) => str.replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+  const toHiragana = (str: string) => str.replace(/[\u30A1-\u30F6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
 
   // メンバーのサジェスト候補をフィルタリング（最大10件）
+  // ひらがな・カタカナ両方でマッチ
   const memberSuggestions = useMemo(() => {
-    if (!memberInput.trim()) return [];
+    const query = searchQueryRef.current || memberInput;
+    if (!query.trim()) return [];
+    const inputLower = query.toLowerCase();
+    const inputKata = toKatakana(inputLower);
+    const inputHira = toHiragana(inputLower);
     return allMembers
-      .filter(
-        member =>
-          member.toLowerCase().includes(memberInput.toLowerCase()) &&
-          !band.members.includes(member)
-      )
-      .slice(0, 10); // 最大10件まで表示
+      .filter(member => {
+        if (band.members.includes(member)) return false;
+        const memberLower = member.toLowerCase();
+        const memberKata = toKatakana(memberLower);
+        const memberHira = toHiragana(memberLower);
+        return memberLower.includes(inputLower)
+          || memberKata.includes(inputKata)
+          || memberHira.includes(inputHira);
+      })
+      .slice(0, 10);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberInput, allMembers, band.members]);
+
+  // スクロール時にサジェスト位置を更新
+  useEffect(() => {
+    if (!showMemberSuggestions || memberSuggestions.length === 0) return;
+    const handleScrollOrResize = () => updateSuggestionsPosition();
+    // 親のスクロールコンテナとwindow両方を監視
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [showMemberSuggestions, memberSuggestions.length, updateSuggestionsPosition]);
 
   // メンバーを追加
   const handleAddMember = (memberName: string) => {
     if (memberName.trim() && !band.members.includes(memberName.trim())) {
       onUpdate({ members: [...band.members, memberName.trim()] });
       setMemberInput('');
+      searchQueryRef.current = '';
       setShowMemberSuggestions(false);
+      setSelectedSuggestionIndex(-1);
     }
   };
 
@@ -125,36 +180,91 @@ export const BandRow = ({
           {/* メンバー追加入力 */}
           <div className="relative">
             <input
+              ref={memberInputRef}
               type="text"
               value={memberInput}
               onChange={(e) => {
                 setMemberInput(e.target.value);
+                searchQueryRef.current = e.target.value;
                 setShowMemberSuggestions(true);
+                setSelectedSuggestionIndex(-1);
+                updateSuggestionsPosition();
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Tab' && !e.shiftKey && showMemberSuggestions && memberSuggestions.length > 0) {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => {
+                    const next = (prev + 1) % memberSuggestions.length;
+                    setMemberInput(memberSuggestions[next]);
+                    return next;
+                  });
+                } else if (e.key === 'Tab' && e.shiftKey && showMemberSuggestions && memberSuggestions.length > 0) {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => {
+                    const next = prev > 0 ? prev - 1 : memberSuggestions.length - 1;
+                    setMemberInput(memberSuggestions[next]);
+                    return next;
+                  });
+                } else if (e.key === 'ArrowDown' && showMemberSuggestions && memberSuggestions.length > 0) {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => {
+                    const next = prev < memberSuggestions.length - 1 ? prev + 1 : 0;
+                    setMemberInput(memberSuggestions[next]);
+                    return next;
+                  });
+                } else if (e.key === 'ArrowUp' && showMemberSuggestions && memberSuggestions.length > 0) {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => {
+                    const next = prev > 0 ? prev - 1 : memberSuggestions.length - 1;
+                    setMemberInput(memberSuggestions[next]);
+                    return next;
+                  });
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
                   handleAddMember(memberInput);
+                } else if (e.key === 'Escape') {
+                  setShowMemberSuggestions(false);
+                  setSelectedSuggestionIndex(-1);
                 }
               }}
               onBlur={() => {
                 // 少し遅延させてクリックイベントを拾えるようにする
                 setTimeout(() => setShowMemberSuggestions(false), 300);
               }}
-              onFocus={() => setShowMemberSuggestions(true)}
+              onFocus={() => {
+                setShowMemberSuggestions(true);
+                setSelectedSuggestionIndex(-1);
+                updateSuggestionsPosition();
+              }}
               placeholder="メンバーを追加..."
               className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
             />
             {/* サジェスト候補 */}
             {showMemberSuggestions && memberSuggestions.length > 0 && (
-              <div className="absolute z-20 w-full mt-1 bg-gray-700 border border-gray-600 rounded shadow-lg max-h-40 overflow-y-auto">
-                {memberSuggestions.map(member => (
+              <div
+                className="fixed z-50 bg-gray-700 border border-gray-600 rounded shadow-lg max-h-40 overflow-y-auto"
+                style={{
+                  ...(suggestionsStyle.top !== undefined ? { top: suggestionsStyle.top } : {}),
+                  ...(suggestionsStyle.bottom !== undefined ? { bottom: suggestionsStyle.bottom } : {}),
+                  left: suggestionsStyle.left,
+                  width: suggestionsStyle.width,
+                }}
+              >
+                {memberSuggestions.map((member, idx) => (
                   <button
                     key={member}
+                    ref={el => {
+                      if (idx === selectedSuggestionIndex && el) {
+                        el.scrollIntoView({ block: 'nearest' });
+                      }
+                    }}
                     onMouseDown={(e) => {
                       e.preventDefault(); // onBlurより先に実行されるようにする
                       handleAddMember(member);
                     }}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-600 text-white text-sm transition-colors"
+                    className={`w-full text-left px-3 py-2 text-white text-sm transition-colors ${
+                      idx === selectedSuggestionIndex ? 'bg-blue-600' : 'hover:bg-gray-600'
+                    }`}
                   >
                     {member}
                   </button>

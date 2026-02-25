@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Band, EventSettings } from '../types';
 import { useBandManagement } from '../hooks/useBandManagement';
 import { BandRow } from './BandRow';
@@ -15,6 +15,22 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [showImportInfo, setShowImportInfo] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const prevBandCountRef = useRef(bands.length);
+
+  // バンド追加時にテーブル末尾へ自動スクロール
+  useEffect(() => {
+    if (bands.length > prevBandCountRef.current && tableContainerRef.current) {
+      // 少し待ってDOMが更新されてからスクロール
+      setTimeout(() => {
+        tableContainerRef.current?.scrollTo({
+          top: tableContainerRef.current.scrollHeight,
+          behavior: 'smooth',
+        });
+      }, 100);
+    }
+    prevBandCountRef.current = bands.length;
+  }, [bands.length]);
 
   const {
     handleAddBand,
@@ -78,7 +94,7 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
       {/* CSVインポート機能は上部に移動したため削除 */}
 
       <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
-        <div className="overflow-x-auto overflow-y-auto flex-1">
+        <div ref={tableContainerRef} className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full">
             <thead className="bg-gray-700 sticky top-0 z-10">
               <tr>
@@ -118,6 +134,8 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
               )}
             </tbody>
           </table>
+          {/* スクロール時の下部余白 */}
+          <div className="h-48"></div>
         </div>
       </div>
 

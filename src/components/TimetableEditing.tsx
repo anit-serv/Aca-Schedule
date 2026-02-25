@@ -6,7 +6,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import type { DragStartEvent } from '@dnd-kit/core';
-import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent, CustomFieldsSettings } from '../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent, CustomFieldsSettings, ConstraintViolation } from '../types';
 import { TimetableDragOverlay } from './TimetableDragOverlay';
 import { ViolationPanel } from './ViolationPanel';
 import { TimetableContextBar } from './TimetableContextBar';
@@ -93,6 +93,15 @@ export const TimetableEditing = ({
     }
   }, [customEvents, eventSettings.id, eventSettings.customEvents]);
 
+  // eventSettings.customEventsが外部（Firestore）から変更されたらローカル状態を同期
+  useEffect(() => {
+    const firestoreEvents = eventSettings.customEvents || [];
+    if (JSON.stringify(customEvents) !== JSON.stringify(firestoreEvents)) {
+      setCustomEvents(firestoreEvents);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventSettings.customEvents]);
+
 
   // タイムテーブルタイプが切り替わったときに日付を適切に設定
   const handleTimetableTypeChange = (newType: 'performance' | 'rehearsal') => {
@@ -162,6 +171,36 @@ export const TimetableEditing = ({
     return dailyTimetable;
   }, [timetable, selectedDate]);
 
+  // 当日一括リハーサル用：本番とリハーサルの日別タイムテーブルを取得
+  const performanceDailyTimetable = useMemo(() => {
+    const dt = performanceTimetable?.dailyTimetables.find(dt => dt.date === selectedDate);
+    if (!dt) {
+      return {
+        date: selectedDate,
+        startTime: '10:00',
+        cools: [{ id: `cool-1-perf-${selectedDate}`, number: 1, entries: [] }],
+        entries: [],
+      };
+    }
+    return dt;
+  }, [performanceTimetable, selectedDate]);
+
+  const rehearsalDailyTimetable = useMemo(() => {
+    const dt = rehearsalTimetable?.dailyTimetables.find(dt => dt.date === selectedDate);
+    if (!dt) {
+      return {
+        date: selectedDate,
+        startTime: '10:00',
+        cools: [{ id: `cool-1-reh-${selectedDate}`, number: 1, entries: [] }],
+        entries: [],
+      };
+    }
+    return dt;
+  }, [rehearsalTimetable, selectedDate]);
+
+  // 当日一括リハーサル＋カスタムモードで両方表示するかどうか
+  const showCombinedView = isCustomMode && eventSettings.rehearsalType === 'day-start-rehearsal';
+
   // クール数の現在値を計算
   const coolCount = useMemo(() => {
     if (!currentTimetable.cools || currentTimetable.cools.length === 0) {
@@ -225,7 +264,7 @@ export const TimetableEditing = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bands, selectedDate]); // bandsの変更と日付の切り替えを監視
+  }, [bands, selectedDate, currentTimetable.startTime]); // bandsの変更、日付の切り替え、開始時刻の変更を監視
 
 
   // 開始時刻の変更
@@ -432,6 +471,20 @@ export const TimetableEditing = ({
     setCustomEvents(customEvents.filter((e) => e.id !== id));
   };
 
+  // 制約違反クリック時にエントリーまでスクロール＆ハイライト
+  const handleViolationClick = useCallback((violation: ConstraintViolation) => {
+    const entryId = violation.entryId;
+    const row = document.querySelector(`[data-entry-id="${entryId}"]`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // ハイライトアニメーション
+      row.classList.add('ring-2', 'ring-yellow-400', 'bg-yellow-900/40');
+      setTimeout(() => {
+        row.classList.remove('ring-2', 'ring-yellow-400', 'bg-yellow-900/40');
+      }, 2000);
+    }
+  }, []);
+
   // カスタムフィールドデータがあるエントリーの削除確認
   const handleRemoveEntryWithConfirm = useCallback((entryId: string, coolIndex?: number) => {
     // エントリーを探す
@@ -553,6 +606,7 @@ export const TimetableEditing = ({
           inputCoolCount={inputCoolCount}
           isReadOnly={isReadOnly}
           isCustomMode={isCustomMode}
+          showCombinedView={showCombinedView}
           onTimetableTypeChange={handleTimetableTypeChange}
           onDateChange={setSelectedDate}
           onStartTimeChange={handleStartTimeChange}
@@ -570,6 +624,7 @@ export const TimetableEditing = ({
                 violations={violations}
                 isOpen={isViolationPanelOpen}
                 onToggle={() => setIsViolationPanelOpen(!isViolationPanelOpen)}
+                onViolationClick={handleViolationClick}
               />
             )}
           
@@ -577,15 +632,55 @@ export const TimetableEditing = ({
           <div className={`flex gap-4 flex-1 min-w-0 ${isCustomMode ? '' : 'ml-9'}`}>
             {/* 中央ペイン */}
             {isCustomMode ? (
-              <CustomFieldsTable
-                currentTimetable={currentTimetable}
-                bands={bands}
-                timetable={timetable}
-                eventSettings={eventSettings}
-                timetableType={timetableType}
-                selectedDate={selectedDate}
-                onCustomFieldsChange={handleCustomFieldsChange}
-              />
+              showCombinedView ? (
+                // 当日一括リハーサル：リハーサルと本番を縦に並べて表示
+                <div className="flex-1 flex flex-col gap-4 overflow-auto">
+                  {/* リハーサルセクション */}
+                  <div className="flex-shrink-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded">
+                        リハーサル
+                      </span>
+                    </div>
+                    <CustomFieldsTable
+                      currentTimetable={rehearsalDailyTimetable}
+                      bands={bands}
+                      timetable={rehearsalTimetable}
+                      eventSettings={eventSettings}
+                      timetableType="rehearsal"
+                      selectedDate={selectedDate}
+                      onCustomFieldsChange={handleCustomFieldsChange}
+                    />
+                  </div>
+                  {/* 本番セクション */}
+                  <div className="flex-shrink-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">
+                        本番
+                      </span>
+                    </div>
+                    <CustomFieldsTable
+                      currentTimetable={performanceDailyTimetable}
+                      bands={bands}
+                      timetable={performanceTimetable}
+                      eventSettings={eventSettings}
+                      timetableType="performance"
+                      selectedDate={selectedDate}
+                      onCustomFieldsChange={handleCustomFieldsChange}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <CustomFieldsTable
+                  currentTimetable={currentTimetable}
+                  bands={bands}
+                  timetable={timetable}
+                  eventSettings={eventSettings}
+                  timetableType={timetableType}
+                  selectedDate={selectedDate}
+                  onCustomFieldsChange={handleCustomFieldsChange}
+                />
+              )
             ) : (
               <TimetableContent
                 currentTimetable={currentTimetable}
@@ -610,6 +705,7 @@ export const TimetableEditing = ({
               customFields={eventSettings.customFields}
               timetableType={timetableType}
               onCustomFieldsChange={handleCustomFieldsChange}
+              applyToBoth={showCombinedView}
             />
           ) : (
             <BandBankDropZone 

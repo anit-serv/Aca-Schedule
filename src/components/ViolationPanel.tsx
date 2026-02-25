@@ -4,9 +4,10 @@ interface ViolationPanelProps {
   violations: ConstraintViolation[];
   isOpen: boolean;
   onToggle: () => void;
+  onViolationClick?: (violation: ConstraintViolation) => void;
 }
 
-export const ViolationPanel = ({ violations, isOpen, onToggle }: ViolationPanelProps) => {
+export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick }: ViolationPanelProps) => {
   if (violations.length === 0) return null;
 
   // 一意の違反のみを抽出する関数
@@ -61,7 +62,12 @@ export const ViolationPanel = ({ violations, isOpen, onToggle }: ViolationPanelP
                 <span>🚫</span> 重大 ({highViolations.length}件)
               </div>
               {highViolations.map((v, idx) => (
-                <div key={idx} className="text-xs text-gray-300 mb-1">
+                <div
+                  key={idx}
+                  className="text-xs text-gray-300 mb-1 cursor-pointer hover:text-white hover:bg-red-800/30 rounded px-1 py-0.5 -mx-1 transition-colors"
+                  onClick={() => onViolationClick?.(v)}
+                  title="クリックして該当箇所へ移動"
+                >
                   • {v.message}
                 </div>
               ))}
@@ -73,7 +79,12 @@ export const ViolationPanel = ({ violations, isOpen, onToggle }: ViolationPanelP
                 <span>⚠️</span> 警告 ({mediumViolations.length}件)
               </div>
               {mediumViolations.map((v, idx) => (
-                <div key={idx} className="text-xs text-gray-300 mb-1">
+                <div
+                  key={idx}
+                  className="text-xs text-gray-300 mb-1 cursor-pointer hover:text-white hover:bg-yellow-800/30 rounded px-1 py-0.5 -mx-1 transition-colors"
+                  onClick={() => onViolationClick?.(v)}
+                  title="クリックして該当箇所へ移動"
+                >
                   • {v.message}
                 </div>
               ))}
@@ -85,7 +96,12 @@ export const ViolationPanel = ({ violations, isOpen, onToggle }: ViolationPanelP
                 <span>ℹ️</span> 情報 ({lowViolations.length}件)
               </div>
               {lowViolations.map((v, idx) => (
-                <div key={idx} className="text-xs text-gray-300 mb-1">
+                <div
+                  key={idx}
+                  className="text-xs text-gray-300 mb-1 cursor-pointer hover:text-white hover:bg-blue-800/30 rounded px-1 py-0.5 -mx-1 transition-colors"
+                  onClick={() => onViolationClick?.(v)}
+                  title="クリックして該当箇所へ移動"
+                >
                   • {v.message}
                 </div>
               ))}

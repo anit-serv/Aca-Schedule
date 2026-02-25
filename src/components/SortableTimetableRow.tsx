@@ -142,6 +142,7 @@ export const SortableTimetableRow = ({
       <tr
         ref={setNodeRef}
         style={style}
+        data-entry-id={entry.id}
         className={`border-b border-gray-600 hover:bg-gray-650 ${
           isDragging ? 'bg-gray-600' : 
           violationStyle.bgColor ? violationStyle.bgColor :
