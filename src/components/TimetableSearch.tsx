@@ -69,7 +69,7 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
           onFocus={() => setIsFocused(true)}
           onBlur={() => setTimeout(() => setIsFocused(false), 200)}
           placeholder="バンド名・メンバー名で検索"
-          className="bg-transparent outline-none text-sm text-gray-900 placeholder-gray-400 w-40"
+          className="bg-transparent outline-none text-sm text-gray-900 placeholder-gray-400 w-full sm:w-40"
         />
         {searchQuery && (
           <button

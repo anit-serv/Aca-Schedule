@@ -211,7 +211,7 @@ export const PublicTimetablePage = () => {
     <div className="bg-gray-50 text-gray-900 h-screen font-sans flex flex-col overflow-hidden">
       {/* ヘッダー */}
       <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-6 py-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-gray-900">{eventSettings.name}</h1>
@@ -228,7 +228,7 @@ export const PublicTimetablePage = () => {
 
       {/* コントロールバー */}
       <div className="bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-6 py-2 flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center gap-2 sm:gap-4">
           {/* 本番/リハーサル切り替え - 当日一括リハーサルでは非表示（両方表示するため） */}
           {hasRehearsal && !showCombinedView && (
             <div className="flex items-center gap-1">
@@ -257,7 +257,7 @@ export const PublicTimetablePage = () => {
 
           {/* 日付セレクター */}
           {dateList.length > 0 && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 overflow-x-auto">
               {(showCombinedView ? eventSettings.performanceDates : dateList).map(date => (
                 <button
                   key={date}
@@ -275,7 +275,7 @@ export const PublicTimetablePage = () => {
           )}
 
           {/* 検索 */}
-          <div className="ml-auto">
+          <div className="w-full sm:w-auto sm:ml-auto">
             <TimetableSearch
               bands={bands}
               searchQuery={searchQuery}
