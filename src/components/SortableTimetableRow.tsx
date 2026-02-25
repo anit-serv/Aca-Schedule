@@ -14,6 +14,7 @@ interface SortableTimetableRowProps {
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
   violations?: ConstraintViolation[]; // この行の制約違反リスト
   bandNumber?: number; // バンド番号（カスタムイベントの場合はundefined）
+  searchQuery?: string; // 検索クエリ
 }
 
 export const SortableTimetableRow = ({
@@ -27,6 +28,7 @@ export const SortableTimetableRow = ({
   onTransitionTimeChange,
   violations = [],
   bandNumber,
+  searchQuery = '',
 }: SortableTimetableRowProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
@@ -104,6 +106,17 @@ export const SortableTimetableRow = ({
     return performanceDuration;
   })();
 
+  // 検索マッチ判定
+  const isSearchMatch = useMemo(() => {
+    if (!searchQuery.trim()) return false;
+    const q = searchQuery.toLowerCase();
+    if (band) {
+      if (band.name.toLowerCase().includes(q)) return true;
+      if (band.members.some(m => m.toLowerCase().includes(q))) return true;
+    }
+    return false;
+  }, [searchQuery, band]);
+
   // 制約違反の最も重大度の高いものを取得
   const highestSeverityViolation = useMemo(() => {
     if (violations.length === 0) return null;
@@ -147,6 +160,8 @@ export const SortableTimetableRow = ({
           isDragging ? 'bg-emerald-100' : 
           violationStyle.bgColor ? violationStyle.bgColor :
           entry.type === 'custom' ? 'bg-emerald-100/70' : ''
+        } ${isSearchMatch ? 'ring-2 ring-inset ring-emerald-400 bg-emerald-50' : ''} ${
+          searchQuery && !isSearchMatch && entry.type === 'band' ? 'opacity-40' : ''
         }`}
       >
       {/* バンド番号列 */}

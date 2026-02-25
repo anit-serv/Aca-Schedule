@@ -23,6 +23,7 @@ interface CoolSectionProps {
   dailyStartTime: string; // その日の開始時刻（最小値として使用）
   violations?: ConstraintViolation[]; // このクール内の制約違反
   bandNumbers: Map<string, number>; // エントリーIDとバンド番号のマッピング
+  searchQuery?: string; // 検索クエリ
 }
 
 export const CoolSection = ({ 
@@ -44,6 +45,7 @@ export const CoolSection = ({
   dailyStartTime,
   violations = [],
   bandNumbers,
+  searchQuery = '',
 }: CoolSectionProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [startTimeInput, setStartTimeInput] = useState(cool.startTime || '');
@@ -363,6 +365,7 @@ export const CoolSection = ({
                       onTransitionTimeChange={onTransitionTimeChange}
                       violations={entryViolations}
                       bandNumber={bandNumber}
+                      searchQuery={searchQuery}
                     />
                   );
                 })}

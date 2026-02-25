@@ -60,6 +60,7 @@ export const TimetableEditing = ({
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
   const [isCustomMode, setIsCustomMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   // ドラッグ中のエントリーIDを追跡（reorder時にどのエントリーが移動されたか特定するため）
   const lastDraggedEntryIdRef = useRef<string | null>(null);
   // 削除確認ダイアログ
@@ -618,6 +619,9 @@ export const TimetableEditing = ({
           onCoolCountChange={handleCoolCountChange}
           onCoolCountInputChange={setInputCoolCount}
           onCustomModeChange={setIsCustomMode}
+          bands={bands}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
 
         {/* メインコンテンツエリア */}
@@ -655,6 +659,7 @@ export const TimetableEditing = ({
                       timetableType="rehearsal"
                       selectedDate={selectedDate}
                       onCustomFieldsChange={handleCustomFieldsChange}
+                      searchQuery={searchQuery}
                     />
                   </div>
                   {/* 本番セクション */}
@@ -672,6 +677,7 @@ export const TimetableEditing = ({
                       timetableType="performance"
                       selectedDate={selectedDate}
                       onCustomFieldsChange={handleCustomFieldsChange}
+                      searchQuery={searchQuery}
                     />
                   </div>
                 </div>
@@ -684,6 +690,7 @@ export const TimetableEditing = ({
                   timetableType={timetableType}
                   selectedDate={selectedDate}
                   onCustomFieldsChange={handleCustomFieldsChange}
+                  searchQuery={searchQuery}
                 />
               )
             ) : (
@@ -701,6 +708,7 @@ export const TimetableEditing = ({
                 onMoveCoolDown={handleMoveCoolDown}
                 onTransitionTimeChange={handleTransitionTimeChange}
                 onCoolStartTimeChange={handleCoolStartTimeChange}
+                searchQuery={searchQuery}
               />
             )}
 

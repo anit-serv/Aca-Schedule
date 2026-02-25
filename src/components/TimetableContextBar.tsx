@@ -1,5 +1,6 @@
-import type { EventSettings, DailyTimetable } from '../types';
+import type { Band, EventSettings, DailyTimetable } from '../types';
 import { ToggleSwitch } from './ToggleSwitch';
+import { TimetableSearch } from './TimetableSearch';
 
 interface TimetableContextBarProps {
   timetableType: 'performance' | 'rehearsal';
@@ -16,6 +17,9 @@ interface TimetableContextBarProps {
   onCoolCountChange: (count: number) => void;
   onCoolCountInputChange: (value: string) => void;
   onCustomModeChange: (enabled: boolean) => void;
+  bands: Band[];
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
 export const TimetableContextBar = ({
@@ -33,6 +37,9 @@ export const TimetableContextBar = ({
   onCoolCountChange,
   onCoolCountInputChange,
   onCustomModeChange,
+  bands,
+  searchQuery,
+  onSearchChange,
 }: TimetableContextBarProps) => {
   // 現在のタイムテーブルタイプに応じた日付リストを取得
   const dates = timetableType === 'performance'
@@ -140,6 +147,13 @@ export const TimetableContextBar = ({
               />
             </div>
           )}
+
+          {/* 検索 */}
+          <TimetableSearch
+            bands={bands}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+          />
 
           {/* カスタムモードトグル */}
           <ToggleSwitch

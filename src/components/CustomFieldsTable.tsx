@@ -19,6 +19,7 @@ interface CustomFieldsTableProps {
   selectedDate: string;
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
   readOnly?: boolean;
+  searchQuery?: string;
 }
 
 // 範囲選択の状態
@@ -43,6 +44,7 @@ export const CustomFieldsTable = ({
   selectedDate,
   onCustomFieldsChange,
   readOnly,
+  searchQuery = '',
 }: CustomFieldsTableProps) => {
   // 読み取り専用モード
   const isReadOnly = readOnly ?? false;
@@ -898,6 +900,8 @@ export const CustomFieldsTable = ({
                 handleCompositionEnd={handleCompositionEnd}
                 registerInputRef={registerInputRef}
                 readOnly={isReadOnly}
+                bands={bands}
+                searchQuery={searchQuery}
               />
             ))}
           </tbody>
@@ -933,6 +937,8 @@ interface CoolGroupProps {
   handleCompositionEnd: (seq: number, entryId: string, col: CustomColumn, value: string) => void;
   registerInputRef: (key: string, el: HTMLInputElement | null) => void;
   readOnly: boolean;
+  bands: Band[];
+  searchQuery: string;
 }
 
 const CoolGroup = ({
@@ -959,6 +965,8 @@ const CoolGroup = ({
   handleCompositionEnd,
   registerInputRef,
   readOnly: isReadOnly,
+  bands,
+  searchQuery,
 }: CoolGroupProps) => {
   const cellKey = (seq: number, colId: string) => `${seq}:${colId}`;
 
@@ -989,30 +997,41 @@ const CoolGroup = ({
         const name = isCustomEvent ? entry.customEventName || '' : getBandName(entry.bandId);
         const duration = isCustomEvent ? entry.duration || 0 : getBandDuration(entry.bandId);
 
+        // 検索マッチ判定（固定列のハイライト用）
+        const matchBand = !isCustomEvent && entry.bandId ? bands.find(b => b.id === entry.bandId) : null;
+        const isSearchMatch = searchQuery.trim() ? (() => {
+          if (!matchBand) return false;
+          const q = searchQuery.toLowerCase();
+          return matchBand.name.toLowerCase().includes(q) || matchBand.members.some((m: string) => m.toLowerCase().includes(q));
+        })() : false;
+        const isSearchDimmed = !!(searchQuery.trim() && !isSearchMatch && !isCustomEvent);
+        const searchHighlight = isSearchMatch ? 'bg-emerald-50' : '';
+        const searchDimClass = isSearchDimmed ? 'opacity-40' : '';
+
         return (
           <tr
             key={entry.entryId}
             className={`border-b border-gray-200 hover:bg-gray-50 ${
               isCustomEvent ? 'bg-emerald-100/70' : ''
-            }`}
+            } ${searchDimClass}`}
           >
             {/* 通し番号 */}
-            <td className="w-12 px-2 py-1 text-center text-gray-500 font-mono text-xs">
+            <td className={`w-12 px-2 py-1 text-center text-gray-500 font-mono text-xs ${searchHighlight}`}>
               {entry.sequenceNumber}
             </td>
 
             {/* 開始時刻 */}
-            <td className="w-20 px-2 py-1 text-center text-gray-600 font-mono text-xs">
+            <td className={`w-20 px-2 py-1 text-center text-gray-600 font-mono text-xs ${searchHighlight}`}>
               {entry.startTime || '-'}
             </td>
 
             {/* 名称 */}
-            <td className={`px-3 py-1 ${isCustomEvent ? 'text-emerald-600' : 'text-gray-900'}`}>
+            <td className={`px-3 py-1 ${isCustomEvent ? 'text-emerald-600' : 'text-gray-900'} ${searchHighlight}`}>
               <span className="truncate block text-sm">{name}</span>
             </td>
 
             {/* 時間 */}
-            <td className="w-16 px-2 py-1 text-center text-gray-500 text-xs">
+            <td className={`w-16 px-2 py-1 text-center text-gray-500 text-xs ${searchHighlight}`}>
               {duration > 0 ? `${duration}分` : '-'}
             </td>
 

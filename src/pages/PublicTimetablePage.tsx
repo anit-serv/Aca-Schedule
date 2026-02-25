@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { eventService, bandService, timetableService } from '../services/firestore';
 import { CustomFieldsTable } from '../components/CustomFieldsTable';
+import { TimetableSearch } from '../components/TimetableSearch';
 import type { Band, EventSettings, Timetable, DailyTimetable } from '../types';
 
 type LoadingState = 'loading' | 'loaded' | 'not-found' | 'not-public' | 'error';
@@ -18,6 +19,7 @@ export const PublicTimetablePage = () => {
   // タイムテーブルタイプ・日付の選択
   const [timetableType, setTimetableType] = useState<'performance' | 'rehearsal'>('performance');
   const [selectedDate, setSelectedDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // データ読み込み
   useEffect(() => {
@@ -271,6 +273,15 @@ export const PublicTimetablePage = () => {
               ))}
             </div>
           )}
+
+          {/* 検索 */}
+          <div className="ml-auto">
+            <TimetableSearch
+              bands={bands}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+            />
+          </div>
         </div>
       </div>
 
@@ -295,6 +306,7 @@ export const PublicTimetablePage = () => {
                 selectedDate={selectedDate}
                 onCustomFieldsChange={() => {}}
                 readOnly
+                searchQuery={searchQuery}
               />
             </div>
             {/* 本番セクション */}
@@ -313,6 +325,7 @@ export const PublicTimetablePage = () => {
                 selectedDate={selectedDate}
                 onCustomFieldsChange={() => {}}
                 readOnly
+                searchQuery={searchQuery}
               />
             </div>
           </div>
@@ -326,6 +339,7 @@ export const PublicTimetablePage = () => {
             selectedDate={selectedDate}
             onCustomFieldsChange={() => {}}
             readOnly
+            searchQuery={searchQuery}
           />
         )}
       </main>

@@ -17,6 +17,7 @@ interface TimetableContentProps {
   onMoveCoolDown: (coolIndex: number) => void;
   onTransitionTimeChange: (entryId: string, transitionTime: number) => void;
   onCoolStartTimeChange: (coolIndex: number, startTime: string | undefined) => void;
+  searchQuery?: string;
 }
 
 export const TimetableContent = ({
@@ -33,6 +34,7 @@ export const TimetableContent = ({
   onMoveCoolDown,
   onTransitionTimeChange,
   onCoolStartTimeChange,
+  searchQuery = '',
 }: TimetableContentProps) => {
   return (
     <div className="flex-1 bg-white rounded-lg px-6 overflow-y-auto min-w-0 shadow">
@@ -91,6 +93,7 @@ export const TimetableContent = ({
                     dailyStartTime={currentTimetable.startTime}
                     violations={violations.filter(v => v.coolId === cool.id)}
                     bandNumbers={bandNumbers}
+                    searchQuery={searchQuery}
                   />
 
                   {/* クールの後のギャップ */}
@@ -118,6 +121,7 @@ export const TimetableContent = ({
             onTransitionTimeChange={onTransitionTimeChange}
             violations={violations}
             bandNumbers={bandNumbers}
+            searchQuery={searchQuery}
           />
         )}
       </div>

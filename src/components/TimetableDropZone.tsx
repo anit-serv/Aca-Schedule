@@ -12,6 +12,7 @@ interface TimetableDropZoneProps {
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
   violations?: ConstraintViolation[]; // 制約違反
   bandNumbers: Map<string, number>; // エントリーIDとバンド番号のマッピング
+  searchQuery?: string; // 検索クエリ
 }
 
 export const TimetableDropZone = ({ 
@@ -22,6 +23,7 @@ export const TimetableDropZone = ({
   onTransitionTimeChange,
   violations = [],
   bandNumbers,
+  searchQuery = '',
 }: TimetableDropZoneProps) => {
   const { setNodeRef } = useDroppable({
     id: 'timetable-droppable',
@@ -98,6 +100,7 @@ export const TimetableDropZone = ({
                     onTransitionTimeChange={onTransitionTimeChange}
                     violations={entryViolations}
                     bandNumber={bandNumber}
+                    searchQuery={searchQuery}
                   />
                 );
               })}
