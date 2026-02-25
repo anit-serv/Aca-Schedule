@@ -1,3 +1,42 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ライトテーマベースのカスタムスタイル */
+:root {
+  --color-primary: #10b981;
+  --color-primary-hover: #059669;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+/* 制約違反ハイライトアニメーション */
+@keyframes violation-pulse {
+  0% {
+    background-color: rgba(251,191,36,0.45);
+    box-shadow: 0 0 0 2px rgba(251,191,36,0.6), 0 0 12px rgba(251,191,36,0.3);
+  }
+  25% {
+    background-color: rgba(251,191,36,0);
+    box-shadow: 0 0 0 2px rgba(251,191,36,0), 0 0 0 rgba(251,191,36,0);
+  }
+  50% {
+    background-color: rgba(251,191,36,0.45);
+    box-shadow: 0 0 0 2px rgba(251,191,36,0.6), 0 0 12px rgba(251,191,36,0.3);
+  }
+  75% {
+    background-color: rgba(251,191,36,0);
+    box-shadow: 0 0 0 2px rgba(251,191,36,0), 0 0 0 rgba(251,191,36,0);
+  }
+  100% {
+    background-color: rgba(251,191,36,0);
+    box-shadow: 0 0 0 2px rgba(251,191,36,0), 0 0 0 rgba(251,191,36,0);
+  }
+}
+
+.violation-highlight {
+  animation: violation-pulse 2s ease-in-out 1;
+  border-radius: 2px;
+}

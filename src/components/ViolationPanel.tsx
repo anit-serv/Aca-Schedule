@@ -42,7 +42,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
     <>
       {/* スライドパネル */}
       <div
-        className={`fixed left-0 bg-gray-800 rounded-r-lg p-4 overflow-y-auto shadow-xl border-r border-t border-b border-gray-700 transition-transform duration-300 ease-in-out z-30 ${
+        className={`fixed left-0 bg-white rounded-r-lg p-4 overflow-y-auto shadow-xl border-r border-t border-b border-gray-200 transition-transform duration-300 ease-in-out z-30 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         style={{
@@ -51,20 +51,20 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
           height: 'calc(100vh - 8.5rem - 1.5rem)', // 画面高さ - 上部 - 下部マージン
         }}
       >
-        <h3 className="text-lg font-bold mb-3 flex items-center gap-2 whitespace-nowrap">
-          <span className="text-yellow-400">⚠️</span>
+        <h3 className="text-lg font-bold mb-3 flex items-center gap-2 whitespace-nowrap text-gray-900">
+          <span className="text-yellow-500">⚠️</span>
           制約違反 ({uniqueCount}件)
         </h3>
         <div className="space-y-2">
           {highViolations.length > 0 && (
-            <div className="bg-red-900/30 border border-red-700 rounded p-3">
-              <div className="text-sm font-bold text-red-400 mb-2 flex items-center gap-1">
+            <div className="bg-rose-50 border border-rose-200 rounded p-3">
+              <div className="text-sm font-bold text-rose-600 mb-2 flex items-center gap-1">
                 <span>🚫</span> 重大 ({highViolations.length}件)
               </div>
               {highViolations.map((v, idx) => (
                 <div
                   key={idx}
-                  className="text-xs text-gray-300 mb-1 cursor-pointer hover:text-white hover:bg-red-800/30 rounded px-1 py-0.5 -mx-1 transition-colors"
+                  className="text-xs text-gray-600 mb-1 cursor-pointer hover:text-gray-900 hover:bg-rose-100 rounded px-1 py-0.5 -mx-1 transition-colors"
                   onClick={() => onViolationClick?.(v)}
                   title="クリックして該当箇所へ移動"
                 >
@@ -74,14 +74,14 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
             </div>
           )}
           {mediumViolations.length > 0 && (
-            <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3">
-              <div className="text-sm font-bold text-yellow-400 mb-2 flex items-center gap-1">
+            <div className="bg-amber-50 border border-amber-200 rounded p-3">
+              <div className="text-sm font-bold text-amber-600 mb-2 flex items-center gap-1">
                 <span>⚠️</span> 警告 ({mediumViolations.length}件)
               </div>
               {mediumViolations.map((v, idx) => (
                 <div
                   key={idx}
-                  className="text-xs text-gray-300 mb-1 cursor-pointer hover:text-white hover:bg-yellow-800/30 rounded px-1 py-0.5 -mx-1 transition-colors"
+                  className="text-xs text-gray-600 mb-1 cursor-pointer hover:text-gray-900 hover:bg-amber-100 rounded px-1 py-0.5 -mx-1 transition-colors"
                   onClick={() => onViolationClick?.(v)}
                   title="クリックして該当箇所へ移動"
                 >
@@ -91,14 +91,14 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
             </div>
           )}
           {lowViolations.length > 0 && (
-            <div className="bg-blue-900/30 border border-blue-700 rounded p-3">
-              <div className="text-sm font-bold text-blue-400 mb-2 flex items-center gap-1">
+            <div className="bg-sky-50 border border-sky-200 rounded p-3">
+              <div className="text-sm font-bold text-sky-600 mb-2 flex items-center gap-1">
                 <span>ℹ️</span> 情報 ({lowViolations.length}件)
               </div>
               {lowViolations.map((v, idx) => (
                 <div
                   key={idx}
-                  className="text-xs text-gray-300 mb-1 cursor-pointer hover:text-white hover:bg-blue-800/30 rounded px-1 py-0.5 -mx-1 transition-colors"
+                  className="text-xs text-gray-600 mb-1 cursor-pointer hover:text-gray-900 hover:bg-emerald-100 rounded px-1 py-0.5 -mx-1 transition-colors"
                   onClick={() => onViolationClick?.(v)}
                   title="クリックして該当箇所へ移動"
                 >
@@ -113,7 +113,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
       {/* 取っ手部分 - パネル右上に小さく配置 */}
       <button
         onClick={onToggle}
-        className={`fixed bg-yellow-900/70 hover:bg-yellow-900/90 transition-all duration-300 ease-in-out rounded-r-lg shadow-lg border-r-2 border-t-2 border-b-2 border-yellow-700 z-30 ${
+        className={`fixed bg-yellow-100 hover:bg-yellow-200 transition-all duration-300 ease-in-out rounded-r-lg shadow-lg border-r-2 border-t-2 border-b-2 border-yellow-300 z-30 ${
           isOpen ? 'left-[320px]' : 'left-0'
         }`}
         style={{
@@ -123,7 +123,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
       >
         <div className="px-1.5 py-2 flex flex-col items-center gap-1">
           <span className="text-base">⚠️</span>
-          <span className="text-[10px] font-bold text-yellow-400">{uniqueCount}</span>
+          <span className="text-[10px] font-bold text-yellow-600">{uniqueCount}</span>
         </div>
       </button>
     </>

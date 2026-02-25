@@ -42,19 +42,19 @@ export const TimetableContextBar = ({
       : eventSettings.rehearsalDates || [];
 
   return (
-    <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-6 py-3">
+    <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-3">
       <div className="flex items-center justify-between gap-6">
         {/* 左側: タイムテーブルタイプ選択（セグメントコントロール）と日付選択 */}
         <div className="flex items-center gap-4 flex-1">
           {/* セグメントコントロール（本番用/リハ用）- 当日一括リハのカスタムモードでは非表示 */}
           {!showCombinedView && (
-          <div className="inline-flex bg-gray-700 rounded-lg p-1">
+          <div className="inline-flex bg-emerald-50 rounded-lg p-1">
             <button
               onClick={() => onTimetableTypeChange('performance')}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
                 timetableType === 'performance'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-300 hover:text-white'
+                  ? 'bg-emerald-500 text-white shadow-sm'
+                  : 'text-emerald-600 hover:text-emerald-800'
               }`}
             >
               本番用
@@ -63,8 +63,8 @@ export const TimetableContextBar = ({
               onClick={() => onTimetableTypeChange('rehearsal')}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
                 timetableType === 'rehearsal'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-300 hover:text-white'
+                  ? 'bg-emerald-500 text-white shadow-sm'
+                  : 'text-emerald-600 hover:text-emerald-800'
               }`}
             >
               リハ用
@@ -84,8 +84,8 @@ export const TimetableContextBar = ({
                   onClick={() => onDateChange(date)}
                   className={`px-3 py-1.5 text-sm rounded-md whitespace-nowrap transition-colors ${
                     selectedDate === date
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                   }`}
                 >
                   {formattedDate}
@@ -99,7 +99,7 @@ export const TimetableContextBar = ({
         <div className="flex items-center gap-4">
           {/* 開始時刻 */}
           <div className="flex items-center gap-2">
-            <label htmlFor="startTime" className="text-sm text-gray-400 whitespace-nowrap">
+            <label htmlFor="startTime" className="text-sm text-gray-500 whitespace-nowrap">
               開始時刻:
             </label>
             <input
@@ -108,7 +108,7 @@ export const TimetableContextBar = ({
               value={currentTimetable.startTime}
               onChange={(e) => onStartTimeChange(e.target.value)}
               disabled={isCustomMode}
-              className={`px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm ${
+              className={`px-2 py-1 bg-white border border-gray-300 rounded text-sm text-gray-900 ${
                 isCustomMode ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             />
@@ -117,7 +117,7 @@ export const TimetableContextBar = ({
           {/* クール数（カスタムモード時は非表示） */}
           {!isCustomMode && (
             <div className="flex items-center gap-2">
-              <label htmlFor="coolCount" className="text-sm text-gray-400 whitespace-nowrap">
+              <label htmlFor="coolCount" className="text-sm text-gray-500 whitespace-nowrap">
                 クール数:
               </label>
               <input
@@ -134,7 +134,7 @@ export const TimetableContextBar = ({
                   }
                 }}
                 disabled={isReadOnly}
-                className={`w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-center ${
+                className={`w-16 px-2 py-1 bg-white border border-gray-300 rounded text-sm text-center text-gray-900 ${
                   isReadOnly ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               />

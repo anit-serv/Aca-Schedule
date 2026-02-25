@@ -118,11 +118,11 @@ export const SortableTimetableRow = ({
     
     switch (highestSeverityViolation.severity) {
       case 'high':
-        return { bgColor: 'bg-red-900/30', icon: '🚫', iconColor: 'text-red-400' };
+        return { bgColor: 'bg-rose-100/80', icon: '🚫', iconColor: 'text-rose-500' };
       case 'medium':
-        return { bgColor: 'bg-yellow-900/30', icon: '⚠️', iconColor: 'text-yellow-400' };
+        return { bgColor: 'bg-amber-100/80', icon: '⚠️', iconColor: 'text-amber-500' };
       case 'low':
-        return { bgColor: 'bg-blue-900/30', icon: 'ℹ️', iconColor: 'text-blue-400' };
+        return { bgColor: 'bg-sky-100/80', icon: 'ℹ️', iconColor: 'text-sky-500' };
       default:
         return { bgColor: '', icon: '', iconColor: '' };
     }
@@ -143,14 +143,14 @@ export const SortableTimetableRow = ({
         ref={setNodeRef}
         style={style}
         data-entry-id={entry.id}
-        className={`border-b border-gray-600 hover:bg-gray-650 ${
-          isDragging ? 'bg-gray-600' : 
+        className={`border-b border-gray-200 hover:bg-emerald-50 ${
+          isDragging ? 'bg-emerald-100' : 
           violationStyle.bgColor ? violationStyle.bgColor :
-          entry.type === 'custom' ? 'bg-purple-900/20' : ''
+          entry.type === 'custom' ? 'bg-emerald-100/70' : ''
         }`}
       >
       {/* バンド番号列 */}
-      <td className="px-3 py-3 text-sm text-center font-semibold text-gray-300">
+      <td className="px-3 py-3 text-sm text-center font-semibold text-gray-600">
         {bandNumber !== undefined ? bandNumber : ''}
       </td>
       <td className="px-2 py-3 text-sm">
@@ -179,7 +179,7 @@ export const SortableTimetableRow = ({
           <div
             {...listeners}
             {...attributes}
-            className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-white"
+            className="cursor-grab active:cursor-grabbing text-emerald-400 hover:text-emerald-600"
           >
             ⋮⋮
           </div>
@@ -188,20 +188,20 @@ export const SortableTimetableRow = ({
               {/* バンド名（ツールチップでメンバー表示） */}
               {bandMembers && bandMembers.length > 0 ? (
                 <div className="group relative">
-                  <div className={`font-medium ${entry.type === 'custom' ? 'text-purple-300' : ''}`}>
+                  <div className={`font-medium ${entry.type === 'custom' ? 'text-emerald-600' : 'text-gray-900'}`}>
                     {bandName}
                   </div>
                   {/* メンバーツールチップ */}
                   <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-40 w-max max-w-xs">
-                    <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg">
-                      <div className="text-xs text-gray-300">
+                    <div className="bg-white border border-gray-200 rounded-lg p-2 shadow-lg">
+                      <div className="text-xs text-gray-600">
                         {bandMembers.join(', ')}
                       </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className={`font-medium ${entry.type === 'custom' ? 'text-purple-300' : ''}`}>
+                <div className={`font-medium ${entry.type === 'custom' ? 'text-emerald-600' : 'text-gray-900'}`}>
                   {bandName}
                 </div>
               )}
@@ -219,12 +219,12 @@ export const SortableTimetableRow = ({
                     className="fixed hidden group-hover:block z-50 w-80"
                     style={tooltipStyle}
                   >
-                    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-2xl max-h-96 overflow-y-auto">
-                      <div className="text-xs font-bold mb-2 text-white">
+                    <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-2xl max-h-96 overflow-y-auto">
+                      <div className="text-xs font-bold mb-2 text-gray-900">
                         制約違反 ({violations.length}件)
                       </div>
                       {violations.map((violation, idx) => (
-                        <div key={idx} className="text-xs text-gray-300 mb-1 break-words">
+                        <div key={idx} className="text-xs text-gray-600 mb-1 break-words">
                           • {violation.message}
                         </div>
                       ))}
@@ -257,20 +257,20 @@ export const SortableTimetableRow = ({
       <tr>
         <td colSpan={6} className="p-0">
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-bold mb-4">転換時間の設定</h3>
-              <p className="text-sm text-gray-400 mb-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-bold mb-4 text-gray-900">転換時間の設定</h3>
+              <p className="text-sm text-gray-500 mb-4">
                 このエントリーの前に挿入される転換時間（分単位）を設定します。
               </p>
               <div className="mb-4">
-                <label className="block text-sm text-gray-400 mb-2">転換時間（分）</label>
+                <label className="block text-sm text-gray-500 mb-2">転換時間（分）</label>
                 <input
                   type="number"
                   min="0"
                   max="60"
                   value={transitionInput}
                   onChange={(e) => setTransitionInput(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-900"
                   autoFocus
                 />
               </div>
@@ -280,7 +280,7 @@ export const SortableTimetableRow = ({
                     setShowTransitionModal(false);
                     setTransitionInput((entry.transitionTime || 0).toString());
                   }}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-gray-700"
                 >
                   キャンセル
                 </button>
@@ -292,7 +292,7 @@ export const SortableTimetableRow = ({
                     }
                     setShowTransitionModal(false);
                   }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded text-white"
                 >
                   設定
                 </button>
@@ -306,7 +306,7 @@ export const SortableTimetableRow = ({
     {isDropTargetAfter && (
       <tr className="h-1">
         <td colSpan={6} className="p-0">
-          <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+          <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
         </td>
       </tr>
     )}

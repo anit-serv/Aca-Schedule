@@ -197,7 +197,7 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
         <button
           onClick={handleDownloadTemplate}
           disabled={isImporting}
-          className="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
           テンプレートダウンロード
         </button>

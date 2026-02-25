@@ -40,16 +40,16 @@ export const TimetableDropZone = ({
   }, [bands, entries]);
 
   return (
-    <div className="bg-gray-700 rounded-lg overflow-hidden min-h-[400px]">
+    <div className="bg-emerald-50/50 rounded-lg overflow-hidden min-h-[400px] border border-emerald-100">
       <table className="w-full" ref={setNodeRef}>
-        <thead className="bg-gray-600 sticky top-0">
+        <thead className="bg-emerald-100/70 sticky top-0">
           <tr>
-            <th className="px-3 py-3 text-center text-sm font-semibold w-16">#</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold w-24">開始</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold w-24">終了</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold w-20">時間</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold">バンド名</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold w-20">操作</th>
+            <th className="px-3 py-3 text-center text-sm font-semibold text-emerald-800 w-16">#</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-24">開始</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-24">終了</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-20">時間</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800">バンド名</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-20">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -59,12 +59,12 @@ export const TimetableDropZone = ({
               {overEntryId === 'timetable-droppable' && (
                 <tr className="h-1">
                   <td colSpan={6} className="p-0">
-                    <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+                    <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
                   </td>
                 </tr>
               )}
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                   右のバンドバンクからドラッグ＆ドロップでバンドを配置してください
                 </td>
               </tr>

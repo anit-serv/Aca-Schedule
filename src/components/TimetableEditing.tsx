@@ -477,11 +477,16 @@ export const TimetableEditing = ({
     const row = document.querySelector(`[data-entry-id="${entryId}"]`);
     if (row) {
       row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // ハイライトアニメーション
-      row.classList.add('ring-2', 'ring-yellow-400', 'bg-yellow-900/40');
-      setTimeout(() => {
-        row.classList.remove('ring-2', 'ring-yellow-400', 'bg-yellow-900/40');
-      }, 2000);
+      // グラデーション点滅ハイライト
+      row.classList.remove('violation-highlight');
+      // reflow を強制して再アニメーション
+      void (row as HTMLElement).offsetWidth;
+      row.classList.add('violation-highlight');
+      const onEnd = () => {
+        row.classList.remove('violation-highlight');
+        row.removeEventListener('animationend', onEnd);
+      };
+      row.addEventListener('animationend', onEnd);
     }
   }, []);
 
@@ -734,7 +739,7 @@ export const TimetableEditing = ({
 
       {/* 挿入時の通知バナー */}
       {insertionNotification && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-5 py-2.5 rounded-lg shadow-lg text-sm font-medium animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-white px-5 py-2.5 rounded-lg shadow-lg text-sm font-medium animate-fade-in">
           {insertionNotification}
         </div>
       )}
@@ -742,28 +747,28 @@ export const TimetableEditing = ({
       {/* 削除確認ダイアログ */}
       {deleteConfirmDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl p-6 max-w-md">
-            <h3 className="text-lg font-bold text-white mb-3">削除の確認</h3>
-            <div className="text-gray-300 text-sm mb-4 space-y-1">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-2xl p-6 max-w-md">
+            <h3 className="text-lg font-bold text-gray-900 mb-3">削除の確認</h3>
+            <div className="text-gray-600 text-sm mb-4 space-y-1">
               <p>「{deleteConfirmDialog.entryName}」を削除します。</p>
               {deleteConfirmDialog.hasEntityData && (
-                <p className="text-amber-400">• エントリー追従のカスタム項目データが失われます</p>
+                <p className="text-amber-600">• エントリー追従のカスタム項目データが失われます</p>
               )}
               {deleteConfirmDialog.hasSeqData && (
-                <p className="text-amber-400">• この位置の位置固定カスタム項目データが失われます</p>
+                <p className="text-amber-600">• この位置の位置固定カスタム項目データが失われます</p>
               )}
               {deleteConfirmDialog.seqMergeAffected && (
-                <p className="text-amber-400">• セル結合が自動的に調整されます</p>
+                <p className="text-amber-600">• セル結合が自動的に調整されます</p>
               )}
               {!deleteConfirmDialog.hasEntityData && !deleteConfirmDialog.hasSeqData && !deleteConfirmDialog.seqMergeAffected && (
-                <p className="text-amber-400">• 位置固定のカスタム項目データが繰り上がります</p>
+                <p className="text-amber-600">• 位置固定のカスタム項目データが繰り上がります</p>
               )}
               <p className="mt-2">削除しますか？</p>
             </div>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setDeleteConfirmDialog(null)}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                className="px-4 py-2 text-sm font-medium rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
               >
                 キャンセル
               </button>

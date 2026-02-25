@@ -92,20 +92,20 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen font-sans flex items-center justify-center">
+    <div className="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 min-h-screen font-sans flex items-center justify-center">
       <div className="w-full max-w-md mx-auto p-6">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">Aca-Schedule</h1>
-          <p className="text-gray-400">アカペラサークルのスケジュール管理</p>
+          <h1 className="text-3xl font-bold mb-2 text-emerald-600">Aca-Schedule</h1>
+          <p className="text-gray-500">アカペラサークルのスケジュール管理</p>
         </div>
 
-        <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
+        <div className="bg-white rounded-lg p-6 shadow-lg border border-gray-200">
           <h2 className="text-xl font-bold mb-6 text-center">
             {mode === 'login' ? 'ログイン' : 'アカウント作成'}
           </h2>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md text-red-300 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-600 text-sm">
               {error}
             </div>
           )}
@@ -113,12 +113,12 @@ export const LoginPage = () => {
           <form onSubmit={handleEmailSubmit} className="space-y-4">
             {mode === 'register' && (
               <div>
-                <label className="block text-sm font-medium mb-1">表示名</label>
+                <label className="block text-sm font-medium mb-1 text-gray-700">表示名</label>
                 <input
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   placeholder="例: 田中太郎"
                   required
                 />
@@ -126,24 +126,24 @@ export const LoginPage = () => {
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-1">メールアドレス</label>
+              <label className="block text-sm font-medium mb-1 text-gray-700">メールアドレス</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="example@email.com"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">パスワード</label>
+              <label className="block text-sm font-medium mb-1 text-gray-700">パスワード</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="6文字以上"
                 minLength={6}
                 required
@@ -152,12 +152,12 @@ export const LoginPage = () => {
 
             {mode === 'register' && (
               <div>
-                <label className="block text-sm font-medium mb-1">パスワード（確認）</label>
+                <label className="block text-sm font-medium mb-1 text-gray-700">パスワード（確認）</label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   placeholder="パスワードを再入力"
                   minLength={6}
                   required
@@ -168,7 +168,7 @@ export const LoginPage = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-md font-medium transition-colors"
+              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md font-medium transition-colors text-white"
             >
               {isSubmitting
                 ? '処理中...'
@@ -180,17 +180,17 @@ export const LoginPage = () => {
 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-600"></div>
+              <div className="w-full border-t border-gray-200"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-800 text-gray-400">または</span>
+              <span className="px-2 bg-white text-gray-400">または</span>
             </div>
           </div>
 
           <button
             onClick={handleGoogleLogin}
             disabled={isSubmitting}
-            className="w-full py-2.5 bg-white text-gray-900 hover:bg-gray-100 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md font-medium transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed rounded-md font-medium transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -203,23 +203,23 @@ export const LoginPage = () => {
 
           <div className="mt-6 text-center text-sm">
             {mode === 'login' ? (
-              <p className="text-gray-400">
+              <p className="text-gray-500">
                 アカウントをお持ちでない方は{' '}
                 <button
                   type="button"
                   onClick={() => { setMode('register'); setError(null); }}
-                  className="text-blue-400 hover:text-blue-300 underline"
+                  className="text-emerald-600 hover:text-emerald-700 underline"
                 >
                   新規登録
                 </button>
               </p>
             ) : (
-              <p className="text-gray-400">
+              <p className="text-gray-500">
                 既にアカウントをお持ちの方は{' '}
                 <button
                   type="button"
                   onClick={() => { setMode('login'); setError(null); }}
-                  className="text-blue-400 hover:text-blue-300 underline"
+                  className="text-emerald-600 hover:text-emerald-700 underline"
                 >
                   ログイン
                 </button>

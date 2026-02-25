@@ -35,7 +35,7 @@ export const TimetableContent = ({
   onCoolStartTimeChange,
 }: TimetableContentProps) => {
   return (
-    <div className="flex-1 bg-gray-800 rounded-lg px-6 overflow-y-auto min-w-0">
+    <div className="flex-1 bg-white rounded-lg px-6 overflow-y-auto min-w-0 shadow">
       <div>
         {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
           <div>

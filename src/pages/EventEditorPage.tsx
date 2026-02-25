@@ -939,10 +939,10 @@ export const EventEditorPage = () => {
   // ローディング中
   if (isLoading) {
     return (
-      <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
+      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-400">イベントを読み込んでいます...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-500">イベントを読み込んでいます...</p>
         </div>
       </div>
     );
@@ -963,15 +963,15 @@ export const EventEditorPage = () => {
         };
 
     return (
-      <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
+      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
         <div className="max-w-md w-full mx-auto p-6">
           <div className="text-center">
             <div className="text-6xl mb-4">{errorConfig.icon}</div>
             <h1 className="text-2xl font-bold mb-2">{errorConfig.title}</h1>
-            <p className="text-gray-400 mb-6">{errorConfig.message}</p>
+            <p className="text-gray-500 mb-6">{errorConfig.message}</p>
             <button
               onClick={() => navigate('/')}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
+              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md font-medium transition-colors"
             >
               マイイベントに戻る
             </button>
@@ -982,22 +982,22 @@ export const EventEditorPage = () => {
   }
 
   return (
-    // 全体を囲むコンテナ。ダークテーマの背景色とテキスト色を設定
-    <div className="bg-gray-900 text-white h-screen font-sans flex flex-col overflow-hidden">
+    // 全体を囲むコンテナ。ライトテーマの背景色とテキスト色を設定
+    <div className="bg-gray-50 text-gray-900 h-screen font-sans flex flex-col overflow-hidden">
       {/* ヘッダーセクション */}
-      <header className="bg-gray-800 shadow-lg flex-shrink-0">
+      <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
         <nav className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/')}
-              className="text-gray-400 hover:text-white transition-colors text-sm"
+              className="text-gray-400 hover:text-gray-700 transition-colors text-sm"
               title="マイイベントに戻る"
             >
               ← 戻る
             </button>
             <div>
-              <h1 className="text-xl font-bold">{eventSettings.name}</h1>
-              <p className="text-sm text-gray-400">{eventSettings.year}年 @ {eventSettings.venue}</p>
+              <h1 className="text-xl font-bold text-gray-900">{eventSettings.name}</h1>
+              <p className="text-sm text-gray-500">{eventSettings.year}年 @ {eventSettings.venue}</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -1005,8 +1005,8 @@ export const EventEditorPage = () => {
               onClick={() => setMode('band-management')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
                 mode === 'band-management'
-                  ? 'bg-blue-600 text-white' // アクティブなボタンのスタイル
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600' // 非アクティブなボタンのスタイル
+                  ? 'bg-emerald-500 text-white' // アクティブなボタンのスタイル
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' // 非アクティブなボタンのスタイル
               }`}
             >
               バンド管理
@@ -1015,8 +1015,8 @@ export const EventEditorPage = () => {
               onClick={() => setMode('timetable-editing')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
                 mode === 'timetable-editing'
-                  ? 'bg-blue-600 text-white' // アクティブなボタンのスタイル
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600' // 非アクティブなボタンのスタイル
+                  ? 'bg-emerald-500 text-white' // アクティブなボタンのスタイル
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' // 非アクティブなボタンのスタイル
               }`}
             >
               タイムテーブル編集
@@ -1028,8 +1028,8 @@ export const EventEditorPage = () => {
                 onClick={() => setShowSharePanel(!showSharePanel)}
                 className={`p-2 rounded-md transition-colors duration-200 ${
                   eventSettings.isPublic
-                    ? 'bg-green-700 text-green-100 hover:bg-green-600'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                    : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
                 }`}
                 title="共有設定"
               >
@@ -1040,14 +1040,14 @@ export const EventEditorPage = () => {
               
               {/* 共有パネル */}
               {showSharePanel && (
-                <div className="absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-50 p-4">
-                  <h3 className="text-sm font-bold text-white mb-3">共有設定</h3>
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 p-4">
+                  <h3 className="text-sm font-bold text-gray-900 mb-3">共有設定</h3>
                   
                   {/* 公開トグル */}
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="text-sm text-gray-300">閲覧用ページを公開</p>
-                      <p className="text-xs text-gray-500 mt-0.5">リンクを知っている人が閲覧できます</p>
+                      <p className="text-sm text-gray-700">閲覧用ページを公開</p>
+                      <p className="text-xs text-gray-400 mt-0.5">リンクを知っている人が閲覧できます</p>
                     </div>
                     <button
                       onClick={async () => {
@@ -1061,11 +1061,11 @@ export const EventEditorPage = () => {
                         }
                       }}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                        eventSettings.isPublic ? 'bg-green-600' : 'bg-gray-600'
+                        eventSettings.isPublic ? 'bg-emerald-500' : 'bg-gray-300'
                       }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow ${
                           eventSettings.isPublic ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
@@ -1074,8 +1074,8 @@ export const EventEditorPage = () => {
                   
                   {/* 注意書き */}
                   {eventSettings.isPublic && (
-                    <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-md px-3 py-2 mb-3">
-                      <p className="text-xs text-yellow-300">
+                    <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-3">
+                      <p className="text-xs text-amber-700">
                         ⚠️ バンド名を含むタイムテーブル情報が公開されます
                       </p>
                     </div>
@@ -1084,13 +1084,13 @@ export const EventEditorPage = () => {
                   {/* URL表示・コピー */}
                   {eventSettings.isPublic && (
                     <div>
-                      <p className="text-xs text-gray-400 mb-1.5">共有URL</p>
+                      <p className="text-xs text-gray-500 mb-1.5">共有URL</p>
                       <div className="flex gap-2">
                         <input
                           type="text"
                           readOnly
                           value={`${window.location.origin}/share/${eventSettings.id}`}
-                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-gray-300 font-mono truncate"
+                          className="flex-1 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 font-mono truncate"
                           onClick={(e) => (e.target as HTMLInputElement).select()}
                         />
                         <button
@@ -1099,7 +1099,7 @@ export const EventEditorPage = () => {
                             setShareUrlCopied(true);
                             setTimeout(() => setShareUrlCopied(false), 2000);
                           }}
-                          className="px-3 py-1.5 rounded text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors whitespace-nowrap"
+                          className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors whitespace-nowrap"
                         >
                           {shareUrlCopied ? '✓ コピー済' : 'コピー'}
                         </button>
@@ -1114,7 +1114,7 @@ export const EventEditorPage = () => {
             <div className="relative settings-menu-container">
               <button
                 onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-                className="p-2 rounded-md bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors duration-200"
+                className="p-2 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors duration-200"
                 title="設定"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1125,7 +1125,7 @@ export const EventEditorPage = () => {
               
               {/* ドロップダウンメニュー */}
               {showSettingsMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg border border-gray-700 z-50">
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50">
                   {/* エクスポート機能（タイムテーブル編集モードのみ） */}
                   {mode === 'timetable-editing' && (
                     <>
@@ -1138,7 +1138,7 @@ export const EventEditorPage = () => {
                             downloadCSV(csvContent, filename);
                           }
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
                       >
                         📥 本番タイムテーブルをCSV出力
                       </button>
@@ -1152,12 +1152,12 @@ export const EventEditorPage = () => {
                               downloadCSV(csvContent, filename);
                             }
                           }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
                         >
                           📥 リハーサルタイムテーブルをCSV出力
                         </button>
                       )}
-                      <div className="border-t border-gray-700" />
+                      <div className="border-t border-gray-100" />
                     </>
                   )}
                   
@@ -1166,7 +1166,7 @@ export const EventEditorPage = () => {
                       setShowSettingsMenu(false);
                       setShowSettingsModal(true);
                     }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
                   >
                     イベント設定
                   </button>
@@ -1176,7 +1176,7 @@ export const EventEditorPage = () => {
                       handleDeleteEvent();
                     }}
                     disabled={isDeleting}
-                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-b-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50 rounded-b-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isDeleting ? '削除中...' : 'イベントを削除'}
                   </button>

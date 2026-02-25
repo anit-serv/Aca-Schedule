@@ -11,16 +11,16 @@ export const ToggleSwitch = ({ enabled, onChange, label, icon, disabled = false 
     <label
       className={`flex items-center gap-2 select-none ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
     >
-      {icon && <span className="text-gray-400">{icon}</span>}
-      {label && <span className="text-sm text-gray-300 whitespace-nowrap">{label}</span>}
+      {icon && <span className="text-gray-500">{icon}</span>}
+      {label && <span className="text-sm text-gray-600 whitespace-nowrap">{label}</span>}
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
         disabled={disabled}
         onClick={() => !disabled && onChange(!enabled)}
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
-          enabled ? 'bg-emerald-500' : 'bg-gray-600'
+        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white ${
+          enabled ? 'bg-emerald-500' : 'bg-gray-300'
         }`}
       >
         <span

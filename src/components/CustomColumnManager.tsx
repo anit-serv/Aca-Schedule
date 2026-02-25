@@ -115,11 +115,11 @@ export const CustomColumnManager = ({
   };
 
   return (
-    <div className="w-72 bg-gray-800 rounded-lg border border-gray-700 flex flex-col h-full overflow-hidden">
+    <div className="w-72 bg-white rounded-lg border border-gray-200 flex flex-col h-full overflow-hidden shadow">
       {/* ヘッダー */}
-      <div className="px-4 py-3 border-b border-gray-700 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-gray-200">列管理</h3>
-        <p className="text-xs text-gray-400 mt-0.5">
+      <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
+        <h3 className="text-sm font-semibold text-gray-700">列管理</h3>
+        <p className="text-xs text-gray-500 mt-0.5">
           {applyToBoth ? '本番+リハ共通' : (timetableType === 'performance' ? '本番用' : 'リハ用')} · {columns.length}列
         </p>
       </div>
@@ -127,7 +127,7 @@ export const CustomColumnManager = ({
       {/* 列リスト */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {columns.length === 0 && !isAdding && (
-          <p className="text-xs text-gray-500 text-center py-4">
+          <p className="text-xs text-gray-400 text-center py-4">
             カスタム列がありません。<br />「列を追加」から作成してください。
           </p>
         )}
@@ -135,7 +135,7 @@ export const CustomColumnManager = ({
         {columns.map((col, index) => (
           <div
             key={col.id}
-            className="bg-gray-700/50 rounded-lg p-2 group"
+            className="bg-gray-50 rounded-lg p-2 group"
           >
             {editingColumnId === col.id ? (
               <div className="flex items-center gap-1">
@@ -146,7 +146,7 @@ export const CustomColumnManager = ({
                   onChange={e => setEditingName(e.target.value)}
                   onBlur={handleRenameConfirm}
                   onKeyDown={e => { if (e.key === 'Enter') handleRenameConfirm(); if (e.key === 'Escape') setEditingColumnId(null); }}
-                  className="flex-1 bg-gray-600 border border-blue-500 rounded px-2 py-0.5 text-sm text-white"
+                  className="flex-1 bg-white border border-emerald-500 rounded px-2 py-0.5 text-sm text-gray-900"
                   maxLength={20}
                 />
               </div>
@@ -156,7 +156,7 @@ export const CustomColumnManager = ({
                   {col.bindingType === 'sequence' ? '📍' : '🎵'}
                 </span>
                 <span
-                  className="flex-1 text-sm text-gray-200 cursor-pointer hover:text-blue-300 truncate"
+                  className="flex-1 text-sm text-gray-700 cursor-pointer hover:text-emerald-600 truncate"
                   onClick={() => handleStartRename(col)}
                   title="クリックで名前変更"
                 >
@@ -168,7 +168,7 @@ export const CustomColumnManager = ({
                   <button
                     onClick={() => handleMoveUp(index)}
                     disabled={index === 0}
-                    className="text-gray-400 hover:text-white disabled:opacity-30 p-0.5"
+                    className="text-gray-500 hover:text-gray-900 disabled:opacity-30 p-0.5"
                     title="上へ移動"
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -178,7 +178,7 @@ export const CustomColumnManager = ({
                   <button
                     onClick={() => handleMoveDown(index)}
                     disabled={index >= columns.length - 1}
-                    className="text-gray-400 hover:text-white disabled:opacity-30 p-0.5"
+                    className="text-gray-500 hover:text-gray-900 disabled:opacity-30 p-0.5"
                     title="下へ移動"
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -199,7 +199,7 @@ export const CustomColumnManager = ({
             )}
 
             <div className="mt-0.5">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-400">
                 {col.bindingType === 'sequence' ? '位置固定 · 結合可能' : 'エントリー追従'}
               </span>
             </div>
@@ -208,7 +208,7 @@ export const CustomColumnManager = ({
       </div>
 
       {/* 列追加フォーム */}
-      <div className="border-t border-gray-700 p-3 flex-shrink-0">
+      <div className="border-t border-gray-200 p-3 flex-shrink-0">
         {isAdding ? (
           <div className="space-y-2">
             <input
@@ -218,13 +218,13 @@ export const CustomColumnManager = ({
               value={newColumnName}
               onChange={e => setNewColumnName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleAddColumn(); if (e.key === 'Escape') setIsAdding(false); }}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white placeholder:text-gray-500"
+              className="w-full bg-white border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400"
               maxLength={20}
             />
 
             {/* 紐付けタイプ選択 */}
             <div className="space-y-1">
-              <label className="flex items-start gap-2 p-1.5 rounded hover:bg-gray-700/50 cursor-pointer">
+              <label className="flex items-start gap-2 p-1.5 rounded hover:bg-gray-100 cursor-pointer">
                 <input
                   type="radio"
                   name="bindingType"
@@ -234,11 +234,11 @@ export const CustomColumnManager = ({
                   className="mt-0.5"
                 />
                 <div>
-                  <div className="text-xs text-gray-200 font-medium">📍 位置固定</div>
-                  <div className="text-xs text-gray-500">番号に紐付け。結合可能</div>
+                  <div className="text-xs text-gray-700 font-medium">📍 位置固定</div>
+                  <div className="text-xs text-gray-400">番号に紐付け。結合可能</div>
                 </div>
               </label>
-              <label className="flex items-start gap-2 p-1.5 rounded hover:bg-gray-700/50 cursor-pointer">
+              <label className="flex items-start gap-2 p-1.5 rounded hover:bg-gray-100 cursor-pointer">
                 <input
                   type="radio"
                   name="bindingType"
@@ -248,8 +248,8 @@ export const CustomColumnManager = ({
                   className="mt-0.5"
                 />
                 <div>
-                  <div className="text-xs text-gray-200 font-medium">🎵 エントリー追従</div>
-                  <div className="text-xs text-gray-500">移動時にデータも追従</div>
+                  <div className="text-xs text-gray-700 font-medium">🎵 エントリー追従</div>
+                  <div className="text-xs text-gray-400">移動時にデータも追従</div>
                 </div>
               </label>
             </div>
@@ -258,13 +258,13 @@ export const CustomColumnManager = ({
               <button
                 onClick={handleAddColumn}
                 disabled={!newColumnName.trim()}
-                className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded"
+                className="flex-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded"
               >
                 追加
               </button>
               <button
                 onClick={() => { setIsAdding(false); setNewColumnName(''); }}
-                className="px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-gray-200 text-sm rounded"
+                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded"
               >
                 取消
               </button>
@@ -273,7 +273,7 @@ export const CustomColumnManager = ({
         ) : (
           <button
             onClick={() => setIsAdding(true)}
-            className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg border border-dashed border-gray-600 transition-colors"
+            className="w-full px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm rounded-lg border border-dashed border-emerald-300 transition-colors"
           >
             + 列を追加
           </button>

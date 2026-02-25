@@ -154,10 +154,10 @@ export const PublicTimetablePage = () => {
   // ローディング
   if (loadingState === 'loading') {
     return (
-      <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
+      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4" />
-          <p className="text-lg text-gray-400">読み込み中...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4" />
+          <p className="text-lg text-gray-500">読み込み中...</p>
         </div>
       </div>
     );
@@ -188,12 +188,12 @@ export const PublicTimetablePage = () => {
     };
 
     return (
-      <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
+      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
         <div className="max-w-md w-full mx-auto p-6">
           <div className="text-center">
             <div className="text-6xl mb-4">{config.icon}</div>
             <h1 className="text-2xl font-bold mb-2">{config.title}</h1>
-            <p className="text-gray-400 mb-6">{config.message}</p>
+            <p className="text-gray-500 mb-6">{config.message}</p>
           </div>
         </div>
       </div>
@@ -206,16 +206,16 @@ export const PublicTimetablePage = () => {
   const showCombinedView = eventSettings.rehearsalType === 'day-start-rehearsal';
 
   return (
-    <div className="bg-gray-900 text-white h-screen font-sans flex flex-col overflow-hidden">
+    <div className="bg-gray-50 text-gray-900 h-screen font-sans flex flex-col overflow-hidden">
       {/* ヘッダー */}
-      <header className="bg-gray-800 shadow-lg flex-shrink-0">
+      <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
         <div className="max-w-7xl mx-auto px-6 py-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold">{eventSettings.name}</h1>
-              <p className="text-sm text-gray-400">
+              <h1 className="text-xl font-bold text-gray-900">{eventSettings.name}</h1>
+              <p className="text-sm text-gray-500">
                 {eventSettings.year}年 @ {eventSettings.venue}
-                <span className="ml-3 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900/50 text-green-300 border border-green-700/50">
+                <span className="ml-3 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                   閲覧専用
                 </span>
               </p>
@@ -225,7 +225,7 @@ export const PublicTimetablePage = () => {
       </header>
 
       {/* コントロールバー */}
-      <div className="bg-gray-800/50 border-b border-gray-700 flex-shrink-0">
+      <div className="bg-white border-b border-gray-200 flex-shrink-0">
         <div className="max-w-7xl mx-auto px-6 py-2 flex items-center gap-4">
           {/* 本番/リハーサル切り替え - 当日一括リハーサルでは非表示（両方表示するため） */}
           {hasRehearsal && !showCombinedView && (
@@ -234,8 +234,8 @@ export const PublicTimetablePage = () => {
                 onClick={() => handleTypeChange('performance')}
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                   timetableType === 'performance'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                 }`}
               >
                 本番
@@ -244,8 +244,8 @@ export const PublicTimetablePage = () => {
                 onClick={() => handleTypeChange('rehearsal')}
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                   timetableType === 'rehearsal'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                 }`}
               >
                 リハーサル
@@ -262,8 +262,8 @@ export const PublicTimetablePage = () => {
                   onClick={() => setSelectedDate(date)}
                   className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                     selectedDate === date
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                   }`}
                 >
                   {formatDate(date)}
@@ -282,7 +282,7 @@ export const PublicTimetablePage = () => {
             {/* リハーサルセクション */}
             <div className="flex-shrink-0">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded">
+                <span className="text-sm font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
                   リハーサル
                 </span>
               </div>
@@ -300,7 +300,7 @@ export const PublicTimetablePage = () => {
             {/* 本番セクション */}
             <div className="flex-shrink-0">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">
+                <span className="text-sm font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   本番
                 </span>
               </div>

@@ -187,16 +187,16 @@ export const CoolSection = ({
   const shouldShowCoolHeader = rehearsalType === 'rehearsal-day' || (totalCools > 1 && !isReadOnly);
 
   return (
-    <div className={`bg-gray-700 rounded-lg overflow-hidden ${showWarning ? 'ring-2 ring-red-500' : ''}`}>
+    <div className={`bg-emerald-50/50 rounded-lg overflow-hidden border border-emerald-100 ${showWarning ? 'ring-2 ring-red-500' : ''}`}>
       {shouldShowCoolHeader && (
         <div className="relative">
           {/* クール名ヘッダーの上に表示する線は削除（ドロップ可能だがハイライトなし） */}
-          <div ref={setHeaderRef} className="bg-gray-600 px-4 py-2 flex justify-between items-center">
+          <div ref={setHeaderRef} className="bg-emerald-100 px-4 py-2 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <div className="font-semibold">第{cool.number}クール</div>
+            <div className="font-semibold text-emerald-800">第{cool.number}クール</div>
             {!isReadOnly && (
             <div className="flex items-center gap-2 text-sm">
-              <label htmlFor={`cool-start-time-${coolIndex}`} className="text-gray-300">
+              <label htmlFor={`cool-start-time-${coolIndex}`} className="text-gray-600">
                 開始時刻:
               </label>
               <div className="flex items-center gap-1">
@@ -208,14 +208,14 @@ export const CoolSection = ({
                   onFocus={handleStartTimeFocus}
                   onBlur={handleStartTimeBlur}
                   min={dailyStartTime}
-                  className="bg-gray-700 text-white px-2 py-1 rounded border border-gray-500 focus:border-blue-400 focus:outline-none"
+                  className="bg-white text-gray-900 px-2 py-1 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
                   placeholder="未設定"
                   title={`${dailyStartTime}以降の時刻を設定してください`}
                 />
                 {startTimeInput && (
                   <button
                     onClick={handleClearStartTime}
-                    className="text-gray-400 hover:text-white px-1 transition-colors"
+                    className="text-gray-500 hover:text-gray-900 px-1 transition-colors"
                     title="開始時刻をクリア"
                   >
                     ✕
@@ -223,12 +223,12 @@ export const CoolSection = ({
                 )}
               </div>
               {!startTimeInput && previousCoolEndTime && (
-                <span className="text-gray-400 text-xs">
+                <span className="text-gray-500 text-xs">
                   ({previousCoolEndTime} から継続)
                 </span>
               )}
               {!startTimeInput && !previousCoolEndTime && (
-                <span className="text-gray-400 text-xs">(前のクールから継続)</span>
+                <span className="text-gray-500 text-xs">(前のクールから継続)</span>
               )}
               {showWarning && (
                 <span className="text-red-400 text-xs flex items-center gap-1">
@@ -242,19 +242,19 @@ export const CoolSection = ({
           <div className="relative">
             <button
               onClick={handleMenuToggle}
-              className="px-2 py-1 text-white hover:bg-gray-500 rounded transition-colors"
+              className="px-2 py-1 text-gray-700 hover:bg-gray-300 rounded transition-colors"
               title="メニュー"
             >
               ⋮
             </button>
             
             {isMenuOpen && (
-              <div className="absolute right-0 mt-1 w-40 bg-gray-800 border border-gray-600 rounded shadow-lg z-10">
+              <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded shadow-lg z-10">
                 <button
                   onClick={handleMoveUp}
                   disabled={coolIndex === 0}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-700 ${
-                    coolIndex === 0 ? 'text-gray-500 cursor-not-allowed' : 'text-white'
+                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 ${
+                    coolIndex === 0 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
                   }`}
                 >
                   ↑ 上に移動
@@ -262,16 +262,16 @@ export const CoolSection = ({
                 <button
                   onClick={handleMoveDown}
                   disabled={coolIndex === totalCools - 1}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-700 ${
-                    coolIndex === totalCools - 1 ? 'text-gray-500 cursor-not-allowed' : 'text-white'
+                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 ${
+                    coolIndex === totalCools - 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
                   }`}
                 >
                   ↓ 下に移動
                 </button>
-                <div className="border-t border-gray-600"></div>
+                <div className="border-t border-gray-200"></div>
                 <button
                   onClick={handleDeleteClick}
-                  className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-gray-700 transition-colors"
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 transition-colors"
                 >
                   🗑 削除
                 </button>
@@ -284,14 +284,14 @@ export const CoolSection = ({
       )}
       <div className={cool.entries.length === 0 ? "min-h-[100px]" : ""}>
         <table className="w-full">
-          <thead ref={setColumnHeaderRef} className="bg-gray-650">
+          <thead ref={setColumnHeaderRef} className="bg-emerald-100/70">
             <tr>
-              <th className="px-3 py-2 text-center text-sm font-semibold w-16">#</th>
-              <th className="px-4 py-2 text-left text-sm font-semibold w-24">開始</th>
-              <th className="px-4 py-2 text-left text-sm font-semibold w-24">終了</th>
-              <th className="px-4 py-2 text-left text-sm font-semibold w-20">時間</th>
-              <th className="px-4 py-2 text-left text-sm font-semibold">バンド名</th>
-              <th className="px-4 py-2 text-left text-sm font-semibold w-20">操作</th>
+              <th className="px-3 py-2 text-center text-sm font-semibold text-emerald-800 w-16">#</th>
+              <th className="px-4 py-2 text-left text-sm font-semibold text-emerald-800 w-24">開始</th>
+              <th className="px-4 py-2 text-left text-sm font-semibold text-emerald-800 w-24">終了</th>
+              <th className="px-4 py-2 text-left text-sm font-semibold text-emerald-800 w-20">時間</th>
+              <th className="px-4 py-2 text-left text-sm font-semibold text-emerald-800">バンド名</th>
+              <th className="px-4 py-2 text-left text-sm font-semibold text-emerald-800 w-20">操作</th>
             </tr>
           </thead>
           <SortableContext
@@ -309,12 +309,12 @@ export const CoolSection = ({
                   overEntryId === `cool-gap-after-${coolIndex}`) && (
                   <tr className="h-1">
                     <td colSpan={6} className="p-0">
-                      <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+                      <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
                     </td>
                   </tr>
                 )}
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                     バンドをドラッグ＆ドロップで配置
                   </td>
                 </tr>
@@ -372,7 +372,7 @@ export const CoolSection = ({
                   overEntryId === `cool-gap-after-${coolIndex}`) && (
                   <tr className="h-1">
                     <td colSpan={6} className="p-0">
-                      <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+                      <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
                     </td>
                   </tr>
                 )}

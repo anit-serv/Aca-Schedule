@@ -297,12 +297,12 @@ export const BandAvailabilityModal = ({
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       onMouseUp={handleMouseUp}
     >
-      <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-700">
-          <h3 className="text-xl font-bold text-white">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-xl font-bold text-gray-900">
             出演可能時間帯設定: {band.name || '(未設定)'}
           </h3>
-          <p className="text-gray-400 text-sm mt-1">
+          <p className="text-gray-500 text-sm mt-1">
             クリックで選択/解除、ドラッグで範囲選択（選択済みから開始すると削除モード）
           </p>
         </div>
@@ -322,10 +322,10 @@ export const BandAvailabilityModal = ({
                   onClick={() => setSelectedDate(date)}
                   className={`px-4 py-2 rounded-md font-medium transition-colors ${
                     selectedDate === date
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-emerald-500 text-white'
                       : hasSelection
-                      ? 'bg-gray-600 text-white hover:bg-gray-500'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
                   <div className="flex flex-col items-center">
@@ -339,7 +339,7 @@ export const BandAvailabilityModal = ({
           </div>
 
           {/* 時間グリッド */}
-          <div className="bg-gray-700 p-4 rounded">
+          <div className="bg-gray-100 p-4 rounded">
             <div className="grid grid-cols-12 gap-1 select-none">
               {allTimeSlots.map((time, index) => {
                 // 24:00以降は表示しない
@@ -352,15 +352,15 @@ export const BandAvailabilityModal = ({
                 const isHourMark = minute === '00';
                 
                 // プレビュー中の色を決定
-                let bgColor = 'bg-gray-600 border-gray-500 hover:bg-gray-500';
+                let bgColor = 'bg-gray-200 border-gray-300 hover:bg-gray-300';
                 if (isSelected) {
-                  bgColor = 'bg-blue-600 border-blue-500 hover:bg-blue-500';
+                  bgColor = 'bg-emerald-500 border-emerald-400 hover:bg-emerald-400';
                 }
                 if (isInPreview) {
                   // 削除モードの場合は赤系、追加モードの場合は青系
                   bgColor = selectionMode === 'remove' 
                     ? 'bg-red-400 border-red-300' 
-                    : 'bg-blue-400 border-blue-300';
+                    : 'bg-emerald-300 border-emerald-200';
                 }
                 
                 return (
@@ -376,7 +376,7 @@ export const BandAvailabilityModal = ({
                     title={time}
                   >
                     {isHourMark && (
-                      <div className="text-xs text-center text-gray-200 font-semibold">
+                      <div className="text-xs text-center text-gray-700 font-semibold">
                         {hour}
                       </div>
                     )}
@@ -386,8 +386,8 @@ export const BandAvailabilityModal = ({
             </div>
             
             {/* 選択された時間範囲の表示 */}
-            <div className="mt-4 pt-4 border-t border-gray-600">
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <h4 className="text-sm font-semibold text-gray-600 mb-2">
                 選択された時間帯:
               </h4>
               {selectedSlotsForDate.size > 0 ? (
@@ -395,29 +395,29 @@ export const BandAvailabilityModal = ({
                   {slotsSetToTimeRanges(selectedSlotsForDate).map((range, idx) => (
                     <span
                       key={idx}
-                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded"
+                      className="px-3 py-1 bg-emerald-500 text-white text-sm rounded"
                     >
                       {range.startTime} - {range.endTime}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">未選択</p>
+                <p className="text-sm text-gray-500">未選択</p>
               )}
             </div>
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-700 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded transition-colors"
           >
             キャンセル
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded transition-colors"
           >
             保存
           </button>

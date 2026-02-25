@@ -106,8 +106,8 @@ export const BandRow = ({
   };
 
   return (
-    <tr className="hover:bg-gray-750 transition-colors">
-      <td className="px-4 py-3 text-sm text-gray-400">{index + 1}</td>
+    <tr className="hover:bg-emerald-50 transition-colors">
+      <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
       
       {/* バンド名 */}
       <td className="px-4 py-3">
@@ -116,7 +116,7 @@ export const BandRow = ({
           value={band.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
           placeholder="バンド名を入力"
-          className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+          className="w-full bg-white text-gray-900 px-3 py-2 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
         />
       </td>
 
@@ -127,10 +127,10 @@ export const BandRow = ({
             type="number"
             value={band.performanceDuration}
             onChange={(e) => onUpdate({ performanceDuration: parseInt(e.target.value) || 0 })}
-            className="w-20 bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+            className="w-20 bg-white text-gray-900 px-3 py-2 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
             min="0"
           />
-          <span className="text-gray-400 text-sm">分</span>
+          <span className="text-gray-500 text-sm">分</span>
         </div>
         {/* プリセットボタン */}
         <div className="flex gap-1 mt-2">
@@ -138,7 +138,7 @@ export const BandRow = ({
             <button
               key={duration}
               onClick={() => onUpdate({ performanceDuration: duration })}
-              className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-gray-200 rounded transition-colors"
+              className="px-2 py-1 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded transition-colors"
             >
               {duration}分
             </button>
@@ -152,7 +152,7 @@ export const BandRow = ({
           type="number"
           value={band.performanceCount}
           onChange={(e) => onUpdate({ performanceCount: parseInt(e.target.value) || 1 })}
-          className="w-16 bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+          className="w-16 bg-white text-gray-900 px-3 py-2 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
           min="1"
         />
       </td>
@@ -165,7 +165,7 @@ export const BandRow = ({
             {band.members.map(member => (
               <span
                 key={member}
-                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-sm rounded"
+                className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-500 text-white text-sm rounded"
               >
                 {member}
                 <button
@@ -237,12 +237,12 @@ export const BandRow = ({
                 updateSuggestionsPosition();
               }}
               placeholder="メンバーを追加..."
-              className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+              className="w-full bg-white text-gray-900 px-3 py-2 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none text-sm"
             />
             {/* サジェスト候補 */}
             {showMemberSuggestions && memberSuggestions.length > 0 && (
               <div
-                className="fixed z-50 bg-gray-700 border border-gray-600 rounded shadow-lg max-h-40 overflow-y-auto"
+                className="fixed z-50 bg-white border border-gray-300 rounded shadow-lg max-h-40 overflow-y-auto"
                 style={{
                   ...(suggestionsStyle.top !== undefined ? { top: suggestionsStyle.top } : {}),
                   ...(suggestionsStyle.bottom !== undefined ? { bottom: suggestionsStyle.bottom } : {}),
@@ -262,8 +262,8 @@ export const BandRow = ({
                       e.preventDefault(); // onBlurより先に実行されるようにする
                       handleAddMember(member);
                     }}
-                    className={`w-full text-left px-3 py-2 text-white text-sm transition-colors ${
-                      idx === selectedSuggestionIndex ? 'bg-blue-600' : 'hover:bg-gray-600'
+                    className={`w-full text-left px-3 py-2 text-gray-900 text-sm transition-colors ${
+                      idx === selectedSuggestionIndex ? 'bg-emerald-500 text-white' : 'hover:bg-gray-100'
                     }`}
                   >
                     {member}
@@ -279,7 +279,7 @@ export const BandRow = ({
       <td className="px-4 py-3">
         <button
           onClick={onOpenAvailability}
-          className="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded transition-colors whitespace-nowrap"
+          className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-sm rounded transition-colors whitespace-nowrap"
         >
           {band.availableTimeSlots.length > 0
             ? `設定済み (${band.availableTimeSlots.reduce((sum, slot) => sum + slot.timeRanges.length, 0)}範囲)`

@@ -42,12 +42,12 @@ export const BandBankDropZone = ({
   };
 
   return (
-    <div className="w-80 bg-gray-800 rounded-lg overflow-y-auto">
+    <div className="w-80 bg-white rounded-lg overflow-y-auto shadow">
       <div ref={setNodeRef} className="p-4">
       {/* カスタムイベント追加ボタン */}
       <button
         onClick={() => setShowModal(true)}
-        className="w-full mb-4 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg transition-colors"
+        className="w-full mb-4 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-lg transition-colors"
       >
         + カスタムイベントを追加
       </button>
@@ -55,30 +55,30 @@ export const BandBankDropZone = ({
       {/* カスタムイベント作成モーダル */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-96">
-            <h4 className="text-lg font-bold mb-4">カスタムイベントを作成</h4>
+          <div className="bg-white rounded-lg p-6 w-96 shadow-xl">
+            <h4 className="text-lg font-bold mb-4 text-gray-900">カスタムイベントを作成</h4>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">イベント名</label>
+                <label className="block text-sm font-medium mb-1 text-gray-700">イベント名</label>
                 <input
                   type="text"
                   value={eventName}
                   onChange={(e) => setEventName(e.target.value)}
                   placeholder="例: 休憩、MC、セットチェンジ"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  className="w-full bg-white border border-gray-300 rounded px-3 py-2 text-gray-900"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">時間（分）</label>
+                <label className="block text-sm font-medium mb-1 text-gray-700">時間（分）</label>
                 <input
                   type="number"
                   value={eventDuration}
                   onChange={(e) => setEventDuration(Number(e.target.value))}
                   min="1"
                   max="60"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  className="w-full bg-white border border-gray-300 rounded px-3 py-2 text-gray-900"
                 />
               </div>
               
@@ -89,14 +89,14 @@ export const BandBankDropZone = ({
                     setEventName('');
                     setEventDuration(10);
                   }}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded transition-colors"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors text-gray-700"
                 >
                   キャンセル
                 </button>
                 <button
                   onClick={handleAddCustomEvent}
                   disabled={!eventName.trim()}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
                 >
                   作成
                 </button>
@@ -109,7 +109,7 @@ export const BandBankDropZone = ({
       {/* カスタムイベント一覧 */}
       {customEvents.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-semibold text-purple-300 mb-2">カスタムイベント</h4>
+          <h4 className="text-sm font-semibold text-emerald-600 mb-2">カスタムイベント</h4>
           <div className="space-y-2">
             {customEvents.map((event) => (
               <CustomEventBankItem
@@ -123,13 +123,13 @@ export const BandBankDropZone = ({
         </div>
       )}
       
-      <div className="text-sm text-gray-400 mb-4">
+      <div className="text-sm font-semibold text-emerald-700 mb-4 pb-2 border-b border-emerald-200">
         未配置バンド: {unplacedBands.length}
       </div>
 
       <div className="space-y-2">
         {unplacedBands.length === 0 ? (
-          <div className="text-center text-gray-400 py-8">
+          <div className="text-center text-gray-500 py-8">
             すべてのバンドが配置されました
           </div>
         ) : (

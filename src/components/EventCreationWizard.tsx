@@ -136,12 +136,12 @@ export const EventCreationWizard = () => {
   };
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen font-sans">
-      <header className="bg-gray-800 shadow-lg">
+    <div className="bg-gray-50 text-gray-900 min-h-screen font-sans">
+      <header className="bg-white shadow-lg">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
           <button
             onClick={() => navigate('/')}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-gray-500 hover:text-gray-900 transition-colors"
           >
             ← 戻る
           </button>
@@ -152,7 +152,7 @@ export const EventCreationWizard = () => {
       <main className="max-w-4xl mx-auto p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* 基本情報 */}
-          <div className="bg-gray-800 rounded-lg p-6">
+          <div className="bg-white rounded-lg p-6 shadow">
             <h2 className="text-xl font-bold mb-4">基本情報</h2>
             
             <div className="space-y-4">
@@ -164,7 +164,7 @@ export const EventCreationWizard = () => {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="例: 2025年春ライブ"
                   required
                 />
@@ -177,7 +177,7 @@ export const EventCreationWizard = () => {
                     type="number"
                     value={formData.year}
                     onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     min="2000"
                     max="2100"
                   />
@@ -189,7 +189,7 @@ export const EventCreationWizard = () => {
                     type="text"
                     value={formData.venue}
                     onChange={(e) => setFormData(prev => ({ ...prev, venue: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     placeholder="例: 〇〇ホール"
                   />
                 </div>
@@ -200,7 +200,7 @@ export const EventCreationWizard = () => {
                 <textarea
                   value={formData.goal}
                   onChange={(e) => setFormData(prev => ({ ...prev, goal: e.target.value }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   rows={3}
                   placeholder="例: 全バンドが楽しく演奏できるライブを作る"
                 />
@@ -209,7 +209,7 @@ export const EventCreationWizard = () => {
           </div>
 
           {/* 本番日程 */}
-          <div className="bg-gray-800 rounded-lg p-6">
+          <div className="bg-white rounded-lg p-6 shadow">
             <h2 className="text-xl font-bold mb-4">
               本番日程 <span className="text-red-500">*</span>
             </h2>
@@ -221,7 +221,7 @@ export const EventCreationWizard = () => {
                     type="date"
                     value={date}
                     onChange={(e) => updatePerformanceDate(index, e.target.value)}
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   />
                   {formData.performanceDates.length > 1 && (
@@ -239,7 +239,7 @@ export const EventCreationWizard = () => {
               <button
                 type="button"
                 onClick={addPerformanceDate}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded-md transition-colors"
               >
                 + 本番日を追加
               </button>
@@ -247,7 +247,7 @@ export const EventCreationWizard = () => {
           </div>
 
           {/* リハーサル設定 */}
-          <div className="bg-gray-800 rounded-lg p-6">
+          <div className="bg-white rounded-lg p-6 shadow">
             <h2 className="text-xl font-bold mb-4">リハーサル設定</h2>
             
             <div className="space-y-4">
@@ -259,14 +259,14 @@ export const EventCreationWizard = () => {
                     ...prev, 
                     rehearsalType: e.target.value as EventSettings['rehearsalType']
                   }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="none">リハーサルなし</option>
                   <option value="rehearsal-day">別日リハーサル</option>
                   <option value="cool-pre-rehearsal">クール直前リハーサル</option>
                   <option value="day-start-rehearsal">当日一括リハーサル</option>
                 </select>
-                <p className="text-sm text-gray-400 mt-1">
+                <p className="text-sm text-gray-500 mt-1">
                   ※ この設定は後から変更できません
                 </p>
               </div>
@@ -283,7 +283,7 @@ export const EventCreationWizard = () => {
                           type="date"
                           value={date}
                           onChange={(e) => updateRehearsalDate(index, e.target.value)}
-                          className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           required
                         />
                         {formData.rehearsalDates.length > 1 && (
@@ -301,7 +301,7 @@ export const EventCreationWizard = () => {
                     <button
                       type="button"
                       onClick={addRehearsalDate}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded-md transition-colors"
                     >
                       + リハーサル日を追加
                     </button>
@@ -321,11 +321,11 @@ export const EventCreationWizard = () => {
                       ...prev, 
                       rehearsalDuration: parseInt(e.target.value) 
                     }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     min="5"
                     max="120"
                   />
-                  <p className="text-sm text-gray-400 mt-1">
+                  <p className="text-sm text-gray-500 mt-1">
                     全バンド共通のリハーサル時間です
                   </p>
                 </div>
@@ -338,7 +338,7 @@ export const EventCreationWizard = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-md font-medium transition-colors"
+              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md font-medium transition-colors text-white"
             >
               {isSubmitting ? '作成中...' : 'イベントを作成'}
             </button>

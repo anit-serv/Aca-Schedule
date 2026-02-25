@@ -739,20 +739,20 @@ export const CustomFieldsTable = ({
     : false;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-gray-900 rounded-lg border border-gray-700 relative">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-lg border border-gray-200 relative">
       {/* エラー表示 */}
       {mergeError && (
-        <div className="flex-shrink-0 bg-red-900/50 border border-red-700 text-red-300 text-sm px-4 py-2">
+        <div className="flex-shrink-0 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2">
           {mergeError}
         </div>
       )}
 
       {/* フローティングツールバー（範囲選択時に表示、readOnly時は非表示） */}
       {!isReadOnly && selection && selectionSize > 1 && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-gray-800 border border-gray-600 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-4">
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-white border border-gray-200 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-blue-400 font-bold text-lg">{selectionSize}</span>
-            <span className="text-sm text-gray-300">
+            <span className="text-emerald-600 font-bold text-lg">{selectionSize}</span>
+            <span className="text-sm text-gray-600">
               セル選択中
               {columns.find(c => c.id === selection.colId) && (
                 <span className="text-gray-500 ml-1">
@@ -761,12 +761,12 @@ export const CustomFieldsTable = ({
               )}
             </span>
           </div>
-          <div className="h-6 w-px bg-gray-600" />
+          <div className="h-6 w-px bg-gray-200" />
           <div className="flex gap-2">
             {selectionHasMerge ? (
               <button
                 onClick={() => handleUnmerge(selection.colId, Math.min(selection.startSeq, selection.endSeq))}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-yellow-600 hover:bg-yellow-500 text-white transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium rounded-md bg-yellow-500 hover:bg-yellow-400 text-white transition-colors flex items-center gap-2"
               >
                 <span className="text-base">🔓</span>
                 結合を解除
@@ -774,7 +774,7 @@ export const CustomFieldsTable = ({
             ) : (
               <button
                 onClick={handleMerge}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-500 text-white transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium rounded-md bg-emerald-500 hover:bg-emerald-400 text-white transition-colors flex items-center gap-2"
               >
                 <span className="text-base">🔗</span>
                 セルを結合
@@ -782,7 +782,7 @@ export const CustomFieldsTable = ({
             )}
             <button
               onClick={() => setSelection(null)}
-              className="px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+              className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
               title="選択を解除"
             >
               ✕
@@ -794,21 +794,21 @@ export const CustomFieldsTable = ({
       {/* 確認ダイアログ */}
       {!isReadOnly && mergeConfirmDialog?.show && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl p-6 max-w-md">
-            <h3 className="text-lg font-bold text-white mb-3">結合の確認</h3>
-            <p className="text-gray-300 text-sm mb-4 whitespace-pre-line">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-2xl p-6 max-w-md">
+            <h3 className="text-lg font-bold text-gray-900 mb-3">結合の確認</h3>
+            <p className="text-gray-600 text-sm mb-4 whitespace-pre-line">
               {mergeConfirmDialog.message || 'この操作を実行しますか？'}
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setMergeConfirmDialog(null)}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                className="px-4 py-2 text-sm font-medium rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
               >
                 キャンセル
               </button>
               <button
                 onClick={mergeConfirmDialog.callback}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                className="px-4 py-2 text-sm font-medium rounded-md bg-emerald-500 hover:bg-emerald-400 text-white transition-colors"
               >
                 確認して結合
               </button>
@@ -820,13 +820,13 @@ export const CustomFieldsTable = ({
       {/* 右クリックメニュー */}
       {!isReadOnly && contextMenu && (
         <div
-          className="fixed bg-gray-800 border border-gray-600 rounded-md shadow-xl py-1 z-50"
+          className="fixed bg-white border border-gray-200 rounded-md shadow-xl py-1 z-50"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={() => handleUnmerge(contextMenu.colId, contextMenu.seq)}
-            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2"
+            className="w-full px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors flex items-center gap-2"
           >
             <span>🔓</span>
             結合を解除
@@ -848,15 +848,15 @@ export const CustomFieldsTable = ({
           </colgroup>
           {/* ヘッダー */}
           <thead className="sticky top-0 z-10">
-            <tr className="bg-gray-800 border-b border-gray-600">
-              <th className="w-12 px-2 py-2 text-center text-gray-400 font-medium">#</th>
-              <th className="w-20 px-2 py-2 text-center text-gray-400 font-medium">開始</th>
-              <th className="px-3 py-2 text-left text-gray-400 font-medium min-w-[120px]">名称</th>
-              <th className="w-16 px-2 py-2 text-center text-gray-400 font-medium">時間</th>
+            <tr className="bg-emerald-50 border-b border-emerald-100">
+              <th className="w-12 px-2 py-2 text-center text-emerald-700 font-medium">#</th>
+              <th className="w-20 px-2 py-2 text-center text-emerald-700 font-medium">開始</th>
+              <th className="px-3 py-2 text-left text-emerald-700 font-medium min-w-[120px]">名称</th>
+              <th className="w-16 px-2 py-2 text-center text-emerald-700 font-medium">時間</th>
               {columns.map(col => (
                 <th
                   key={col.id}
-                  className="px-3 py-2 text-left text-gray-400 font-medium min-w-[120px] border-l border-gray-600"
+                  className="px-3 py-2 text-left text-emerald-700 font-medium min-w-[120px] border-l border-emerald-100"
                 >
                   <div className="flex items-center gap-1">
                     <span className="text-xs" title={col.bindingType === 'sequence' ? '位置固定' : 'エントリー追従'}>
@@ -966,18 +966,18 @@ const CoolGroup = ({
     <>
       {/* クールヘッダー行 */}
       {group.coolId && showCoolHeaders && (
-        <tr className="bg-blue-900/30">
+        <tr className="bg-emerald-50">
           <td
             colSpan={4 + columns.length}
-            className={`px-3 py-1.5 text-xs font-bold text-blue-300 tracking-wider ${
-              groupIndex > 0 ? 'border-t-[3px] border-t-blue-500' : ''
+            className={`px-3 py-1.5 text-xs font-bold text-emerald-700 tracking-wider ${
+              groupIndex > 0 ? 'border-t-[3px] border-t-emerald-400' : ''
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className="bg-blue-600/40 rounded px-2 py-0.5">
+              <span className="bg-emerald-100 rounded px-2 py-0.5">
                 クール {group.coolNumber}
               </span>
-              <span className="flex-1 border-t border-blue-700/50" />
+              <span className="flex-1 border-t border-emerald-200" />
             </div>
           </td>
         </tr>
@@ -992,8 +992,8 @@ const CoolGroup = ({
         return (
           <tr
             key={entry.entryId}
-            className={`border-b border-gray-700/50 hover:bg-gray-800/30 ${
-              isCustomEvent ? 'bg-purple-900/10' : ''
+            className={`border-b border-gray-200 hover:bg-gray-50 ${
+              isCustomEvent ? 'bg-emerald-100/70' : ''
             }`}
           >
             {/* 通し番号 */}
@@ -1002,17 +1002,17 @@ const CoolGroup = ({
             </td>
 
             {/* 開始時刻 */}
-            <td className="w-20 px-2 py-1 text-center text-gray-300 font-mono text-xs">
+            <td className="w-20 px-2 py-1 text-center text-gray-600 font-mono text-xs">
               {entry.startTime || '-'}
             </td>
 
             {/* 名称 */}
-            <td className={`px-3 py-1 ${isCustomEvent ? 'text-purple-300' : 'text-gray-200'}`}>
+            <td className={`px-3 py-1 ${isCustomEvent ? 'text-emerald-600' : 'text-gray-900'}`}>
               <span className="truncate block text-sm">{name}</span>
             </td>
 
             {/* 時間 */}
-            <td className="w-16 px-2 py-1 text-center text-gray-400 text-xs">
+            <td className="w-16 px-2 py-1 text-center text-gray-500 text-xs">
               {duration > 0 ? `${duration}分` : '-'}
             </td>
 
@@ -1041,7 +1041,7 @@ const CoolGroup = ({
                 );
                 if (hasBandInRange && isCustomEvent) {
                   // 先頭がカスタムイベントだが範囲内にバンドがある場合、背景を上書き
-                  mergedCellBgClass = 'bg-gray-900';
+                  mergedCellBgClass = 'bg-white';
                 }
               }
 
@@ -1049,14 +1049,14 @@ const CoolGroup = ({
                 <td
                   key={col.id}
                   rowSpan={hasMerge ? cellData.rowSpan : undefined}
-                  className={`border-l border-gray-600 p-0 relative transition-colors ${
+                  className={`border-l border-gray-200 p-0 relative transition-colors ${
                     hasMerge ? 'align-middle' : ''
                   } ${
                     mergedCellBgClass
                   } ${
-                    isSelected ? 'bg-blue-500/20 ring-1 ring-blue-400/40 ring-inset' : ''
+                    isSelected ? 'bg-emerald-100 ring-1 ring-emerald-300 ring-inset' : ''
                   } ${
-                    isFocused ? 'ring-2 ring-blue-500/70 ring-inset bg-gray-700/40' : ''
+                    isFocused ? 'ring-2 ring-emerald-400 ring-inset bg-emerald-50' : ''
                   }`}
                   onMouseDown={(e) => handleMouseDown(entry.sequenceNumber, col.id, col, e)}
                   onMouseMove={() => handleMouseMove(entry.sequenceNumber, col.id)}
@@ -1075,12 +1075,12 @@ const CoolGroup = ({
                       onFocus={() => handleCellFocus(entry.sequenceNumber, colIndex)}
                       onCompositionStart={() => handleCompositionStart(entry.sequenceNumber, col.id)}
                       onCompositionEnd={(e) => handleCompositionEnd(entry.sequenceNumber, entry.entryId, col, e.currentTarget.value)}
-                      className={`w-full h-full px-2 text-sm bg-transparent border-0 outline-none text-gray-300 placeholder-gray-600 transition-colors ${
+                      className={`w-full h-full px-2 text-sm bg-transparent border-0 outline-none text-gray-900 placeholder-gray-400 transition-colors ${
                         hasMerge ? 'py-0' : 'py-1'
                       } ${
-                        isFocused ? '' : 'hover:bg-gray-800/40'
+                        isFocused ? '' : 'hover:bg-gray-100'
                       } ${
-                        isSelected && !isFocused ? 'bg-blue-500/10' : ''
+                        isSelected && !isFocused ? 'bg-emerald-50' : ''
                       }`}
                       placeholder="-"
                       maxLength={100}
