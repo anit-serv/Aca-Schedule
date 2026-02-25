@@ -286,7 +286,7 @@ export const PublicTimetablePage = () => {
       </div>
 
       {/* メインコンテンツ */}
-      <main className="flex-1 flex flex-col overflow-hidden p-4">
+      <main className="flex-1 flex flex-col min-h-0 overflow-auto p-4">
         {showCombinedView ? (
           // 当日一括リハーサル：リハーサルと本番を縦に並べて表示
           <div className="flex-1 flex flex-col gap-4 overflow-auto">
