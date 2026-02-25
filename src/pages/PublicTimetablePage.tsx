@@ -208,7 +208,7 @@ export const PublicTimetablePage = () => {
   const showCombinedView = eventSettings.rehearsalType === 'day-start-rehearsal';
 
   return (
-    <div className="bg-gray-50 text-gray-900 h-screen font-sans flex flex-col overflow-hidden">
+    <div className="bg-gray-50 text-gray-900 min-h-screen sm:h-screen font-sans flex flex-col sm:overflow-hidden">
       {/* ヘッダー */}
       <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
