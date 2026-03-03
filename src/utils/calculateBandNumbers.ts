@@ -8,12 +8,12 @@ import type { Timetable } from '../types';
 export const calculateBandNumbers = (timetable: Timetable | null): Map<string, number> => {
   const numbers = new Map<string, number>();
   
-  if (!timetable) return numbers;
+  if (!timetable || !timetable.dailyTimetables) return numbers;
   
   let bandCounter = 1;
   
   // 全ての日付のタイムテーブルを順番に処理
-  timetable.dailyTimetables
+  [...timetable.dailyTimetables]
     .sort((a, b) => a.date.localeCompare(b.date))
     .forEach(dailyTimetable => {
       if (dailyTimetable.cools && dailyTimetable.cools.length > 0) {

@@ -148,7 +148,7 @@ export const SortableTimetableRow = ({
       {isDropTarget && (
         <tr className="h-1">
           <td colSpan={6} className="p-0">
-            <div className="h-1 bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+            <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
           </td>
         </tr>
       )}

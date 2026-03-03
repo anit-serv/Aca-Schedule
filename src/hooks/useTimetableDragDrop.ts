@@ -87,40 +87,47 @@ export const useTimetableDragDrop = ({
 
     // タイムテーブルの特定の位置に挿入する場合
     if (overId.startsWith('entry-')) {
-      const targetIndex = currentTimetable.entries.findIndex((e) => `entry-${e.id}` === overId);
+      // entry-{id}-afterの場合の処理
+      const isAfter = overId.includes('-after');
+      const entryId = isAfter ? overId.replace('-after', '') : overId;
+      const targetIndex = currentTimetable.entries.findIndex((e) => `entry-${e.id}` === entryId);
       
-      const newEntry: TimetableEntry = {
-        id: crypto.randomUUID(),
-        type: 'band',
-        bandId: band.id,
-        order: targetIndex,
-      };
+      if (targetIndex !== -1) {
+        const insertIndex = isAfter ? targetIndex + 1 : targetIndex;
+        const newEntry: TimetableEntry = {
+          id: crypto.randomUUID(),
+          type: 'band',
+          bandId: band.id,
+          order: insertIndex,
+        };
 
-      const updatedEntries = [...currentTimetable.entries];
-      updatedEntries.splice(targetIndex, 0, newEntry);
-      const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
+        const updatedEntries = [...currentTimetable.entries];
+        updatedEntries.splice(insertIndex, 0, newEntry);
+        const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
 
-      onTimetableChange({
-        ...currentTimetable,
-        entries: calculatedEntries,
-      });
-    } else {
-      // タイムテーブルの最後に追加
-      const newEntry: TimetableEntry = {
-        id: crypto.randomUUID(),
-        type: 'band',
-        bandId: band.id,
-        order: currentTimetable.entries.length,
-      };
-
-      const updatedEntries = [...currentTimetable.entries, newEntry];
-      const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
-
-      onTimetableChange({
-        ...currentTimetable,
-        entries: calculatedEntries,
-      });
+        onTimetableChange({
+          ...currentTimetable,
+          entries: calculatedEntries,
+        });
+        return;
+      }
     }
+    
+    // タイムテーブルの最後に追加
+    const newEntry: TimetableEntry = {
+      id: crypto.randomUUID(),
+      type: 'band',
+      bandId: band.id,
+      order: currentTimetable.entries.length,
+    };
+
+    const updatedEntries = [...currentTimetable.entries, newEntry];
+    const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
+
+    onTimetableChange({
+      ...currentTimetable,
+      entries: calculatedEntries,
+    });
   }, [bands, currentTimetable, calculateTimes, onTimetableChange]);
 
   // クール内でのエントリー並び替え
@@ -320,40 +327,47 @@ export const useTimetableDragDrop = ({
 
     // タイムテーブルの特定の位置に挿入する場合
     if (overId.startsWith('entry-')) {
-      const targetIndex = currentTimetable.entries.findIndex((e) => `entry-${e.id}` === overId);
+      // entry-{id}-afterの場合の処理
+      const isAfter = overId.includes('-after');
+      const entryId = isAfter ? overId.replace('-after', '') : overId;
+      const targetIndex = currentTimetable.entries.findIndex((e) => `entry-${e.id}` === entryId);
       
-      const newEntry: TimetableEntry = {
-        id: crypto.randomUUID(),
-        type: 'custom',
-        customEvent,
-        order: targetIndex,
-      };
+      if (targetIndex !== -1) {
+        const insertIndex = isAfter ? targetIndex + 1 : targetIndex;
+        const newEntry: TimetableEntry = {
+          id: crypto.randomUUID(),
+          type: 'custom',
+          customEvent,
+          order: insertIndex,
+        };
 
-      const updatedEntries = [...currentTimetable.entries];
-      updatedEntries.splice(targetIndex, 0, newEntry);
-      const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
+        const updatedEntries = [...currentTimetable.entries];
+        updatedEntries.splice(insertIndex, 0, newEntry);
+        const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
 
-      onTimetableChange({
-        ...currentTimetable,
-        entries: calculatedEntries,
-      });
-    } else {
-      // タイムテーブルの最後に追加
-      const newEntry: TimetableEntry = {
-        id: crypto.randomUUID(),
-        type: 'custom',
-        customEvent,
-        order: currentTimetable.entries.length,
-      };
-
-      const updatedEntries = [...currentTimetable.entries, newEntry];
-      const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
-
-      onTimetableChange({
-        ...currentTimetable,
-        entries: calculatedEntries,
-      });
+        onTimetableChange({
+          ...currentTimetable,
+          entries: calculatedEntries,
+        });
+        return;
+      }
     }
+    
+    // タイムテーブルの最後に追加
+    const newEntry: TimetableEntry = {
+      id: crypto.randomUUID(),
+      type: 'custom',
+      customEvent,
+      order: currentTimetable.entries.length,
+    };
+
+    const updatedEntries = [...currentTimetable.entries, newEntry];
+    const calculatedEntries = calculateTimes(updatedEntries, currentTimetable.startTime);
+
+    onTimetableChange({
+      ...currentTimetable,
+      entries: calculatedEntries,
+    });
   }, [customEvents, currentTimetable, calculateTimes, onTimetableChange]);
 
   // エントリを削除

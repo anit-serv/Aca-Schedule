@@ -284,7 +284,7 @@ export const CoolSection = ({
           </div>
         </div>
       )}
-      <div className={cool.entries.length === 0 ? "min-h-[100px]" : ""}>
+      <div ref={setNodeRef} className={cool.entries.length === 0 ? "min-h-[100px]" : ""}>
         <table className="w-full">
           <thead ref={setColumnHeaderRef} className="bg-emerald-100/70">
             <tr>
@@ -300,7 +300,7 @@ export const CoolSection = ({
             items={cool.entries.map(e => `entry-${e.id}`)}
             strategy={verticalListSortingStrategy}
           >
-          <tbody ref={setNodeRef}>
+          <tbody>
             {cool.entries.length === 0 ? (
               <>
                 {/* 空のクールの場合のドロップターゲット */}

@@ -58,7 +58,8 @@ export const useCoolManagement = ({
     // 最小値を1に制限
     if (newCount < 1) return;
     
-    const currentCount = currentTimetable.cools?.length || 0;
+    const currentCools = currentTimetable.cools || [];
+    const currentCount = currentCools.length;
     
     // クール数が変わっていない場合は何もしない
     if (newCount === currentCount) return;
@@ -70,20 +71,38 @@ export const useCoolManagement = ({
     
     if (newCount > currentCount) {
       // クールを追加する場合：既存のクールを保持して最後に追加
-      updatedCools = [...(currentTimetable.cools || [])];
-      
-      for (let i = currentCount; i < newCount; i++) {
+      if (currentCount === 0) {
+        // クールが1つもない場合は新規作成（既存のentriesがあれば最初のクールに移行）
+        const existingEntries = currentTimetable.entries || [];
         updatedCools.push({
           id: crypto.randomUUID(),
-          number: baseNumber + i,
-          entries: [],
+          number: baseNumber,
+          entries: existingEntries,
         });
+        // 2つ目以降のクールを追加
+        for (let i = 1; i < newCount; i++) {
+          updatedCools.push({
+            id: crypto.randomUUID(),
+            number: baseNumber + i,
+            entries: [],
+          });
+        }
+      } else {
+        // 既存のクールがある場合は後ろに追加
+        updatedCools = [...currentCools];
+        for (let i = currentCount; i < newCount; i++) {
+          updatedCools.push({
+            id: crypto.randomUUID(),
+            number: baseNumber + i,
+            entries: [],
+          });
+        }
       }
       
       console.log('[クール追加] 新しいクール数:', updatedCools.length);
     } else {
       // クールを削除する場合：削除されるクールのエントリーを前のクールに移行
-      updatedCools = [...(currentTimetable.cools || [])];
+      updatedCools = [...currentCools];
       
       // 削除するクールのインデックス範囲
       for (let i = currentCount - 1; i >= newCount; i--) {

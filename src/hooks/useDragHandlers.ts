@@ -83,7 +83,8 @@ export const useDragHandlers = ({
         overId.startsWith('cool-header-') ||
         overId.startsWith('cool-column-header-') ||
         overId.startsWith('cool-gap-before-') ||
-        overId.startsWith('cool-gap-after-')
+        overId.startsWith('cool-gap-after-') ||
+        overId === 'timetable-droppable'
       ) {
         // cool-droppableまたはcool-gap-afterの場合、そのクールに最後のエントリーがあれば、
         // そのエントリーの-afterに変換する
@@ -93,6 +94,15 @@ export const useDragHandlers = ({
           
           if (cool && cool.entries.length > 0) {
             const lastEntry = cool.entries[cool.entries.length - 1];
+            setOverEntryId(`entry-${lastEntry.id}-after`);
+          } else {
+            setOverEntryId(overId);
+          }
+        } else if (overId === 'timetable-droppable') {
+          // フラット構造のタイムテーブルへのドロップ
+          // エントリーがあれば最後のエントリーの-afterに変換
+          if (currentTimetable.entries && currentTimetable.entries.length > 0) {
+            const lastEntry = currentTimetable.entries[currentTimetable.entries.length - 1];
             setOverEntryId(`entry-${lastEntry.id}-after`);
           } else {
             setOverEntryId(overId);
@@ -134,7 +144,7 @@ export const useDragHandlers = ({
         overId.startsWith('cool-column-header-') ||
         overId.startsWith('cool-gap-before-') ||
         overId.startsWith('cool-gap-after-') ||
-        (overId === 'timetable-droppable' && (!currentTimetable.cools || currentTimetable.cools.length === 0) && currentTimetable.entries.length === 0);
+        overId === 'timetable-droppable';
       
       if (!isValidDropTarget) return;
 
@@ -163,6 +173,12 @@ export const useDragHandlers = ({
         } else {
           targetDropId = `cool-droppable-${coolIndex}`;
         }
+      } else if (overId === 'timetable-droppable') {
+        // フラット構造のタイムテーブルへのドロップ - エントリーがあれば最後の-afterに変換
+        if (currentTimetable.entries && currentTimetable.entries.length > 0) {
+          const lastEntry = currentTimetable.entries[currentTimetable.entries.length - 1];
+          targetDropId = `entry-${lastEntry.id}-after`;
+        }
       }
 
       if (currentTimetable.cools && currentTimetable.cools.length > 0) {
@@ -188,7 +204,7 @@ export const useDragHandlers = ({
         overId.startsWith('cool-column-header-') ||
         overId.startsWith('cool-gap-before-') ||
         overId.startsWith('cool-gap-after-') ||
-        (overId === 'timetable-droppable' && (!currentTimetable.cools || currentTimetable.cools.length === 0) && currentTimetable.entries.length === 0);
+        overId === 'timetable-droppable';
       
       if (!isValidDropTarget) return;
 
@@ -216,6 +232,12 @@ export const useDragHandlers = ({
           targetDropId = `entry-${cool.entries[0].id}`;
         } else {
           targetDropId = `cool-droppable-${coolIndex}`;
+        }
+      } else if (overId === 'timetable-droppable') {
+        // フラット構造のタイムテーブルへのドロップ - エントリーがあれば最後の-afterに変換
+        if (currentTimetable.entries && currentTimetable.entries.length > 0) {
+          const lastEntry = currentTimetable.entries[currentTimetable.entries.length - 1];
+          targetDropId = `entry-${lastEntry.id}-after`;
         }
       }
 

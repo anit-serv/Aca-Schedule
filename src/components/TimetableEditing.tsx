@@ -169,6 +169,17 @@ export const TimetableEditing = ({
         entries: [],
       };
     }
+    // coolsが空またはundefinedの場合、entriesを使って初期クールを作成
+    if (!dailyTimetable.cools || dailyTimetable.cools.length === 0) {
+      return {
+        ...dailyTimetable,
+        cools: [{
+          id: `cool-1-${selectedDate}`,
+          number: 1,
+          entries: dailyTimetable.entries || [],
+        }],
+      };
+    }
     return dailyTimetable;
   }, [timetable, selectedDate]);
 

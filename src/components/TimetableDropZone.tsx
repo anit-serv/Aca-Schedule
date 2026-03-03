@@ -42,8 +42,8 @@ export const TimetableDropZone = ({
   }, [bands, entries]);
 
   return (
-    <div className="bg-emerald-50/50 rounded-lg overflow-hidden min-h-[400px] border border-emerald-100">
-      <table className="w-full" ref={setNodeRef}>
+    <div ref={setNodeRef} className="flex-1 bg-emerald-50/50 rounded-lg overflow-hidden min-h-[400px] border border-emerald-100">
+      <table className="w-full">
         <thead className="bg-emerald-100/70 sticky top-0">
           <tr>
             <th className="px-3 py-3 text-center text-sm font-semibold text-emerald-800 w-16">#</th>
@@ -76,10 +76,13 @@ export const TimetableDropZone = ({
               items={entries.map((e) => `entry-${e.id}`)}
               strategy={verticalListSortingStrategy}
             >
-              {entries.map((entry) => {
+              {entries.map((entry, index) => {
                 const band = entry.bandId ? bands.find((b) => b.id === entry.bandId) : null;
                 const entryId = `entry-${entry.id}`;
                 const isDropTarget = overEntryId === entryId;
+                const isDropTargetAfter = overEntryId === `${entryId}-after`;
+                // 最後のエントリーで、timetable-droppableが検出された場合、最後のエントリーの後ろをハイライト
+                const isLastEntryAndTimetableEnd = index === entries.length - 1 && overEntryId === 'timetable-droppable';
                 // バンド情報が更新されたときに確実に再レンダリングするため、keyにbandsSignatureを含める
                 const rowKey = `${entry.id}-${bandsSignature}`;
                 
@@ -96,6 +99,7 @@ export const TimetableDropZone = ({
                     entry={entry}
                     band={band}
                     isDropTarget={isDropTarget}
+                    isDropTargetAfter={isDropTargetAfter || isLastEntryAndTimetableEnd}
                     onRemove={() => onRemoveEntry(entry.id)}
                     onTransitionTimeChange={onTransitionTimeChange}
                     violations={entryViolations}

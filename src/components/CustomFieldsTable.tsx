@@ -9,6 +9,7 @@ import {
   mergeCells,
   unmergeCells,
 } from '../utils/customFieldsUtils';
+import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 
 interface CustomFieldsTableProps {
   currentTimetable: DailyTimetable;
@@ -55,6 +56,8 @@ export const CustomFieldsTable = ({
   const [focusedCell, setFocusedCell] = useState<CellCoord | null>(null);
   // 範囲選択状態
   const [selection, setSelection] = useState<SelectionRange | null>(null);
+  // ツールバー表示位置（Y座標）
+  const [toolbarY, setToolbarY] = useState<number>(100);
   // ドラッグ中フラグ
   const [isDragging, setIsDragging] = useState(false);
   // エラー表示
@@ -68,7 +71,7 @@ export const CustomFieldsTable = ({
   // テーブルコンテナref
   const tableRef = useRef<HTMLDivElement>(null);
   // ドラッグ開始位置（結合セル情報含む）
-  const dragStartRef = useRef<{ seq: number; colId: string; mergedEndSeq?: number } | null>(null);
+  const dragStartRef = useRef<{ seq: number; colId: string; mergedEndSeq?: number; startY: number } | null>(null);
   // input要素のrefマップ
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   // IME変換中フラグ（キー: "seq:colId"）
@@ -85,6 +88,12 @@ export const CustomFieldsTable = ({
   const entries = useMemo(
     () => getEntriesWithCoolInfo(currentTimetable),
     [currentTimetable]
+  );
+
+  // バンド番号マップ（全日程を通した連番、カスタムイベントは含まない）
+  const bandNumbers = useMemo(
+    () => calculateBandNumbers(timetable),
+    [timetable]
   );
 
   // バンドIDから名前を取得
@@ -314,24 +323,27 @@ export const CustomFieldsTable = ({
         // 上方向: 結合セルの先頭(seq)、下方向: 結合セルの末尾(mergedEndSeq)
         const targetEndSeq = isMergedCell ? (isUpward ? seq : (mergedEndSeq ?? seq)) : seq;
         if (selection && selection.colId === colId) {
-          // 既存選択がある場合: 範囲拡張
+          // 既存選択がある場合: 範囲拡張（toolbarYは更新しない）
           if (isSameCool(selection.startSeq, seq)) {
             setSelection(prev => prev ? { ...prev, endSeq: targetEndSeq } : { colId, startSeq: seq, endSeq: targetEndSeq });
           }
         } else if (focusedCell && columns[focusedCell.colIndex]?.id === colId) {
-          // 選択はないが同じ列にフォーカスセルがある場合: フォーカスセルを起点に範囲選択
+          // 選択はないが同じ列にフォーカスセルがある場合: フォーカスセルを起点に範囲選択（新規選択なのでtoolbarY更新）
           if (isSameCool(focusedCell.seq, seq)) {
             setSelection({ colId, startSeq: focusedCell.seq, endSeq: targetEndSeq });
+            setToolbarY(e.clientY);
           }
         } else {
+          // 完全に新規の選択（toolbarY更新）
           setSelection({ colId, startSeq: seq, endSeq: targetEndSeq });
+          setToolbarY(e.clientY);
         }
         return;
       }
 
       // 通常クリック: 選択をクリアし、ドラッグ開始位置を記録（inputフォーカスを妨げない）
       setSelection(null);
-      dragStartRef.current = { seq, colId, mergedEndSeq };
+      dragStartRef.current = { seq, colId, mergedEndSeq, startY: e.clientY };
       setIsDragging(true);
     },
     [isReadOnly, selection, focusedCell, columns, isSameCool, customFields, timetableType, selectedDate]
@@ -363,6 +375,8 @@ export const CustomFieldsTable = ({
         } else if (seq < startSeq) {
           setSelection({ colId, startSeq: startEndSeq, endSeq: seq });
         }
+        // ドラッグ開始位置のtoolbarYを設定（選択開始セルの位置に固定）
+        setToolbarY(start.startY);
       }
     },
     [isDragging, isSameCool, getMergedSpan]
@@ -595,6 +609,12 @@ export const CustomFieldsTable = ({
               const span = getMergedSpan(col.id, parentSeq);
               const endSeq = delta > 0 ? parentSeq + span - 1 : parentSeq;
               setSelection({ colId: col.id, startSeq: seq, endSeq });
+              // 選択開始セルの位置をtoolbarYに設定
+              const inputEl = inputRefs.current.get(`${seq}:${col.id}`);
+              if (inputEl) {
+                const rect = inputEl.getBoundingClientRect();
+                setToolbarY(rect.top + rect.height / 2);
+              }
             }
           }
         }
@@ -750,8 +770,20 @@ export const CustomFieldsTable = ({
       )}
 
       {/* フローティングツールバー（範囲選択時に表示、readOnly時は非表示） */}
-      {!isReadOnly && selection && selectionSize > 1 && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-white border border-gray-200 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-4">
+      {!isReadOnly && selection && selectionSize > 1 && (() => {
+        // 選択方向に応じてツールバーの位置を調整
+        // 上方向に選択 → 選択開始セルの下側に表示
+        // 下方向に選択 → 選択開始セルの上側に表示
+        const isSelectingUpward = selection.endSeq < selection.startSeq;
+        const offset = 60; // ツールバーのずらし量
+        const adjustedY = isSelectingUpward ? toolbarY + offset : toolbarY - offset;
+        const clampedY = Math.max(80, Math.min(adjustedY, window.innerHeight - 80));
+        
+        return (
+        <div 
+          className="fixed left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white border border-gray-200 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-4"
+          style={{ top: clampedY }}
+        >
           <div className="flex items-center gap-2">
             <span className="text-emerald-600 font-bold text-lg">{selectionSize}</span>
             <span className="text-sm text-gray-600">
@@ -791,7 +823,8 @@ export const CustomFieldsTable = ({
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* 確認ダイアログ */}
       {!isReadOnly && mergeConfirmDialog?.show && (
@@ -902,10 +935,13 @@ export const CustomFieldsTable = ({
                 readOnly={isReadOnly}
                 bands={bands}
                 searchQuery={searchQuery}
+                bandNumbers={bandNumbers}
               />
             ))}
           </tbody>
         </table>
+        {/* ツールバー表示用の余白（本番のみ） */}
+        {timetableType === 'performance' && <div className="h-32" />}
       </div>
     </div>
   );
@@ -939,6 +975,7 @@ interface CoolGroupProps {
   readOnly: boolean;
   bands: Band[];
   searchQuery: string;
+  bandNumbers: Map<string, number>;
 }
 
 const CoolGroup = ({
@@ -967,6 +1004,7 @@ const CoolGroup = ({
   readOnly: isReadOnly,
   bands,
   searchQuery,
+  bandNumbers,
 }: CoolGroupProps) => {
   const cellKey = (seq: number, colId: string) => `${seq}:${colId}`;
 
@@ -1015,9 +1053,9 @@ const CoolGroup = ({
               isCustomEvent ? 'bg-emerald-100/70' : ''
             } ${searchDimClass}`}
           >
-            {/* 通し番号 */}
+            {/* 通し番号（バンドのみカウント、カスタムイベントは空欄） */}
             <td className={`w-12 px-2 py-1 text-center text-gray-500 font-mono text-xs ${searchHighlight}`}>
-              {entry.sequenceNumber}
+              {bandNumbers.get(entry.entryId) ?? ''}
             </td>
 
             {/* 開始時刻 */}

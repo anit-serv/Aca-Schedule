@@ -102,9 +102,10 @@ export const TimetableContent = ({
                       id={`cool-gap-after-${coolIndex}`}
                     />
                   ) : (
-                    <div className="pb-6">
+                    <div className="pb-6 min-h-[100px]">
                       <CoolGapDropZone
                         id={`cool-gap-after-${coolIndex}`}
+                        className="h-full min-h-[76px]"
                       />
                     </div>
                   )}
