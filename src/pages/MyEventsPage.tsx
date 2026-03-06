@@ -9,6 +9,7 @@ export const MyEventsPage = () => {
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventSettings[]>([]);
   const [sharedEvents, setSharedEvents] = useState<EventSettings[]>([]);
+  const [pendingEvents, setPendingEvents] = useState<EventSettings[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -19,14 +20,18 @@ export const MyEventsPage = () => {
 
     const loadEvents = async () => {
       try {
-        const [userEvents, collaborated] = await Promise.all([
+        const [userEvents, collaborated, pending] = await Promise.all([
           eventService.getEventsByOwner(currentUser.uid),
           currentUser.email
             ? collaboratorService.getSharedEvents(currentUser.email)
             : Promise.resolve([]),
+          currentUser.email
+            ? collaboratorService.getPendingEvents(currentUser.email)
+            : Promise.resolve([]),
         ]);
         setEvents(userEvents);
         setSharedEvents(collaborated);
+        setPendingEvents(pending);
       } catch (error) {
         console.error('[MyEventsPage] イベント読み込みエラー:', error);
       } finally {
@@ -254,7 +259,84 @@ export const MyEventsPage = () => {
           </div>
         )}
 
-        {/* 共有されたイベント */}
+        {/* 招待中のイベント */}
+        {pendingEvents.length > 0 && (
+          <div className="mt-10">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-700">招待されたイベント</h2>
+              <p className="text-sm text-gray-400">{pendingEvents.length}件</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="bg-white rounded-lg p-5 text-left border-l-4 border-l-amber-400 border border-gray-200 relative"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-bold text-gray-800">
+                      {event.name}
+                    </h3>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
+                      招待中
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-sm text-gray-500">
+                    <p>📅 {event.year}年</p>
+                    {event.venue && <p>📍 {event.venue}</p>}
+                    <p>
+                      🎤 本番日:{' '}
+                      {event.performanceDates.map(formatDate).join(', ')}
+                    </p>
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!currentUser?.email) return;
+                        setIsProcessing(true);
+                        try {
+                          await collaboratorService.acceptCollaboration(event.id, currentUser.email);
+                          setPendingEvents(prev => prev.filter(e => e.id !== event.id));
+                          setSharedEvents(prev => [...prev, event]);
+                        } catch (error) {
+                          console.error('招待の承認に失敗:', error);
+                          alert('承認に失敗しました');
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }}
+                      className="px-4 py-2 rounded-md text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+                      disabled={isProcessing}
+                    >
+                      承認する
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!currentUser?.email) return;
+                        if (!confirm(`「${event.name}」の招待を辞退しますか？`)) return;
+                        setIsProcessing(true);
+                        try {
+                          await collaboratorService.declineCollaboration(event.id, currentUser.email);
+                          setPendingEvents(prev => prev.filter(e => e.id !== event.id));
+                        } catch (error) {
+                          console.error('招待の辞退に失敗:', error);
+                          alert('辞退に失敗しました');
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }}
+                      className="px-4 py-2 rounded-md text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                      disabled={isProcessing}
+                    >
+                      辞退する
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 共有されたイベント（承認済み） */}
         {sharedEvents.length > 0 && (
           <div className="mt-10">
             <div className="flex justify-between items-center mb-4">

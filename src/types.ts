@@ -23,7 +23,8 @@ export interface EventSettings {
   ownerId: string; // イベント作成者のユーザーID
   customFields?: CustomFieldsSettings; // カスタムフィールド設定
   isPublic?: boolean; // 閲覧用の共有ページを公開するかどうか
-  collaboratorEmails?: string[]; // 共同編集者のメールアドレス一覧
+  collaboratorEmails?: string[]; // 承認済み共同編集者のメールアドレス一覧
+  pendingCollaboratorEmails?: string[]; // 招待中（未承認）の共同編集者メールアドレス一覧
   pendingOwnerEmail?: string; // オーナー権限移譲の保留中メールアドレス
 }
 

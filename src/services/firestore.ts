@@ -213,6 +213,12 @@ const eventSettingsToFirestore = (settings: EventSettings): Partial<EventSetting
     (firestoreData as any).collaboratorEmails = settings.collaboratorEmails;
   }
 
+  // pendingCollaboratorEmailsがundefinedでない場合のみ含める
+  if (settings.pendingCollaboratorEmails !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (firestoreData as any).pendingCollaboratorEmails = settings.pendingCollaboratorEmails;
+  }
+
   // pendingOwnerEmailがundefinedでない場合のみ含める
   if (settings.pendingOwnerEmail !== undefined) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -239,6 +245,7 @@ const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings
   customFields: data.customFields,
   isPublic: data.isPublic || false,
   collaboratorEmails: data.collaboratorEmails || [],
+  pendingCollaboratorEmails: data.pendingCollaboratorEmails || [],
   pendingOwnerEmail: data.pendingOwnerEmail || undefined,
 });
 
@@ -308,6 +315,7 @@ export const eventService = {
     if (updates.customFields !== undefined) updateData.customFields = updates.customFields;
     if (updates.isPublic !== undefined) updateData.isPublic = updates.isPublic;
     if (updates.collaboratorEmails !== undefined) updateData.collaboratorEmails = updates.collaboratorEmails;
+    if (updates.pendingCollaboratorEmails !== undefined) updateData.pendingCollaboratorEmails = updates.pendingCollaboratorEmails;
     if (updates.pendingOwnerEmail !== undefined) updateData.pendingOwnerEmail = updates.pendingOwnerEmail;
     
     // updatedAtは常に更新
@@ -691,34 +699,46 @@ export const timetableService = {
 
 // 共同編集者管理のFirestore操作
 export const collaboratorService = {
-  // 共同編集者を追加（オーナーが実行）
+  // 共同編集者を招待（オーナーが実行 → pendingに追加）
   async addCollaborator(eventId: string, email: string): Promise<void> {
     const eventRef = doc(db, 'events', eventId);
     await updateDoc(eventRef, {
+      pendingCollaboratorEmails: arrayUnion(email.toLowerCase().trim()),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // 共同編集者を削除（オーナーが実行 → 両方の配列から削除）
+  async removeCollaborator(eventId: string, email: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      collaboratorEmails: arrayRemove(email.toLowerCase().trim()),
+      pendingCollaboratorEmails: arrayRemove(email.toLowerCase().trim()),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // 招待を承認（招待された本人が実行 → pendingから削除、collaboratorに追加）
+  async acceptCollaboration(eventId: string, email: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      pendingCollaboratorEmails: arrayRemove(email.toLowerCase().trim()),
       collaboratorEmails: arrayUnion(email.toLowerCase().trim()),
       updatedAt: Timestamp.now(),
     });
   },
 
-  // 共同編集者を削除（オーナーが実行）
-  async removeCollaborator(eventId: string, email: string): Promise<void> {
-    const eventRef = doc(db, 'events', eventId);
-    await updateDoc(eventRef, {
-      collaboratorEmails: arrayRemove(email.toLowerCase().trim()),
-      updatedAt: Timestamp.now(),
-    });
-  },
-
-  // 共同編集を辞退（共同編集者本人が実行）
+  // 招待を辞退 / 共同編集を辞退（本人が実行 → 両方の配列から削除）
   async declineCollaboration(eventId: string, email: string): Promise<void> {
     const eventRef = doc(db, 'events', eventId);
     await updateDoc(eventRef, {
       collaboratorEmails: arrayRemove(email.toLowerCase().trim()),
+      pendingCollaboratorEmails: arrayRemove(email.toLowerCase().trim()),
       updatedAt: Timestamp.now(),
     });
   },
 
-  // 共同編集者として参加しているイベント一覧を取得
+  // 承認済み共同編集者のイベント一覧を取得
   async getSharedEvents(email: string): Promise<EventSettings[]> {
     try {
       const eventsRef = collection(db, 'events');
@@ -727,6 +747,19 @@ export const collaboratorService = {
       return snapshot.docs.map(d => firestoreToEventSettings(d.id, d.data()));
     } catch (error) {
       console.error('[collaboratorService.getSharedEvents] エラー:', error);
+      throw error;
+    }
+  },
+
+  // 招待中のイベント一覧を取得
+  async getPendingEvents(email: string): Promise<EventSettings[]> {
+    try {
+      const eventsRef = collection(db, 'events');
+      const q = query(eventsRef, where('pendingCollaboratorEmails', 'array-contains', email.toLowerCase().trim()));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => firestoreToEventSettings(d.id, d.data()));
+    } catch (error) {
+      console.error('[collaboratorService.getPendingEvents] エラー:', error);
       throw error;
     }
   },

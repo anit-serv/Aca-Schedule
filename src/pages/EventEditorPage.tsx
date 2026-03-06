@@ -1144,7 +1144,7 @@ export const EventEditorPage = () => {
                               setCollaboratorError('自分自身は追加できません');
                               return;
                             }
-                            if (eventSettings.collaboratorEmails?.includes(email)) {
+                            if (eventSettings.collaboratorEmails?.includes(email) || eventSettings.pendingCollaboratorEmails?.includes(email)) {
                               setCollaboratorError('既に追加されています');
                               return;
                             }
@@ -1153,7 +1153,7 @@ export const EventEditorPage = () => {
                               await collaboratorService.addCollaborator(eventSettings.id, email);
                               setEventSettings(prev => prev ? {
                                 ...prev,
-                                collaboratorEmails: [...(prev.collaboratorEmails || []), email],
+                                pendingCollaboratorEmails: [...(prev.pendingCollaboratorEmails || []), email],
                               } : null);
                               setCollaboratorEmail('');
                               setCollaboratorError('');
@@ -1174,10 +1174,18 @@ export const EventEditorPage = () => {
                         <p className="text-xs text-red-500 mb-2">{collaboratorError}</p>
                       )}
 
-                      {/* 招待中の共同編集者一覧 */}
-                      {(eventSettings.collaboratorEmails?.length ?? 0) > 0 && (
+                      {/* 共同編集者一覧（承認済み + 招待中） */}
+                      {((eventSettings.collaboratorEmails?.length ?? 0) + (eventSettings.pendingCollaboratorEmails?.length ?? 0)) > 0 && (
                         <div className="space-y-1.5 mb-3">
-                          {eventSettings.collaboratorEmails!.map((email) => (
+                          {eventSettings.collaboratorEmails?.map((email) => (
+                            <div key={email} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
+                              <span className="text-xs text-gray-700 truncate flex-1">{email}</span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 flex-shrink-0">
+                                承認済み
+                              </span>
+                            </div>
+                          ))}
+                          {eventSettings.pendingCollaboratorEmails?.map((email) => (
                             <div key={email} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
                               <span className="text-xs text-gray-700 truncate flex-1">{email}</span>
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 flex-shrink-0">
@@ -1197,8 +1205,8 @@ export const EventEditorPage = () => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
                         </svg>
                         <span className="underline">
-                          {(eventSettings.collaboratorEmails?.length ?? 0) > 0
-                            ? `${eventSettings.collaboratorEmails!.length}人の共同編集者を管理`
+                          {((eventSettings.collaboratorEmails?.length ?? 0) + (eventSettings.pendingCollaboratorEmails?.length ?? 0)) > 0
+                            ? `${(eventSettings.collaboratorEmails?.length ?? 0) + (eventSettings.pendingCollaboratorEmails?.length ?? 0)}人の共同編集者を管理`
                             : '共同編集者の管理'}
                         </span>
                       </button>
@@ -1280,7 +1288,7 @@ export const EventEditorPage = () => {
 
                     {/* 共同編集者一覧 */}
                     <div className="mb-4">
-                      <p className="text-sm text-gray-500 mb-2">現在の共同編集者</p>
+                      <p className="text-sm text-gray-500 mb-2">承認済みの共同編集者</p>
                       {(eventSettings.collaboratorEmails?.length ?? 0) > 0 ? (
                         <div className="space-y-2">
                           {eventSettings.collaboratorEmails!.map((email) => (
@@ -1322,8 +1330,58 @@ export const EventEditorPage = () => {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-gray-400">共同編集者はいません</p>
+                        <p className="text-xs text-gray-400">承認済みの共同編集者はいません</p>
                       )}
+                    </div>
+
+                    {/* 招待中の共同編集者一覧 */}
+                    {(eventSettings.pendingCollaboratorEmails?.length ?? 0) > 0 && (
+                      <div className="mb-4">
+                        <p className="text-sm text-gray-500 mb-2">招待中</p>
+                        <div className="space-y-2">
+                          {eventSettings.pendingCollaboratorEmails!.map((email) => (
+                            <div key={email} className="flex items-center justify-between bg-amber-50 rounded-lg px-3 py-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                  {email[0].toUpperCase()}
+                                </div>
+                                <span className="text-sm text-gray-700 truncate">{email}</span>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                                  招待中
+                                </span>
+                              </div>
+                              {currentUser && eventSettings.ownerId === currentUser.uid && (
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`${email} への招待を取り消しますか？`)) return;
+                                    setIsCollaboratorProcessing(true);
+                                    try {
+                                      await collaboratorService.removeCollaborator(eventSettings.id, email);
+                                      setEventSettings(prev => prev ? {
+                                        ...prev,
+                                        pendingCollaboratorEmails: (prev.pendingCollaboratorEmails || []).filter(e => e !== email),
+                                      } : null);
+                                    } catch (error) {
+                                      console.error('招待の取り消しに失敗:', error);
+                                      alert('取り消しに失敗しました');
+                                    } finally {
+                                      setIsCollaboratorProcessing(false);
+                                    }
+                                  }}
+                                  className="ml-2 p-1 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                  disabled={isCollaboratorProcessing}
+                                  title="招待取り消し"
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     </div>
 
                     {/* オーナー権限移譲（オーナーのみ） */}
@@ -1331,7 +1389,7 @@ export const EventEditorPage = () => {
                       <div className="border-t border-gray-200 pt-4">
                         <h4 className="text-sm font-bold text-gray-900 mb-2">オーナー権限の移譲</h4>
                         {(eventSettings.collaboratorEmails?.length ?? 0) === 0 ? (
-                          <p className="text-xs text-gray-400">共同編集者を追加すると、オーナー権限を移譲できます。</p>
+                          <p className="text-xs text-gray-400">承認済みの共同編集者がいると、オーナー権限を移譲できます。</p>
                         ) : eventSettings.pendingOwnerEmail ? (
                           <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                             <p className="text-xs text-amber-700 mb-2">
