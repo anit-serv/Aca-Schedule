@@ -1382,7 +1382,6 @@ export const EventEditorPage = () => {
                         </div>
                       </div>
                     )}
-                    </div>
 
                     {/* オーナー権限移譲（オーナーのみ） */}
                     {currentUser && eventSettings.ownerId === currentUser.uid && (
