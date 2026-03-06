@@ -1225,6 +1225,96 @@ export const EventEditorPage = () => {
                       </button>
                     </div>
                   )}
+
+                  {/* 共同編集者向けの表示（オーナー以外） */}
+                  {currentUser && eventSettings.ownerId !== currentUser.uid && (
+                    <div>
+                      {/* 公開状態の表示（読み取り専用） */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-sm text-gray-700">閲覧用ページ</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {eventSettings.isPublic ? '公開中' : '非公開'}
+                          </p>
+                        </div>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                          eventSettings.isPublic ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {eventSettings.isPublic ? '公開' : '非公開'}
+                        </span>
+                      </div>
+
+                      {/* 公開URLの表示 */}
+                      {eventSettings.isPublic && (
+                        <div className="mb-3">
+                          <p className="text-xs text-gray-500 mb-1.5">共有URL</p>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={`${window.location.origin}/share/${eventSettings.id}`}
+                              className="flex-1 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 font-mono truncate"
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                            />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/share/${eventSettings.id}`);
+                                setShareUrlCopied(true);
+                                setTimeout(() => setShareUrlCopied(false), 2000);
+                              }}
+                              className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors whitespace-nowrap"
+                            >
+                              {shareUrlCopied ? '✓ コピー済' : 'コピー'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 共同編集者一覧（読み取り専用） */}
+                      {((eventSettings.collaboratorEmails?.length ?? 0) + (eventSettings.pendingCollaboratorEmails?.length ?? 0)) > 0 && (
+                        <div className="border-t border-gray-200 pt-3 mt-1 mb-3">
+                          <h4 className="text-sm font-bold text-gray-900 mb-2">共同編集者</h4>
+                          <div className="space-y-1.5">
+                            {eventSettings.collaboratorEmails?.map((email) => (
+                              <div key={email} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
+                                <span className="text-xs text-gray-700 truncate flex-1">{email}</span>
+                                {currentUser.email && email.toLowerCase() === currentUser.email.toLowerCase() && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 flex-shrink-0">
+                                    あなた
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 共同編集を辞退 */}
+                      <div className="border-t border-gray-200 pt-3 mt-1">
+                        <button
+                          onClick={async () => {
+                            if (!currentUser?.email) return;
+                            if (!confirm('このイベントの共同編集を辞退しますか？')) return;
+                            setIsCollaboratorProcessing(true);
+                            try {
+                              await collaboratorService.declineCollaboration(eventSettings.id, currentUser.email);
+                              // ホーム画面に戻る
+                              window.location.href = '/';
+                            } catch (error) {
+                              console.error('共同編集の辞退に失敗:', error);
+                              alert('辞退に失敗しました');
+                            } finally {
+                              setIsCollaboratorProcessing(false);
+                            }
+                          }}
+                          className="text-xs text-gray-500 hover:text-red-500 transition-colors underline"
+                          disabled={isCollaboratorProcessing}
+                        >
+                          共同編集を辞退する
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
