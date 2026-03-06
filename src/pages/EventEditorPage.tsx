@@ -1174,7 +1174,21 @@ export const EventEditorPage = () => {
                         <p className="text-xs text-red-500 mb-2">{collaboratorError}</p>
                       )}
 
-                      {/* 共同編集者数と詳細リンク */}
+                      {/* 招待中の共同編集者一覧 */}
+                      {(eventSettings.collaboratorEmails?.length ?? 0) > 0 && (
+                        <div className="space-y-1.5 mb-3">
+                          {eventSettings.collaboratorEmails!.map((email) => (
+                            <div key={email} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
+                              <span className="text-xs text-gray-700 truncate flex-1">{email}</span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                                招待中
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 詳細リンク */}
                       <button
                         onClick={() => { setShowSharePanel(false); setShowCollaboratorDetail(true); }}
                         className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 transition-colors"
