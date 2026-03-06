@@ -792,17 +792,26 @@ export const collaboratorService = {
         throw new Error('イベントが見つかりません');
       }
       const data = eventDoc.data();
+      console.log('[acceptOwnerTransfer] data:', data);
+      console.log('[acceptOwnerTransfer] transferFromOwnerEmail:', data.transferFromOwnerEmail);
+      
       if (data.pendingOwnerEmail?.toLowerCase() !== newOwnerEmail.toLowerCase()) {
         throw new Error('この移譲リクエストは無効です');
       }
+      
+      // 旧オーナーのメールを取得
+      const oldOwnerEmail: string = data.transferFromOwnerEmail || '';
+      if (!oldOwnerEmail) {
+        throw new Error('移譲情報が不完全です。オーナーに移譲をキャンセルして再度開始してもらってください。');
+      }
+      
       // 新しいオーナーをcollaboratorEmailsから削除し、旧オーナーを追加
       const currentCollaborators: string[] = data.collaboratorEmails || [];
-      const oldOwnerEmail: string = data.transferFromOwnerEmail || '';
       const updatedCollaborators = currentCollaborators
         .filter((e: string) => e.toLowerCase() !== newOwnerEmail.toLowerCase());
-      if (oldOwnerEmail) {
-        updatedCollaborators.push(oldOwnerEmail.toLowerCase());
-      }
+      updatedCollaborators.push(oldOwnerEmail.toLowerCase());
+      
+      console.log('[acceptOwnerTransfer] updatedCollaborators:', updatedCollaborators);
       
       transaction.update(eventRef, {
         ownerId: newOwnerUid,
