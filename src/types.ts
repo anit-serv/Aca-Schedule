@@ -23,6 +23,8 @@ export interface EventSettings {
   ownerId: string; // イベント作成者のユーザーID
   customFields?: CustomFieldsSettings; // カスタムフィールド設定
   isPublic?: boolean; // 閲覧用の共有ページを公開するかどうか
+  collaboratorEmails?: string[]; // 共同編集者のメールアドレス一覧
+  pendingOwnerEmail?: string; // オーナー権限移譲の保留中メールアドレス
 }
 
 // 時間範囲（30分単位）

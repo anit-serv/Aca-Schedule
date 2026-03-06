@@ -14,6 +14,8 @@ import {
   Timestamp,
   QuerySnapshot,
   runTransaction,
+  arrayUnion,
+  arrayRemove,
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -205,6 +207,18 @@ const eventSettingsToFirestore = (settings: EventSettings): Partial<EventSetting
     (firestoreData as any).isPublic = settings.isPublic;
   }
 
+  // collaboratorEmailsがundefinedでない場合のみ含める
+  if (settings.collaboratorEmails !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (firestoreData as any).collaboratorEmails = settings.collaboratorEmails;
+  }
+
+  // pendingOwnerEmailがundefinedでない場合のみ含める
+  if (settings.pendingOwnerEmail !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (firestoreData as any).pendingOwnerEmail = settings.pendingOwnerEmail;
+  }
+
   return firestoreData as EventSettingsFirestore;
 };
 
@@ -224,6 +238,8 @@ const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings
   ownerId: data.ownerId || '',
   customFields: data.customFields,
   isPublic: data.isPublic || false,
+  collaboratorEmails: data.collaboratorEmails || [],
+  pendingOwnerEmail: data.pendingOwnerEmail || undefined,
 });
 
 // イベント設定のFirestore操作
@@ -291,6 +307,8 @@ export const eventService = {
     if (updates.customEvents !== undefined) updateData.customEvents = updates.customEvents;
     if (updates.customFields !== undefined) updateData.customFields = updates.customFields;
     if (updates.isPublic !== undefined) updateData.isPublic = updates.isPublic;
+    if (updates.collaboratorEmails !== undefined) updateData.collaboratorEmails = updates.collaboratorEmails;
+    if (updates.pendingOwnerEmail !== undefined) updateData.pendingOwnerEmail = updates.pendingOwnerEmail;
     
     // updatedAtは常に更新
     updateData.updatedAt = Timestamp.now();
@@ -668,5 +686,102 @@ export const timetableService = {
         if (onError) onError(error);
       }
     );
+  },
+};
+
+// 共同編集者管理のFirestore操作
+export const collaboratorService = {
+  // 共同編集者を追加（オーナーが実行）
+  async addCollaborator(eventId: string, email: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      collaboratorEmails: arrayUnion(email.toLowerCase().trim()),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // 共同編集者を削除（オーナーが実行）
+  async removeCollaborator(eventId: string, email: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      collaboratorEmails: arrayRemove(email.toLowerCase().trim()),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // 共同編集を辞退（共同編集者本人が実行）
+  async declineCollaboration(eventId: string, email: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      collaboratorEmails: arrayRemove(email.toLowerCase().trim()),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // 共同編集者として参加しているイベント一覧を取得
+  async getSharedEvents(email: string): Promise<EventSettings[]> {
+    try {
+      const eventsRef = collection(db, 'events');
+      const q = query(eventsRef, where('collaboratorEmails', 'array-contains', email.toLowerCase().trim()));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => firestoreToEventSettings(d.id, d.data()));
+    } catch (error) {
+      console.error('[collaboratorService.getSharedEvents] エラー:', error);
+      throw error;
+    }
+  },
+
+  // オーナー権限移譲を開始（オーナーが実行）
+  async initiateOwnerTransfer(eventId: string, email: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      pendingOwnerEmail: email.toLowerCase().trim(),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // オーナー権限移譲をキャンセル（オーナーが実行）
+  async cancelOwnerTransfer(eventId: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      pendingOwnerEmail: '',
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // オーナー権限移譲を承認（移譲先ユーザーが実行）
+  async acceptOwnerTransfer(eventId: string, newOwnerUid: string, oldOwnerEmail: string, newOwnerEmail: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await runTransaction(db, async (transaction) => {
+      const eventDoc = await transaction.get(eventRef);
+      if (!eventDoc.exists()) {
+        throw new Error('イベントが見つかりません');
+      }
+      const data = eventDoc.data();
+      if (data.pendingOwnerEmail?.toLowerCase() !== newOwnerEmail.toLowerCase()) {
+        throw new Error('この移譲リクエストは無効です');
+      }
+      // 新しいオーナーをcollaboratorEmailsから削除し、旧オーナーを追加
+      const currentCollaborators: string[] = data.collaboratorEmails || [];
+      const updatedCollaborators = currentCollaborators
+        .filter((e: string) => e.toLowerCase() !== newOwnerEmail.toLowerCase());
+      updatedCollaborators.push(oldOwnerEmail.toLowerCase());
+      
+      transaction.update(eventRef, {
+        ownerId: newOwnerUid,
+        collaboratorEmails: updatedCollaborators,
+        pendingOwnerEmail: '',
+        updatedAt: Timestamp.now(),
+      });
+    });
+  },
+
+  // オーナー権限移譲を拒否（移譲先ユーザーが実行）
+  async declineOwnerTransfer(eventId: string): Promise<void> {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, {
+      pendingOwnerEmail: '',
+      updatedAt: Timestamp.now(),
+    });
   },
 };

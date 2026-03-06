@@ -15,6 +15,18 @@ service cloud.firestore {
       return eventData(eventId).isPublic == true;
     }
 
+    // 共同編集者かどうかを確認
+    function isEventCollaborator(eventId) {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email in eventData(eventId).collaboratorEmails;
+    }
+
+    // オーナーまたは共同編集者
+    function isEventOwnerOrCollaborator(eventId) {
+      return isEventOwner(eventId) || isEventCollaborator(eventId);
+    }
+
     // ユーザー情報: 本人のみ読み書き可能
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
@@ -22,34 +34,47 @@ service cloud.firestore {
 
     // イベント
     // - オーナーのみ読み書き可能
+    // - 共同編集者は読み取りのみ可能
     // - isPublic=true の場合は認証なしでも読み取り可能（共有URL用）
     match /events/{eventId} {
       allow read: if (request.auth != null && resource.data.ownerId == request.auth.uid)
+                   || (request.auth != null
+                       && request.auth.token.email != null
+                       && request.auth.token.email in resource.data.collaboratorEmails)
                    || resource.data.isPublic == true;
       allow create: if request.auth != null
                      && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if request.auth != null
-                             && resource.data.ownerId == request.auth.uid;
+      // オーナーは全フィールド更新可能
+      // 共同編集者は自分のメールを collaboratorEmails から削除のみ可能（辞退）
+      allow update: if (request.auth != null && resource.data.ownerId == request.auth.uid)
+                     || (request.auth != null
+                         && request.auth.token.email != null
+                         && request.auth.token.email in resource.data.collaboratorEmails
+                         && !(request.auth.token.email in request.resource.data.collaboratorEmails)
+                         && request.resource.data.ownerId == resource.data.ownerId
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaboratorEmails', 'updatedAt']));
+      allow delete: if request.auth != null
+                     && resource.data.ownerId == request.auth.uid;
     }
 
     // バンド
-    // - 関連するイベントのオーナーのみ読み書き可能
+    // - 関連するイベントのオーナーまたは共同編集者が読み書き可能
     // - 関連するイベントが公開の場合は認証なしでも読み取り可能
     match /bands/{bandId} {
-      allow read: if isEventOwner(resource.data.eventId)
+      allow read: if isEventOwnerOrCollaborator(resource.data.eventId)
                    || isEventPublic(resource.data.eventId);
-      allow create: if isEventOwner(request.resource.data.eventId);
-      allow update, delete: if isEventOwner(resource.data.eventId);
+      allow create: if isEventOwnerOrCollaborator(request.resource.data.eventId);
+      allow update, delete: if isEventOwnerOrCollaborator(resource.data.eventId);
     }
 
     // タイムテーブル
-    // - 関連するイベントのオーナーのみ読み書き可能
+    // - 関連するイベントのオーナーまたは共同編集者が読み書き可能
     // - 関連するイベントが公開の場合は認証なしでも読み取り可能
     match /timetables/{timetableId} {
-      allow read: if isEventOwner(resource.data.eventId)
+      allow read: if isEventOwnerOrCollaborator(resource.data.eventId)
                    || isEventPublic(resource.data.eventId);
-      allow create: if isEventOwner(request.resource.data.eventId);
-      allow update, delete: if isEventOwner(resource.data.eventId);
+      allow create: if isEventOwnerOrCollaborator(request.resource.data.eventId);
+      allow update, delete: if isEventOwnerOrCollaborator(resource.data.eventId);
     }
 
   }

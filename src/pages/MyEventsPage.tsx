@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { eventService } from '../services/firestore';
+import { eventService, collaboratorService } from '../services/firestore';
 import type { EventSettings } from '../types';
 
 export const MyEventsPage = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventSettings[]>([]);
+  const [sharedEvents, setSharedEvents] = useState<EventSettings[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -18,8 +19,14 @@ export const MyEventsPage = () => {
 
     const loadEvents = async () => {
       try {
-        const userEvents = await eventService.getEventsByOwner(currentUser.uid);
+        const [userEvents, collaborated] = await Promise.all([
+          eventService.getEventsByOwner(currentUser.uid),
+          currentUser.email
+            ? collaboratorService.getSharedEvents(currentUser.email)
+            : Promise.resolve([]),
+        ]);
         setEvents(userEvents);
+        setSharedEvents(collaborated);
       } catch (error) {
         console.error('[MyEventsPage] イベント読み込みエラー:', error);
       } finally {
@@ -244,6 +251,83 @@ export const MyEventsPage = () => {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* 共有されたイベント */}
+        {sharedEvents.length > 0 && (
+          <div className="mt-10">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-700">共有されたイベント</h2>
+              <p className="text-sm text-gray-400">{sharedEvents.length}件</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sharedEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="bg-white rounded-lg p-5 text-left hover:shadow-md hover:ring-1 hover:ring-blue-400 transition-all group border-l-4 border-l-blue-400 border border-gray-200 relative"
+                >
+                  <button
+                    onClick={() => navigate(`/events/${event.id}`)}
+                    className="w-full text-left"
+                    disabled={isProcessing}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-lg font-bold group-hover:text-blue-600 transition-colors">
+                        {event.name}
+                      </h3>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
+                        共有
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-sm text-gray-500">
+                      <p>📅 {event.year}年</p>
+                      {event.venue && <p>📍 {event.venue}</p>}
+                      <p>
+                        🎤 本番日:{' '}
+                        {event.performanceDates.map(formatDate).join(', ')}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* 辞退ボタン */}
+                  <div className="absolute top-4 right-4">
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!currentUser?.email) return;
+                        if (!confirm(`「${event.name}」の共同編集を辞退しますか？`)) return;
+                        setIsProcessing(true);
+                        try {
+                          await collaboratorService.declineCollaboration(event.id, currentUser.email);
+                          setSharedEvents(prev => prev.filter(e => e.id !== event.id));
+                        } catch (error) {
+                          console.error('共同編集の辞退に失敗:', error);
+                          alert('辞退に失敗しました');
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }}
+                      className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-500 transition-colors"
+                      disabled={isProcessing}
+                      title="共同編集を辞退"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* オーナー権限移譲の通知 */}
+                  {event.pendingOwnerEmail && currentUser?.email && event.pendingOwnerEmail.toLowerCase() === currentUser.email.toLowerCase() && (
+                    <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+                      <p className="text-xs text-blue-700 font-bold mb-1">📩 オーナー権限の移譲リクエスト</p>
+                      <p className="text-xs text-blue-600 mb-2">イベントを開いて共有パネルから承認・拒否できます</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </main>
