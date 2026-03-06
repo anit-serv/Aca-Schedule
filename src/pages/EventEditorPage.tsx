@@ -58,6 +58,8 @@ export const EventEditorPage = () => {
   const [bottomSheetHeight, setBottomSheetHeight] = useState<SheetHeight>('peek');
   // モバイル用: 設定メニュー（アクションシート風）
   const [showMobileSettings, setShowMobileSettings] = useState(false);
+  // モバイル用: 選択中バンドID（タップ to プレース）
+  const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
 
   // オーナー権限移譲リクエストがある場合、自動的に通知モーダルを表示
   useEffect(() => {
@@ -1043,6 +1045,10 @@ export const EventEditorPage = () => {
               eventSettings={eventSettings}
               performanceTimetable={performanceTimetable}
               rehearsalTimetable={rehearsalTimetable}
+              onPerformanceTimetableChange={handlePerformanceTimetableChange}
+              onRehearsalTimetableChange={handleRehearsalTimetableChange}
+              selectedBandId={selectedBandId}
+              onBandPlaced={() => setSelectedBandId(null)}
               onOpenBandBank={() => setBottomSheetHeight(bottomSheetHeight === 'peek' ? 'half' : 'peek')}
             />
           )}
@@ -1060,6 +1066,8 @@ export const EventEditorPage = () => {
               timetableType="performance"
               performanceTimetable={performanceTimetable}
               rehearsalTimetable={rehearsalTimetable}
+              selectedBandId={selectedBandId}
+              onSelectBand={setSelectedBandId}
             />
           </MobileBottomSheet>
         )}

@@ -6,6 +6,8 @@ interface MobileBandBankProps {
   timetableType: 'performance' | 'rehearsal';
   performanceTimetable: Timetable | null;
   rehearsalTimetable: Timetable | null;
+  selectedBandId: string | null;
+  onSelectBand: (bandId: string | null) => void;
 }
 
 export const MobileBandBank = ({
@@ -13,6 +15,8 @@ export const MobileBandBank = ({
   timetableType,
   performanceTimetable,
   rehearsalTimetable,
+  selectedBandId,
+  onSelectBand,
 }: MobileBandBankProps) => {
   const timetable = timetableType === 'performance' ? performanceTimetable : rehearsalTimetable;
 
@@ -65,25 +69,39 @@ export const MobileBandBank = ({
         </div>
       ) : (
         <div className="space-y-1.5">
-          {unplacedBands.map((band) => (
-            <div
-              key={band.id}
-              className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 active:bg-emerald-100 transition-colors"
-            >
-              <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                {band.name.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{band.name}</p>
-                <p className="text-[10px] text-gray-500">
-                  {band.performanceDuration}分 · {band.members.length}人
-                </p>
-              </div>
-              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
-            </div>
-          ))}
+          {unplacedBands.map((band) => {
+            const isSelected = selectedBandId === band.id;
+            return (
+              <button
+                key={band.id}
+                onClick={() => onSelectBand(isSelected ? null : band.id)}
+                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all text-left ${
+                  isSelected
+                    ? 'bg-emerald-500 border-2 border-emerald-600 shadow-md ring-2 ring-emerald-300'
+                    : 'bg-emerald-50 border border-emerald-200 active:bg-emerald-100'
+                }`}
+              >
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                  isSelected ? 'bg-white text-emerald-600' : 'bg-emerald-500 text-white'
+                }`}>
+                  {band.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>{band.name}</p>
+                  <p className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-gray-500'}`}>
+                    {band.performanceDuration}分 · {band.members.length}人
+                  </p>
+                </div>
+                {isSelected ? (
+                  <span className="text-[10px] text-emerald-100 font-medium flex-shrink-0">選択中</span>
+                ) : (
+                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
