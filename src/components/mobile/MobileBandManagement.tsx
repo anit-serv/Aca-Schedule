@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Band, EventSettings } from '../../types';
 import { useBandManagement } from '../../hooks/useBandManagement';
 import { BandAvailabilityModal } from '../BandAvailabilityModal';
+import { BandImportCSV } from '../BandImportCSV';
 
 interface MobileBandManagementProps {
   bands: Band[];
@@ -65,12 +66,18 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange }: Mo
       {/* ヘッダー */}
       <div className="flex justify-between items-center px-4 py-3 flex-shrink-0">
         <h2 className="text-lg font-bold text-gray-900">バンド管理</h2>
-        <button
-          onClick={handleAddBand}
-          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-sm font-medium transition-colors"
-        >
-          + 追加
-        </button>
+        <div className="flex items-center gap-2">
+          <BandImportCSV
+            eventSettings={eventSettings}
+            onImportComplete={() => {}}
+          />
+          <button
+            onClick={handleAddBand}
+            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-sm font-medium transition-colors"
+          >
+            + 追加
+          </button>
+        </div>
       </div>
 
       {/* バンドリスト */}

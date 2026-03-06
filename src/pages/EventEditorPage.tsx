@@ -60,6 +60,8 @@ export const EventEditorPage = () => {
   const [showMobileSettings, setShowMobileSettings] = useState(false);
   // モバイル用: 選択中バンドID（タップ to プレース）
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
+  // モバイル用: MobileTimetableViewで選択中のタイムテーブルタイプ
+  const [mobileTimetableType, setMobileTimetableType] = useState<'performance' | 'rehearsal'>('performance');
 
   // オーナー権限移譲リクエストがある場合、自動的に通知モーダルを表示
   useEffect(() => {
@@ -1103,6 +1105,10 @@ export const EventEditorPage = () => {
               selectedBandId={selectedBandId}
               onBandPlaced={() => setSelectedBandId(null)}
               onOpenBandBank={() => setBottomSheetHeight(bottomSheetHeight === 'peek' ? 'half' : 'peek')}
+              onTimetableTypeChange={setMobileTimetableType}
+              onEventSettingsChange={(updates) => {
+                setEventSettings(prev => prev ? { ...prev, ...updates } : null);
+              }}
             />
           )}
         </main>
@@ -1116,7 +1122,7 @@ export const EventEditorPage = () => {
           >
             <MobileBandBank
               bands={bands}
-              timetableType="performance"
+              timetableType={mobileTimetableType}
               performanceTimetable={performanceTimetable}
               rehearsalTimetable={rehearsalTimetable}
               selectedBandId={selectedBandId}
