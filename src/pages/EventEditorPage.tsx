@@ -42,8 +42,8 @@ export const EventEditorPage = () => {
   const [collaboratorEmail, setCollaboratorEmail] = useState('');
   const [collaboratorError, setCollaboratorError] = useState('');
   const [isCollaboratorProcessing, setIsCollaboratorProcessing] = useState(false);
-  const [transferEmail, setTransferEmail] = useState('');
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
+  const [showCollaboratorDetail, setShowCollaboratorDetail] = useState(false);
 
   // 設定メニューの外側をクリックしたときに閉じる
   useEffect(() => {
@@ -1048,71 +1048,8 @@ export const EventEditorPage = () => {
               
               {/* 共有パネル */}
               {showSharePanel && (
-                <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50 p-4 max-h-[80vh] overflow-y-auto">
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 p-4">
                   <h3 className="text-sm font-bold text-gray-900 mb-3">共有設定</h3>
-
-                  {/* オーナー権限移譲の保留通知（移譲先ユーザーに表示） */}
-                  {eventSettings.pendingOwnerEmail
-                    && currentUser?.email
-                    && eventSettings.pendingOwnerEmail.toLowerCase() === currentUser.email.toLowerCase()
-                    && eventSettings.ownerId !== currentUser.uid && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-3 mb-3">
-                      <p className="text-xs font-bold text-blue-800 mb-2">📩 オーナー権限の移譲リクエスト</p>
-                      <p className="text-xs text-blue-700 mb-2">このイベントのオーナー権限があなたに移譲されようとしています。</p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={async () => {
-                            if (!currentUser?.email) return;
-                            setIsCollaboratorProcessing(true);
-                            try {
-                              const eventDoc = await eventService.getEvent(eventSettings.id);
-                              if (!eventDoc) throw new Error('イベントが見つかりません');
-                              // 現在のオーナーのメールアドレスを取得するため、users コレクションにアクセスできない
-                              // → eventにownerEmailを保存するか、別の方法が必要
-                              // 簡易実装: オーナーのUIDからは直接メールを取得できないので、
-                              // acceptOwnerTransfer には旧オーナーのメールが必要
-                              // ここではイベントのpendingOwnerEmailの確認で代用
-                              await collaboratorService.acceptOwnerTransfer(
-                                eventSettings.id,
-                                currentUser.uid,
-                                '', // 旧オーナーのメールは不明なため空文字（collaboratorに追加されない）
-                                currentUser.email
-                              );
-                              // ページをリロードして状態を更新
-                              window.location.reload();
-                            } catch (error) {
-                              console.error('オーナー権限の承認に失敗:', error);
-                              alert('オーナー権限の承認に失敗しました。');
-                            } finally {
-                              setIsCollaboratorProcessing(false);
-                            }
-                          }}
-                          className="px-3 py-1.5 rounded text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors"
-                          disabled={isCollaboratorProcessing}
-                        >
-                          承認する
-                        </button>
-                        <button
-                          onClick={async () => {
-                            setIsCollaboratorProcessing(true);
-                            try {
-                              await collaboratorService.declineOwnerTransfer(eventSettings.id);
-                              setEventSettings(prev => prev ? { ...prev, pendingOwnerEmail: undefined } : null);
-                            } catch (error) {
-                              console.error('オーナー権限の拒否に失敗:', error);
-                              alert('オーナー権限の拒否に失敗しました。');
-                            } finally {
-                              setIsCollaboratorProcessing(false);
-                            }
-                          }}
-                          className="px-3 py-1.5 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-                          disabled={isCollaboratorProcessing}
-                        >
-                          拒否する
-                        </button>
-                      </div>
-                    </div>
-                  )}
                   
                   {/* 公開トグル（オーナーのみ） */}
                   {currentUser && eventSettings.ownerId === currentUser.uid && (
@@ -1156,7 +1093,7 @@ export const EventEditorPage = () => {
                   
                   {/* URL表示・コピー */}
                   {eventSettings.isPublic && (
-                    <div className="mb-4">
+                    <div className="mb-3">
                       <p className="text-xs text-gray-500 mb-1.5">共有URL</p>
                       <div className="flex gap-2">
                         <input
@@ -1180,11 +1117,10 @@ export const EventEditorPage = () => {
                     </div>
                   )}
 
-                  {/* 共同編集者セクション（オーナーのみ） */}
+                  {/* 共同編集者の追加（オーナーのみ） */}
                   {currentUser && eventSettings.ownerId === currentUser.uid && (
                     <div className="border-t border-gray-200 pt-3 mt-1">
-                      <h4 className="text-sm font-bold text-gray-900 mb-2">共同編集者</h4>
-                      <p className="text-xs text-gray-400 mb-2">メールアドレスで招待できます。バンド・タイムテーブルの編集が可能になります。</p>
+                      <h4 className="text-sm font-bold text-gray-900 mb-2">共同編集者を追加</h4>
 
                       {/* 招待フォーム */}
                       <div className="flex gap-2 mb-2">
@@ -1238,48 +1174,154 @@ export const EventEditorPage = () => {
                         <p className="text-xs text-red-500 mb-2">{collaboratorError}</p>
                       )}
 
-                      {/* 共同編集者一覧 */}
-                      {(eventSettings.collaboratorEmails?.length ?? 0) > 0 && (
-                        <div className="space-y-1.5 mb-3">
+                      {/* 共同編集者数と詳細リンク */}
+                      <button
+                        onClick={() => { setShowSharePanel(false); setShowCollaboratorDetail(true); }}
+                        className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                        </svg>
+                        <span className="underline">
+                          {(eventSettings.collaboratorEmails?.length ?? 0) > 0
+                            ? `${eventSettings.collaboratorEmails!.length}人の共同編集者を管理`
+                            : '共同編集者の管理'}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 共同編集者詳細モーダル */}
+              {showCollaboratorDetail && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowCollaboratorDetail(false)}>
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-bold text-gray-900">共同編集者の管理</h3>
+                      <button
+                        onClick={() => setShowCollaboratorDetail(false)}
+                        className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* オーナー権限移譲の保留通知（移譲先ユーザーに表示） */}
+                    {eventSettings.pendingOwnerEmail
+                      && currentUser?.email
+                      && eventSettings.pendingOwnerEmail.toLowerCase() === currentUser.email.toLowerCase()
+                      && eventSettings.ownerId !== currentUser.uid && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-3 mb-4">
+                        <p className="text-sm font-bold text-blue-800 mb-2">📩 オーナー権限の移譲リクエスト</p>
+                        <p className="text-xs text-blue-700 mb-3">このイベントのオーナー権限があなたに移譲されようとしています。</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              if (!currentUser?.email) return;
+                              setIsCollaboratorProcessing(true);
+                              try {
+                                await collaboratorService.acceptOwnerTransfer(
+                                  eventSettings.id,
+                                  currentUser.uid,
+                                  '',
+                                  currentUser.email
+                                );
+                                window.location.reload();
+                              } catch (error) {
+                                console.error('オーナー権限の承認に失敗:', error);
+                                alert('オーナー権限の承認に失敗しました。');
+                              } finally {
+                                setIsCollaboratorProcessing(false);
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                            disabled={isCollaboratorProcessing}
+                          >
+                            承認する
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setIsCollaboratorProcessing(true);
+                              try {
+                                await collaboratorService.declineOwnerTransfer(eventSettings.id);
+                                setEventSettings(prev => prev ? { ...prev, pendingOwnerEmail: undefined } : null);
+                              } catch (error) {
+                                console.error('オーナー権限の拒否に失敗:', error);
+                                alert('オーナー権限の拒否に失敗しました。');
+                              } finally {
+                                setIsCollaboratorProcessing(false);
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                            disabled={isCollaboratorProcessing}
+                          >
+                            拒否する
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 共同編集者一覧 */}
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-500 mb-2">現在の共同編集者</p>
+                      {(eventSettings.collaboratorEmails?.length ?? 0) > 0 ? (
+                        <div className="space-y-2">
                           {eventSettings.collaboratorEmails!.map((email) => (
-                            <div key={email} className="flex items-center justify-between bg-gray-50 rounded px-2 py-1.5">
-                              <span className="text-xs text-gray-700 truncate flex-1">{email}</span>
-                              <button
-                                onClick={async () => {
-                                  setIsCollaboratorProcessing(true);
-                                  try {
-                                    await collaboratorService.removeCollaborator(eventSettings.id, email);
-                                    setEventSettings(prev => prev ? {
-                                      ...prev,
-                                      collaboratorEmails: (prev.collaboratorEmails || []).filter(e => e !== email),
-                                    } : null);
-                                  } catch (error) {
-                                    console.error('共同編集者の削除に失敗:', error);
-                                    alert('削除に失敗しました');
-                                  } finally {
-                                    setIsCollaboratorProcessing(false);
-                                  }
-                                }}
-                                className="ml-2 text-gray-400 hover:text-red-500 transition-colors"
-                                disabled={isCollaboratorProcessing}
-                                title="削除"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
+                            <div key={email} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                  {email[0].toUpperCase()}
+                                </div>
+                                <span className="text-sm text-gray-700 truncate">{email}</span>
+                              </div>
+                              {currentUser && eventSettings.ownerId === currentUser.uid && (
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`${email} を共同編集者から削除しますか？`)) return;
+                                    setIsCollaboratorProcessing(true);
+                                    try {
+                                      await collaboratorService.removeCollaborator(eventSettings.id, email);
+                                      setEventSettings(prev => prev ? {
+                                        ...prev,
+                                        collaboratorEmails: (prev.collaboratorEmails || []).filter(e => e !== email),
+                                      } : null);
+                                    } catch (error) {
+                                      console.error('共同編集者の削除に失敗:', error);
+                                      alert('削除に失敗しました');
+                                    } finally {
+                                      setIsCollaboratorProcessing(false);
+                                    }
+                                  }}
+                                  className="ml-2 p-1 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                  disabled={isCollaboratorProcessing}
+                                  title="削除"
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
+                      ) : (
+                        <p className="text-xs text-gray-400">共同編集者はいません</p>
                       )}
+                    </div>
 
-                      {/* オーナー権限移譲 */}
-                      <div className="border-t border-gray-100 pt-2 mt-2">
-                        <p className="text-xs text-gray-500 mb-1.5">オーナー権限の移譲</p>
-                        {eventSettings.pendingOwnerEmail ? (
+                    {/* オーナー権限移譲（オーナーのみ） */}
+                    {currentUser && eventSettings.ownerId === currentUser.uid && (
+                      <div className="border-t border-gray-200 pt-4">
+                        <h4 className="text-sm font-bold text-gray-900 mb-2">オーナー権限の移譲</h4>
+                        {(eventSettings.collaboratorEmails?.length ?? 0) === 0 ? (
+                          <p className="text-xs text-gray-400">共同編集者を追加すると、オーナー権限を移譲できます。</p>
+                        ) : eventSettings.pendingOwnerEmail ? (
                           <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                            <p className="text-xs text-amber-700 mb-1.5">
-                              {eventSettings.pendingOwnerEmail} に移譲リクエスト中
+                            <p className="text-xs text-amber-700 mb-2">
+                              <span className="font-bold">{eventSettings.pendingOwnerEmail}</span> に移譲リクエスト中
                             </p>
                             <button
                               onClick={async () => {
@@ -1294,7 +1336,7 @@ export const EventEditorPage = () => {
                                   setIsCollaboratorProcessing(false);
                                 }
                               }}
-                              className="px-2 py-1 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                              className="px-3 py-1.5 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
                               disabled={isCollaboratorProcessing}
                             >
                               キャンセル
@@ -1302,63 +1344,53 @@ export const EventEditorPage = () => {
                           </div>
                         ) : showTransferConfirm ? (
                           <div>
-                            <div className="flex gap-2 mb-2">
-                              <input
-                                type="email"
-                                value={transferEmail}
-                                onChange={(e) => setTransferEmail(e.target.value)}
-                                placeholder="移譲先のメールアドレス"
-                                className="flex-1 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 placeholder-gray-400"
-                                disabled={isCollaboratorProcessing}
-                              />
+                            <p className="text-xs text-gray-400 mb-2">移譲先の共同編集者を選択してください。相手が承認すると、あなたは共同編集者になります。</p>
+                            <div className="space-y-1.5 mb-3">
+                              {eventSettings.collaboratorEmails!.map((email) => (
+                                <button
+                                  key={email}
+                                  onClick={async () => {
+                                    if (!confirm(`${email} にオーナー権限を移譲しますか？\n相手が承認すると、あなたは共同編集者になります。`)) return;
+                                    setIsCollaboratorProcessing(true);
+                                    try {
+                                      await collaboratorService.initiateOwnerTransfer(eventSettings.id, email);
+                                      setEventSettings(prev => prev ? { ...prev, pendingOwnerEmail: email } : null);
+                                      setShowTransferConfirm(false);
+                                    } catch (error) {
+                                      console.error('移譲リクエストに失敗:', error);
+                                      alert('移譲リクエストに失敗しました');
+                                    } finally {
+                                      setIsCollaboratorProcessing(false);
+                                    }
+                                  }}
+                                  className="w-full flex items-center gap-2 bg-gray-50 hover:bg-amber-50 hover:border-amber-300 border border-gray-200 rounded-lg px-3 py-2 text-left transition-colors"
+                                  disabled={isCollaboratorProcessing}
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                    {email[0].toUpperCase()}
+                                  </div>
+                                  <span className="text-sm text-gray-700 truncate">{email}</span>
+                                </button>
+                              ))}
                             </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={async () => {
-                                  const email = transferEmail.trim().toLowerCase();
-                                  if (!email) return;
-                                  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                                    alert('有効なメールアドレスを入力してください');
-                                    return;
-                                  }
-                                  if (!confirm(`${email} にオーナー権限を移譲しますか？\n相手が承認すると、あなたは共同編集者になります。`)) return;
-                                  setIsCollaboratorProcessing(true);
-                                  try {
-                                    await collaboratorService.initiateOwnerTransfer(eventSettings.id, email);
-                                    setEventSettings(prev => prev ? { ...prev, pendingOwnerEmail: email } : null);
-                                    setShowTransferConfirm(false);
-                                    setTransferEmail('');
-                                  } catch (error) {
-                                    console.error('移譲リクエストに失敗:', error);
-                                    alert('移譲リクエストに失敗しました');
-                                  } finally {
-                                    setIsCollaboratorProcessing(false);
-                                  }
-                                }}
-                                className="px-2 py-1 rounded text-xs font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors"
-                                disabled={isCollaboratorProcessing || !transferEmail.trim()}
-                              >
-                                移譲する
-                              </button>
-                              <button
-                                onClick={() => { setShowTransferConfirm(false); setTransferEmail(''); }}
-                                className="px-2 py-1 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-                              >
-                                やめる
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => setShowTransferConfirm(false)}
+                              className="px-3 py-1.5 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                            >
+                              やめる
+                            </button>
                           </div>
                         ) : (
                           <button
                             onClick={() => setShowTransferConfirm(true)}
                             className="text-xs text-gray-500 hover:text-amber-600 transition-colors underline"
                           >
-                            別のユーザーにオーナー権限を移譲
+                            共同編集者にオーナー権限を移譲
                           </button>
                         )}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
             </div>
