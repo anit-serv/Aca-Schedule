@@ -44,6 +44,19 @@ export const EventEditorPage = () => {
   const [isCollaboratorProcessing, setIsCollaboratorProcessing] = useState(false);
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
   const [showCollaboratorDetail, setShowCollaboratorDetail] = useState(false);
+  const [showOwnerTransferNotification, setShowOwnerTransferNotification] = useState(false);
+
+  // オーナー権限移譲リクエストがある場合、自動的に通知モーダルを表示
+  useEffect(() => {
+    if (
+      eventSettings?.pendingOwnerEmail
+      && currentUser?.email
+      && eventSettings.pendingOwnerEmail.toLowerCase() === currentUser.email.toLowerCase()
+      && eventSettings.ownerId !== currentUser.uid
+    ) {
+      setShowOwnerTransferNotification(true);
+    }
+  }, [eventSettings?.pendingOwnerEmail, currentUser?.email, currentUser?.uid, eventSettings?.ownerId]);
 
   // 設定メニューの外側をクリックしたときに閉じる
   useEffect(() => {
@@ -1575,6 +1588,77 @@ export const EventEditorPage = () => {
           onClose={() => setShowSettingsModal(false)}
           onSave={handleSaveEventSettings}
         />
+      )}
+
+      {/* オーナー権限移譲リクエスト通知モーダル */}
+      {showOwnerTransferNotification && eventSettings.pendingOwnerEmail && currentUser?.email
+        && eventSettings.pendingOwnerEmail.toLowerCase() === currentUser.email.toLowerCase()
+        && eventSettings.ownerId !== currentUser.uid && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">📩 オーナー権限の移譲リクエスト</h3>
+              <button
+                onClick={() => setShowOwnerTransferNotification(false)}
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                title="後で対応する"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              このイベントのオーナー権限があなたに移譲されようとしています。承認するとあなたがオーナーになります。
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!currentUser?.email) return;
+                  setIsCollaboratorProcessing(true);
+                  try {
+                    await collaboratorService.acceptOwnerTransfer(
+                      eventSettings.id,
+                      currentUser.uid,
+                      '',
+                      currentUser.email
+                    );
+                    window.location.reload();
+                  } catch (error) {
+                    console.error('オーナー権限の承認に失敗:', error);
+                    alert('オーナー権限の承認に失敗しました。');
+                  } finally {
+                    setIsCollaboratorProcessing(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+                disabled={isCollaboratorProcessing}
+              >
+                承認する
+              </button>
+              <button
+                onClick={async () => {
+                  setIsCollaboratorProcessing(true);
+                  try {
+                    await collaboratorService.declineOwnerTransfer(eventSettings.id);
+                    setEventSettings(prev => prev ? { ...prev, pendingOwnerEmail: undefined } : null);
+                    setShowOwnerTransferNotification(false);
+                  } catch (error) {
+                    console.error('オーナー権限の拒否に失敗:', error);
+                    alert('オーナー権限の拒否に失敗しました。');
+                  } finally {
+                    setIsCollaboratorProcessing(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                disabled={isCollaboratorProcessing}
+              >
+                辞退する
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-3 text-center">×ボタンで後から対応することもできます</p>
+          </div>
+        </div>
       )}
     </div>
   );
