@@ -294,6 +294,30 @@ export const eventService = {
     }
   },
 
+  // イベント設定をリアルタイム監視
+  subscribeToEvent(
+    eventId: string,
+    callback: (settings: EventSettings | null) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const eventRef = doc(db, 'events', eventId);
+    return onSnapshot(
+      eventRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          callback(null);
+          return;
+        }
+        const settings = firestoreToEventSettings(snapshot.id, snapshot.data());
+        callback(settings);
+      },
+      (error) => {
+        console.error('[eventService.subscribeToEvent] エラー:', error);
+        if (onError) onError(error);
+      }
+    );
+  },
+
   // イベント設定を更新
   async updateEvent(eventId: string, updates: Partial<EventSettings>): Promise<void> {
     const eventRef = doc(db, 'events', eventId);

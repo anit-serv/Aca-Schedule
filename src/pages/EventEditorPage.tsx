@@ -91,7 +91,7 @@ export const EventEditorPage = () => {
     };
   }, [showSettingsMenu, showSharePanel]);
 
-  // イベント設定の読み込み
+  // イベント設定のリアルタイム監視（権限はく奪を即時検出）
   useEffect(() => {
     if (!eventId) {
       setError('not-found');
@@ -99,28 +99,25 @@ export const EventEditorPage = () => {
       return;
     }
 
-    const loadEvent = async () => {
-      try {
-        console.log('[EventEditorPage] イベント読み込み開始:', eventId);
-        const settings = await eventService.getEvent(eventId);
-        console.log('[EventEditorPage] イベント読み込み結果:', settings);
-        
+    console.log('[EventEditorPage] イベントリアルタイム監視開始:', eventId);
+    const unsubscribe = eventService.subscribeToEvent(
+      eventId,
+      (settings) => {
         if (!settings) {
           console.error('[EventEditorPage] イベントが見つかりません:', eventId);
           setError('not-found');
           setIsLoading(false);
           return;
         }
-        
         setEventSettings(settings);
         setIsLoading(false);
-        console.log('[EventEditorPage] イベント読み込み成功');
-      } catch (err) {
-        console.error('[EventEditorPage] イベント読み込みエラー:', err);
+      },
+      (err) => {
+        console.error('[EventEditorPage] イベント監視エラー:', err);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const errorCode = (err as any)?.code;
-        
-        // permission-deniedとnot-foundは同じエラーとして扱う（セキュリティのため）
+
+        // permission-deniedはアクセス権はく奪
         if (errorCode === 'permission-denied' || errorCode === 'not-found') {
           setError('not-found');
         } else {
@@ -128,9 +125,9 @@ export const EventEditorPage = () => {
         }
         setIsLoading(false);
       }
-    };
+    );
 
-    loadEvent();
+    return () => unsubscribe();
   }, [eventId]);
 
   // バンドデータの読み込み
@@ -138,16 +135,27 @@ export const EventEditorPage = () => {
     if (!eventId) return;
     
     // リアルタイム監視を設定
-    const unsubscribe = bandService.subscribeToBands(eventId, (fetchedBands) => {
-      setBands(fetchedBands);
-      // 初回読み込み時: バンドが1つ以上あればタイムテーブル編集画面を開く
-      if (!initialModeSetRef.current) {
-        initialModeSetRef.current = true;
-        if (fetchedBands.length > 0) {
-          setMode('timetable-editing');
+    const unsubscribe = bandService.subscribeToBands(
+      eventId,
+      (fetchedBands) => {
+        setBands(fetchedBands);
+        // 初回読み込み時: バンドが1つ以上あればタイムテーブル編集画面を開く
+        if (!initialModeSetRef.current) {
+          initialModeSetRef.current = true;
+          if (fetchedBands.length > 0) {
+            setMode('timetable-editing');
+          }
+        }
+      },
+      (err) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const errorCode = (err as any)?.code;
+        if (errorCode === 'permission-denied') {
+          console.warn('[EventEditorPage] バンド監視: 権限はく奪を検出');
+          setError('not-found');
         }
       }
-    });
+    );
 
     // クリーンアップ
     return () => unsubscribe();
@@ -263,6 +271,13 @@ export const EventEditorPage = () => {
       'performance',
       (fetchedTimetable) => {
         setPerformanceTimetable(fetchedTimetable);
+      },
+      (err) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((err as any)?.code === 'permission-denied') {
+          console.warn('[EventEditorPage] TT監視: 権限はく奪を検出');
+          setError('not-found');
+        }
       }
     );
 
@@ -282,6 +297,13 @@ export const EventEditorPage = () => {
       'rehearsal',
       (fetchedTimetable) => {
         setRehearsalTimetable(fetchedTimetable);
+      },
+      (err) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((err as any)?.code === 'permission-denied') {
+          console.warn('[EventEditorPage] リハTT監視: 権限はく奪を検出');
+          setError('not-found');
+        }
       }
     );
 
@@ -1005,6 +1027,37 @@ export const EventEditorPage = () => {
             <div className="text-6xl mb-4">{errorConfig.icon}</div>
             <h1 className="text-2xl font-bold mb-2">{errorConfig.title}</h1>
             <p className="text-gray-500 mb-6">{errorConfig.message}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md font-medium transition-colors"
+            >
+              マイイベントに戻る
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 編集権限チェック: オーナーまたは承認済み共同編集者のみ編集可能
+  const isOwner = currentUser && eventSettings.ownerId === currentUser.uid;
+  const isCollaborator = currentUser?.email && eventSettings.collaboratorEmails?.some(
+    email => email.toLowerCase() === currentUser.email!.toLowerCase()
+  );
+  const canEdit = isOwner || isCollaborator;
+
+  if (!canEdit) {
+    return (
+      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
+        <div className="max-w-md w-full mx-auto p-6">
+          <div className="text-center">
+            <div className="text-6xl mb-4">{'\uD83D\uDD12'}</div>
+            <h1 className="text-2xl font-bold mb-2">アクセス権限がありません</h1>
+            <p className="text-gray-500 mb-6">
+              {currentUser
+                ? 'このイベントの編集権限がありません。オーナーに共同編集者として招待してもらってください。'
+                : 'ログインしてください。'}
+            </p>
             <button
               onClick={() => navigate('/')}
               className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md font-medium transition-colors"
