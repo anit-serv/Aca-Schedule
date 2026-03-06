@@ -1261,7 +1261,6 @@ export const EventEditorPage = () => {
                                 await collaboratorService.acceptOwnerTransfer(
                                   eventSettings.id,
                                   currentUser.uid,
-                                  '',
                                   currentUser.email
                                 );
                                 window.location.reload();
@@ -1437,7 +1436,7 @@ export const EventEditorPage = () => {
                                     if (!confirm(`${email} にオーナー権限を移譲しますか？\n相手が承認すると、あなたは共同編集者になります。`)) return;
                                     setIsCollaboratorProcessing(true);
                                     try {
-                                      await collaboratorService.initiateOwnerTransfer(eventSettings.id, email);
+                                      await collaboratorService.initiateOwnerTransfer(eventSettings.id, email, currentUser.email!);
                                       setEventSettings(prev => prev ? { ...prev, pendingOwnerEmail: email } : null);
                                       setShowTransferConfirm(false);
                                     } catch (error) {
@@ -1620,7 +1619,6 @@ export const EventEditorPage = () => {
                     await collaboratorService.acceptOwnerTransfer(
                       eventSettings.id,
                       currentUser.uid,
-                      '',
                       currentUser.email
                     );
                     window.location.reload();

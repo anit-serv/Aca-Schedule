@@ -765,10 +765,11 @@ export const collaboratorService = {
   },
 
   // オーナー権限移譲を開始（オーナーが実行）
-  async initiateOwnerTransfer(eventId: string, email: string): Promise<void> {
+  async initiateOwnerTransfer(eventId: string, targetEmail: string, ownerEmail: string): Promise<void> {
     const eventRef = doc(db, 'events', eventId);
     await updateDoc(eventRef, {
-      pendingOwnerEmail: email.toLowerCase().trim(),
+      pendingOwnerEmail: targetEmail.toLowerCase().trim(),
+      transferFromOwnerEmail: ownerEmail.toLowerCase().trim(),
       updatedAt: Timestamp.now(),
     });
   },
@@ -783,7 +784,7 @@ export const collaboratorService = {
   },
 
   // オーナー権限移譲を承認（移譲先ユーザーが実行）
-  async acceptOwnerTransfer(eventId: string, newOwnerUid: string, oldOwnerEmail: string, newOwnerEmail: string): Promise<void> {
+  async acceptOwnerTransfer(eventId: string, newOwnerUid: string, newOwnerEmail: string): Promise<void> {
     const eventRef = doc(db, 'events', eventId);
     await runTransaction(db, async (transaction) => {
       const eventDoc = await transaction.get(eventRef);
@@ -796,14 +797,18 @@ export const collaboratorService = {
       }
       // 新しいオーナーをcollaboratorEmailsから削除し、旧オーナーを追加
       const currentCollaborators: string[] = data.collaboratorEmails || [];
+      const oldOwnerEmail: string = data.transferFromOwnerEmail || '';
       const updatedCollaborators = currentCollaborators
         .filter((e: string) => e.toLowerCase() !== newOwnerEmail.toLowerCase());
-      updatedCollaborators.push(oldOwnerEmail.toLowerCase());
+      if (oldOwnerEmail) {
+        updatedCollaborators.push(oldOwnerEmail.toLowerCase());
+      }
       
       transaction.update(eventRef, {
         ownerId: newOwnerUid,
         collaboratorEmails: updatedCollaborators,
         pendingOwnerEmail: '',
+        transferFromOwnerEmail: '',
         updatedAt: Timestamp.now(),
       });
     });

@@ -70,7 +70,21 @@ service cloud.firestore {
                          && request.auth.token.email in resource.data.pendingCollaboratorEmails
                          && !(request.auth.token.email in request.resource.data.pendingCollaboratorEmails)
                          && request.resource.data.ownerId == resource.data.ownerId
-                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingCollaboratorEmails', 'collaboratorEmails', 'updatedAt']));
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingCollaboratorEmails', 'collaboratorEmails', 'updatedAt']))
+                     // オーナー権限移譲の承認（pendingOwnerEmail の対象者が実行）
+                     || (request.auth != null
+                         && request.auth.token.email != null
+                         && request.auth.token.email == resource.data.pendingOwnerEmail
+                         && request.resource.data.ownerId == request.auth.uid
+                         && request.resource.data.pendingOwnerEmail == ''
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId', 'collaboratorEmails', 'pendingOwnerEmail', 'transferFromOwnerEmail', 'updatedAt']))
+                     // オーナー権限移譲の辞退（pendingOwnerEmail の対象者が実行）
+                     || (request.auth != null
+                         && request.auth.token.email != null
+                         && request.auth.token.email == resource.data.pendingOwnerEmail
+                         && request.resource.data.ownerId == resource.data.ownerId
+                         && request.resource.data.pendingOwnerEmail == ''
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingOwnerEmail', 'updatedAt']));
       allow delete: if request.auth != null
                      && resource.data.ownerId == request.auth.uid;
     }
