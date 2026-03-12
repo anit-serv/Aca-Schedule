@@ -1,16 +1,10 @@
-import { useRef, type ReactNode } from 'react';
-import { motion, type PanInfo } from 'framer-motion';
+import { useRef, useCallback, useEffect, type ReactNode } from 'react';
+import { motion, useMotionValue, useAnimation, type PanInfo } from 'framer-motion';
 
 // ボトムシートの高さ段階
 export type SheetHeight = 'peek' | 'half' | 'full';
 
-const SHEET_HEIGHTS: Record<SheetHeight, string> = {
-  peek: '120px',
-  half: '50vh',
-  full: '90vh',
-};
-
-// 各段階のピクセル値（ジェスチャー判定用）
+// 各段階のピクセル値
 const getHeightPx = (height: SheetHeight): number => {
   const vh = window.innerHeight;
   switch (height) {
@@ -33,49 +27,76 @@ export const MobileBottomSheet = ({
   onHeightChange,
   title,
 }: MobileBottomSheetProps) => {
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
+  const controls = useAnimation();
+  const dragY = useMotionValue(0);
+  const isDraggingRef = useRef(false);
 
-  const handleDragEnd = (_: unknown, info: PanInfo) => {
-    isDragging.current = false;
-    const velocity = info.velocity.y;
-    const offset = info.offset.y;
-
-    // 高速スワイプ判定
-    if (Math.abs(velocity) > 500) {
-      if (velocity > 0) {
-        // 下方向スワイプ → 一段階下げる
-        if (height === 'full') onHeightChange('half');
-        else if (height === 'half') onHeightChange('peek');
-      } else {
-        // 上方向スワイプ → 一段階上げる
-        if (height === 'peek') onHeightChange('half');
-        else if (height === 'half') onHeightChange('full');
-      }
-      return;
+  // height stateが変更されたら高さを更新
+  useEffect(() => {
+    const targetPx = getHeightPx(height);
+    if (!isDraggingRef.current) {
+      controls.start({
+        height: targetPx,
+        transition: { type: 'spring', damping: 28, stiffness: 300 },
+      });
     }
+  }, [height, controls]);
 
-    // ドラッグ距離で判定
-    const currentPx = getHeightPx(height);
-    const newPx = currentPx - offset;
+  // ドラッグ中のリアルタイム高さ更新
+  const handleDrag = useCallback((_: unknown, info: PanInfo) => {
+    const basePx = getHeightPx(height);
+    // 下にドラッグ → offset.y > 0 → 高さ減少
+    // 上にドラッグ → offset.y < 0 → 高さ増加
+    const newHeight = Math.max(60, Math.min(window.innerHeight * 0.92, basePx - info.offset.y));
+    controls.set({ height: newHeight });
+  }, [height, controls]);
+
+  const handleDragEnd = useCallback((_: unknown, info: PanInfo) => {
+    isDraggingRef.current = false;
+    const velocity = info.velocity.y;
+    const basePx = getHeightPx(height);
+    const finalPx = basePx - info.offset.y;
 
     const peekPx = getHeightPx('peek');
     const halfPx = getHeightPx('half');
     const fullPx = getHeightPx('full');
 
-    // 最も近い段階にスナップ
-    const distances = [
-      { h: 'peek' as const, d: Math.abs(newPx - peekPx) },
-      { h: 'half' as const, d: Math.abs(newPx - halfPx) },
-      { h: 'full' as const, d: Math.abs(newPx - fullPx) },
-    ];
-    distances.sort((a, b) => a.d - b.d);
-    const nearest = distances[0].h;
+    let target: SheetHeight;
 
-    if (nearest !== height) {
-      onHeightChange(nearest);
+    // 高速スワイプ判定（速度が速い場合は勢いに従う）
+    if (Math.abs(velocity) > 500) {
+      if (velocity > 0) {
+        // 下方向 → 一段階下げる
+        target = height === 'full' ? 'half' : 'peek';
+      } else {
+        // 上方向 → 一段階上げる
+        target = height === 'peek' ? 'half' : 'full';
+      }
+    } else {
+      // ドラッグ距離で最も近い段階にスナップ
+      const distances: { h: SheetHeight; d: number }[] = [
+        { h: 'peek', d: Math.abs(finalPx - peekPx) },
+        { h: 'half', d: Math.abs(finalPx - halfPx) },
+        { h: 'full', d: Math.abs(finalPx - fullPx) },
+      ];
+      distances.sort((a, b) => a.d - b.d);
+      target = distances[0].h;
     }
-  };
+
+    const targetPx = getHeightPx(target);
+    controls.start({
+      height: targetPx,
+      transition: { type: 'spring', damping: 28, stiffness: 300 },
+    });
+
+    if (target !== height) {
+      onHeightChange(target);
+    }
+  }, [height, onHeightChange, controls]);
+
+  const handleDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
 
   return (
     <>
@@ -92,26 +113,22 @@ export const MobileBottomSheet = ({
 
       {/* シート本体 */}
       <motion.div
-        ref={sheetRef}
-        className="fixed bottom-[calc(52px+env(safe-area-inset-bottom,0px))] left-0 right-0 bg-white rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-40 flex flex-col"
-        style={{ maxHeight: '90vh' }}
-        animate={{
-          height: SHEET_HEIGHTS[height],
-        }}
-        transition={{
-          type: 'spring',
-          damping: 30,
-          stiffness: 300,
-        }}
+        className="fixed bottom-[calc(52px+env(safe-area-inset-bottom,0px))] left-0 right-0 bg-white rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-40 flex flex-col will-change-[height]"
+        style={{ maxHeight: '92vh' }}
+        animate={controls}
+        initial={{ height: getHeightPx(height) }}
       >
-        {/* ドラッグハンドル */}
+        {/* ドラッグハンドル — シート全体の高さを操作 */}
         <motion.div
-          className="flex flex-col items-center pt-2 pb-1 cursor-grab active:cursor-grabbing flex-shrink-0"
+          className="flex flex-col items-center pt-2 pb-1 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none select-none"
           drag="y"
           dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={0.1}
-          onDragStart={() => { isDragging.current = true; }}
+          dragElastic={0}
+          dragMomentum={false}
+          onDragStart={handleDragStart}
+          onDrag={handleDrag}
           onDragEnd={handleDragEnd}
+          style={{ y: dragY }}
         >
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </motion.div>

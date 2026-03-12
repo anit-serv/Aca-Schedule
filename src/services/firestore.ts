@@ -129,10 +129,10 @@ export const bandService = {
 
   // バンドを追加
   async addBand(band: Band, eventId: string): Promise<string> {
-    const bandsRef = collection(db, 'bands');
+    const bandRef = doc(db, 'bands', band.id);
     const bandData = bandToFirestore(band, eventId);
-    const docRef = await addDoc(bandsRef, bandData);
-    return docRef.id;
+    await setDoc(bandRef, bandData);
+    return band.id;
   },
 
   // バンドを更新

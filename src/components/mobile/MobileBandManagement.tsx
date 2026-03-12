@@ -1,22 +1,30 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import Papa from 'papaparse';
 import type { Band, EventSettings } from '../../types';
 import { useBandManagement } from '../../hooks/useBandManagement';
 import { BandAvailabilityModal } from '../BandAvailabilityModal';
-import { BandImportCSV } from '../BandImportCSV';
+import { bandService } from '../../services/firestore';
+import { generateUUID } from '../../utils/generateUUID';
 
 interface MobileBandManagementProps {
   bands: Band[];
   eventSettings: EventSettings;
   onBandsChange: (bands: Band[]) => void;
+  isLoading?: boolean;
 }
 
-export const MobileBandManagement = ({ bands, eventSettings, onBandsChange }: MobileBandManagementProps) => {
+export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLoading = false }: MobileBandManagementProps) => {
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [expandedBandId, setExpandedBandId] = useState<string | null>(null);
   const [editingBandId, setEditingBandId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [memberInput, setMemberInput] = useState('');
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     handleAddBand,
@@ -61,28 +69,228 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange }: Mo
     handleUpdateBand(bandId, { members: band.members.filter(m => m !== member) });
   };
 
+  const handleDownloadTemplate = useCallback(() => {
+    const headers = ['バンド名', '演奏時間', '出演回数', 'メンバー'];
+    const csvContent = headers.join(',') + '\n';
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'band_template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
+  const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportMessage(null);
+    setIsImporting(true);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header: string) => {
+        const headerMap: Record<string, string> = {
+          'バンド名': 'bandName',
+          '演奏時間': 'performanceTime',
+          '出演回数': 'performanceCount',
+          'メンバー': 'members',
+        };
+        return headerMap[header] || header;
+      },
+      complete: async (results) => {
+        try {
+          const data = results.data as Array<Record<string, string>>;
+          const errors: string[] = [];
+          const validBands: Band[] = [];
+
+          data.forEach((row, index) => {
+            const rowNumber = index + 2;
+            if (!row.bandName || row.bandName.trim() === '') {
+              errors.push(`${rowNumber}行目: バンド名が未入力`);
+              return;
+            }
+            if (!row.performanceTime || row.performanceTime.trim() === '') {
+              errors.push(`${rowNumber}行目: 演奏時間が未入力`);
+              return;
+            }
+            const performanceDuration = parseInt(row.performanceTime, 10);
+            if (isNaN(performanceDuration) || performanceDuration <= 0) {
+              errors.push(`${rowNumber}行目: 演奏時間が不正`);
+              return;
+            }
+            let performanceCount = 1;
+            if (row.performanceCount && row.performanceCount.trim() !== '') {
+              performanceCount = parseInt(row.performanceCount, 10);
+              if (isNaN(performanceCount) || performanceCount <= 0) {
+                errors.push(`${rowNumber}行目: 出演回数が不正`);
+                return;
+              }
+            }
+            let members: string[] = [];
+            if (row.members && row.members.trim() !== '') {
+              members = row.members.split(';').map(m => m.trim()).filter(m => m !== '');
+            }
+            validBands.push({
+              id: generateUUID(),
+              name: row.bandName.trim(),
+              performanceDuration,
+              performanceCount,
+              members,
+              availableTimeSlots: [],
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          });
+
+          if (errors.length > 0) {
+            setImportMessage({ type: 'error', text: errors.join('\n') });
+            return;
+          }
+          if (validBands.length === 0) {
+            setImportMessage({ type: 'error', text: 'インポート可能なバンドが見つかりません' });
+            return;
+          }
+          for (const band of validBands) {
+            await bandService.addBand(band, eventSettings.id);
+          }
+          setImportMessage({ type: 'success', text: `${validBands.length}件のバンドをインポートしました` });
+          setTimeout(() => {
+            setShowImportPanel(false);
+            setImportMessage(null);
+          }, 2000);
+        } catch {
+          setImportMessage({ type: 'error', text: 'インポートに失敗しました' });
+        } finally {
+          setIsImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      },
+      error: () => {
+        setImportMessage({ type: 'error', text: 'CSVファイルの読み込みに失敗しました' });
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      },
+    });
+  }, [eventSettings.id]);
+
   return (
     <div className="flex flex-col h-full">
       {/* ヘッダー */}
       <div className="flex justify-between items-center px-4 py-3 flex-shrink-0">
         <h2 className="text-lg font-bold text-gray-900">バンド管理</h2>
         <div className="flex items-center gap-2">
-          <BandImportCSV
-            eventSettings={eventSettings}
-            onImportComplete={() => {}}
-          />
           <button
-            onClick={handleAddBand}
-            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-sm font-medium transition-colors"
+            onClick={() => { setShowImportPanel(!showImportPanel); setImportMessage(null); }}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              showImportPanel
+                ? 'bg-gray-200 text-gray-700'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <span className="flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              インポート
+            </span>
+          </button>
+          <button
+            onClick={() => {
+              handleAddBand().then((newId) => {
+                if (newId) {
+                  setExpandedBandId(newId);
+                  setEditingBandId(newId);
+                  setEditName('');
+                  // スクロールを最下部に移動
+                  requestAnimationFrame(() => {
+                    const list = document.querySelector('[data-band-list]');
+                    if (list) list.scrollTop = list.scrollHeight;
+                  });
+                }
+              });
+            }}
+            className="px-3 py-1.5 bg-emerald-500 active:bg-emerald-600 text-white rounded-md text-sm font-medium transition-colors"
           >
             + 追加
           </button>
         </div>
       </div>
 
+      {/* インポートパネル */}
+      <AnimatePresence>
+        {showImportPanel && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden flex-shrink-0"
+          >
+            <div className="mx-4 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+              <div className="flex gap-2">
+                <label
+                  htmlFor="mobile-csv-import"
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                    isImporting
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-emerald-500 text-white active:bg-emerald-600'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  {isImporting ? 'インポート中...' : 'CSVファイルを選択'}
+                </label>
+                <input
+                  ref={fileInputRef}
+                  id="mobile-csv-import"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                  disabled={isImporting}
+                  className="hidden"
+                />
+                <button
+                  onClick={handleDownloadTemplate}
+                  disabled={isImporting}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 active:bg-gray-100 disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  テンプレート
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 text-center">※ CSV形式: バンド名, 演奏時間, 出演回数, メンバー(セミコロン区切り)</p>
+
+              {importMessage && (
+                <div className={`text-xs px-3 py-2 rounded-lg whitespace-pre-line ${
+                  importMessage.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}>
+                  {importMessage.text}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* バンドリスト */}
-      <div className="flex-1 overflow-y-auto px-4 pb-20">
-        {bands.length === 0 ? (
+      <div className="flex-1 overflow-y-auto px-4 pb-20" data-band-list>
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-400 text-sm">読み込み中...</p>
+          </div>
+        ) : bands.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">🎸</div>
             <p className="text-gray-400 text-sm">バンドが登録されていません</p>

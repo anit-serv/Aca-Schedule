@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
 import type { Band, EventSettings } from '../types';
 import { bandService } from '../services/firestore';
+import { generateUUID } from '../utils/generateUUID';
 
 interface BandImportCSVProps {
   eventSettings: EventSettings;
@@ -121,7 +122,7 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
 
       // バンドオブジェクトを作成
       const band: Band = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         name: row.bandName.trim(),
         performanceDuration,
         performanceCount,

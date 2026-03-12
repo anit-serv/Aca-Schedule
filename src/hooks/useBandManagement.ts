@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { Band, EventSettings } from '../types';
 import { bandService } from '../services/firestore';
+import { generateUUID } from '../utils/generateUUID';
 
 export const useBandManagement = (
   bands: Band[],
@@ -8,9 +9,9 @@ export const useBandManagement = (
   onBandsChange: (bands: Band[]) => void
 ) => {
   // 新しいバンドを追加
-  const handleAddBand = async () => {
+  const handleAddBand = async (): Promise<string | null> => {
     const newBand: Band = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: '',
       performanceDuration: eventSettings.presetDurations[0] || 10,
       performanceCount: 1,
@@ -20,26 +21,30 @@ export const useBandManagement = (
       updatedAt: new Date(),
     };
     
+    // 楽観的更新（UIを即座に更新）
+    onBandsChange([...bands, newBand]);
+    
     // Firestoreに追加
     try {
       await bandService.addBand(newBand, eventSettings.id);
-      // onBandsChangeは自動的にFirestoreのリスナーから呼ばれる
+      return newBand.id;
     } catch (error) {
       console.error('バンド追加エラー:', error);
+      // 失敗時はロールバック
+      onBandsChange(bands);
       alert('バンドの追加に失敗しました。');
+      return null;
     }
   };
 
-  // バンドを削除
+  // バンドを削除（confirmは呼び出し元で行う）
   const handleDeleteBand = async (id: string) => {
-    if (confirm('このバンドを削除しますか?')) {
-      try {
-        await bandService.deleteBand(id);
-        // onBandsChangeは自動的にFirestoreのリスナーから呼ばれる
-      } catch (error) {
-        console.error('バンド削除エラー:', error);
-        alert('バンドの削除に失敗しました。');
-      }
+    try {
+      await bandService.deleteBand(id);
+      // onBandsChangeは自動的にFirestoreのリスナーから呼ばれる
+    } catch (error) {
+      console.error('バンド削除エラー:', error);
+      alert('バンドの削除に失敗しました。');
     }
   };
 

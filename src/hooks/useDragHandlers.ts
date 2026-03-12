@@ -30,17 +30,27 @@ export const useDragHandlers = ({
   const [dropSucceeded, setDropSucceeded] = useState(false);
   const [currentMouseY, setCurrentMouseY] = useState<number>(0);
 
-  // バンドバンクからのドラッグの場合のみマウス位置をトラッキング
+  // バンドバンクからのドラッグの場合のみポインタ位置をトラッキング
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent | MouseEvent | TouchEvent) => {
       if (activeDragId && (activeDragId.startsWith('band-') || activeDragId.startsWith('custom-'))) {
-        setCurrentMouseY(e.clientY);
+        if ('clientY' in e) {
+          setCurrentMouseY(e.clientY);
+        } else if ('touches' in e && e.touches.length > 0) {
+          setCurrentMouseY(e.touches[0].clientY);
+        }
       }
     };
 
     if (activeDragId) {
-      window.addEventListener('mousemove', handleMouseMove);
-      return () => window.removeEventListener('mousemove', handleMouseMove);
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('mousemove', handlePointerMove as (e: MouseEvent) => void);
+      window.addEventListener('touchmove', handlePointerMove as (e: TouchEvent) => void);
+      return () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('mousemove', handlePointerMove as (e: MouseEvent) => void);
+        window.removeEventListener('touchmove', handlePointerMove as (e: TouchEvent) => void);
+      };
     }
   }, [activeDragId]);
 
@@ -121,21 +131,31 @@ export const useDragHandlers = ({
   // ドラッグ終了
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    
+    // overEntryIdを保存（handleDragOverで計算済みの正確な挿入位置）
+    // モバイルではタッチ離脱時にoverがnullになることがあるため、
+    // overEntryIdをフォールバックとして使用する
+    const savedOverEntryId = overEntryId;
+    
     setActiveDragId(null);
     setOverEntryId(null);
     setCurrentMouseY(0);
 
     const activeId = active.id as string;
     
-    console.log('Drag ended:', { activeId, overId: over?.id });
 
     // バンドバンクからタイムテーブルへの追加
     if (activeId.startsWith('band-')) {
-      if (!over) return;
+      if (!over && !savedOverEntryId) {
+        return;
+      }
       
-      const overId = over.id as string;
+      // savedOverEntryIdを優先（-afterサフィックス含む正確な位置情報）
+      const overId = savedOverEntryId || (over!.id as string);
       
-      if (overId === 'band-bank-droppable') return;
+      if (overId === 'band-bank-droppable') {
+        return;
+      }
       
       const isValidDropTarget = 
         overId.startsWith('entry-') || 
@@ -146,11 +166,15 @@ export const useDragHandlers = ({
         overId.startsWith('cool-gap-after-') ||
         overId === 'timetable-droppable';
       
-      if (!isValidDropTarget) return;
+      if (!isValidDropTarget) {
+        return;
+      }
 
       const bandId = activeId.replace('band-', '');
       const band = bands.find((b) => b.id === bandId);
-      if (!band) return;
+      if (!band) {
+        return;
+      }
 
       setDropSucceeded(true);
 
@@ -191,9 +215,10 @@ export const useDragHandlers = ({
 
     // カスタムイベントをタイムテーブルへ追加
     if (activeId.startsWith('custom-')) {
-      if (!over) return;
+      if (!over && !savedOverEntryId) return;
       
-      const overId = over.id as string;
+      // savedOverEntryIdを優先（-afterサフィックス含む正確な位置情報）
+      const overId = savedOverEntryId || (over!.id as string);
       
       if (overId === 'band-bank-droppable') return;
       
@@ -250,9 +275,9 @@ export const useDragHandlers = ({
     }
 
     // タイムテーブル内での並び替え
-    if (!over) return;
+    if (!over && !savedOverEntryId) return;
     
-    const targetId = overEntryId || (over.id as string);
+    const targetId = savedOverEntryId || (over!.id as string);
     
     if (activeId.startsWith('entry-')) {
       const isValidTarget = targetId.startsWith('entry-') ||

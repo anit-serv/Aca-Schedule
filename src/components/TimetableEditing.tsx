@@ -21,6 +21,7 @@ import { useConstraintCheck } from '../hooks/useConstraintCheck';
 import { useDragHandlers } from '../hooks/useDragHandlers';
 import { createTimetableCollisionDetection } from '../utils/timetableCollisionDetection';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
+import { generateUUID } from '../utils/generateUUID';
 import { eventService } from '../services/firestore';
 import {
   hasCustomFieldsDataForEntry,
@@ -473,7 +474,7 @@ export const TimetableEditing = ({
   // カスタムイベント管理
   const handleAddCustomEvent = (customEvent: Omit<CustomEvent, 'id'>) => {
     const newEvent: CustomEvent = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       ...customEvent,
     };
     setCustomEvents([...customEvents, newEvent]);

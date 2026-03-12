@@ -1,9 +1,26 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import {
+  DndContext,
+  TouchSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+} from '@dnd-kit/core';
+import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, CustomEvent, ConstraintViolation } from '../../types';
 import { calculateBandNumbers } from '../../utils/calculateBandNumbers';
+import { generateUUID } from '../../utils/generateUUID';
 import { useTimetableHelpers } from '../../hooks/useTimetableHelpers';
 import { useConstraintCheck } from '../../hooks/useConstraintCheck';
+import { useTimetableDragDrop } from '../../hooks/useTimetableDragDrop';
+import { useDragHandlers } from '../../hooks/useDragHandlers';
+import { createTimetableCollisionDetection } from '../../utils/timetableCollisionDetection';
+import { TimetableDragOverlay } from '../TimetableDragOverlay';
+import { MobileBottomSheet, type SheetHeight } from './MobileBottomSheet';
+import { MobileBandBank } from './MobileBandBank';
 import { eventService } from '../../services/firestore';
 
 interface MobileTimetableViewProps {
@@ -18,6 +35,11 @@ interface MobileTimetableViewProps {
   onOpenBandBank: () => void;
   onTimetableTypeChange?: (type: 'performance' | 'rehearsal') => void;
   onEventSettingsChange?: (updates: Partial<EventSettings>) => void;
+  // D&D用props
+  bottomSheetHeight: SheetHeight;
+  onBottomSheetHeightChange: (height: SheetHeight) => void;
+  onSelectBand: (bandId: string | null) => void;
+  isLoading?: boolean;
 }
 
 export const MobileTimetableView = ({
@@ -32,6 +54,10 @@ export const MobileTimetableView = ({
   onOpenBandBank,
   onTimetableTypeChange,
   onEventSettingsChange,
+  bottomSheetHeight,
+  onBottomSheetHeightChange,
+  onSelectBand,
+  isLoading = false,
 }: MobileTimetableViewProps) => {
   const [timetableType, setTimetableType] = useState<'performance' | 'rehearsal'>('performance');
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
@@ -90,7 +116,7 @@ export const MobileTimetableView = ({
   const onTimetableChange = timetableType === 'performance' ? onPerformanceTimetableChange : onRehearsalTimetableChange;
 
   // \u30bf\u30a4\u30e0\u30c6\u30fc\u30d6\u30eb\u30d8\u30eb\u30d1\u30fc
-  const { recalculateTimes } = useTimetableHelpers({
+  const { recalculateTimes, calculateTimes } = useTimetableHelpers({
     bands,
     eventSettings,
     timetableType,
@@ -117,6 +143,83 @@ export const MobileTimetableView = ({
   }, [timetable, selectedDate]);
 
   const bandNumbers = useMemo(() => calculateBandNumbers(timetable), [timetable]);
+
+  // --- D&D\u30bb\u30c3\u30c8\u30a2\u30c3\u30d7 ---
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: { delay: 200, tolerance: 8 },
+  });
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: { distance: 8 },
+  });
+  const sensors = useSensors(touchSensor, pointerSensor);
+
+  const customCollisionDetection = useMemo(() => createTimetableCollisionDetection(), []);
+
+  // \u30c0\u30df\u30fc\u306eDailyTimetable\uff08currentTimetable\u304cnull\u306e\u6642\u306e\u30d5\u30a9\u30fc\u30eb\u30d0\u30c3\u30af\uff09
+  const dndTimetable: DailyTimetable = useMemo(() => {
+    if (currentTimetable) return currentTimetable;
+    return {
+      date: selectedDate,
+      startTime: '10:00',
+      entries: [],
+      cools: [{ id: 'empty', number: 1, entries: [] }],
+    };
+  }, [currentTimetable, selectedDate]);
+
+  const {
+    handleBandDropToCool,
+    handleBandDropToFlat,
+    handleCustomEventDropToCool,
+    handleCustomEventDropToFlat,
+    handleEntryReorderInCools,
+    handleEntryReorderFlat,
+  } = useTimetableDragDrop({
+    bands,
+    customEvents,
+    currentTimetable: dndTimetable,
+    onTimetableChange,
+    calculateTimes,
+    recalculateCoolTimes: recalculateTimes,
+  });
+
+  const {
+    overEntryId,
+    dropSucceeded,
+    handleDragStart: baseDragStart,
+    handleDragOver,
+    handleDragEnd: baseDragEnd,
+    getActiveItems,
+  } = useDragHandlers({
+    bands,
+    customEvents,
+    currentTimetable: dndTimetable,
+    onBandDropToCool: handleBandDropToCool,
+    onBandDropToFlat: handleBandDropToFlat,
+    onCustomEventDropToCool: handleCustomEventDropToCool,
+    onCustomEventDropToFlat: handleCustomEventDropToFlat,
+    onEntryReorderInCools: handleEntryReorderInCools,
+    onEntryReorderFlat: handleEntryReorderFlat,
+  });
+
+  // \u30c9\u30e9\u30c3\u30b0\u958b\u59cb\u6642\u306b\u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\u3092\u6700\u5c0f\u5316
+  const handleDragStart = useCallback((event: Parameters<typeof baseDragStart>[0]) => {
+    baseDragStart(event);
+    // \u30d0\u30f3\u30c9\u30d0\u30f3\u30af\u304b\u3089\u30c9\u30e9\u30c3\u30b0\u958b\u59cb\u6642\u3001\u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\u3092peek\u306b\u7e2e\u5c0f
+    const activeId = event.active.id as string;
+    if (activeId.startsWith('band-') || activeId.startsWith('custom-')) {
+      onBottomSheetHeightChange('peek');
+    }
+    // \u30bf\u30c3\u30d7\u914d\u7f6e\u30e2\u30fc\u30c9\u3092\u89e3\u9664
+    if (selectedBandId) onBandPlaced();
+    setSelectedCustomEvent(null);
+  }, [baseDragStart, onBottomSheetHeightChange, selectedBandId, onBandPlaced]);
+
+  // \u30c9\u30e9\u30c3\u30b0\u7d42\u4e86\u6642\u306e\u30e9\u30c3\u30d7
+  const handleDragEnd = useCallback((event: Parameters<typeof baseDragEnd>[0]) => {
+    baseDragEnd(event);
+  }, [baseDragEnd]);
+
+  const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
 
   // \u5236\u7d04\u30c1\u30a7\u30c3\u30af
   const violations = useConstraintCheck(currentTimetable, bands, bandNumbers);
@@ -181,7 +284,7 @@ export const MobileTimetableView = ({
     if (!band) return;
 
     const newEntry: TimetableEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: 'band',
       bandId: selectedBandId,
       order: currentTimetable.cools[coolIndex].entries.length,
@@ -205,7 +308,7 @@ export const MobileTimetableView = ({
     if (!band) return;
 
     const newEntry: TimetableEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: 'band',
       bandId: selectedBandId,
       order: insertIndex,
@@ -230,7 +333,7 @@ export const MobileTimetableView = ({
     if (!selectedCustomEvent || !currentTimetable) return;
 
     const newEntry: TimetableEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: 'custom',
       customEvent: { ...selectedCustomEvent },
       order: currentTimetable.cools[coolIndex].entries.length,
@@ -252,7 +355,7 @@ export const MobileTimetableView = ({
     if (!selectedCustomEvent || !currentTimetable) return;
 
     const newEntry: TimetableEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: 'custom',
       customEvent: { ...selectedCustomEvent },
       order: insertIndex,
@@ -379,7 +482,7 @@ export const MobileTimetableView = ({
     if (!name || isNaN(duration) || duration <= 0) return;
 
     const newEvent: CustomEvent = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name,
       duration,
     };
@@ -403,6 +506,17 @@ export const MobileTimetableView = ({
       : null;
 
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={customCollisionDetection}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      autoScroll={{
+        threshold: { x: 0, y: 0.15 },
+        acceleration: 5,
+      }}
+    >
     <div className="flex flex-col h-full">
       {/* \u914d\u7f6e\u4e2d\u30d0\u30ca\u30fc */}
       <AnimatePresence>
@@ -544,7 +658,12 @@ export const MobileTimetableView = ({
 
       {/* \u30bf\u30a4\u30e0\u30c6\u30fc\u30d6\u30eb\u672c\u4f53 */}
       <div className="flex-1 overflow-y-auto pb-32">
-        {!currentTimetable || !currentTimetable.cools || currentTimetable.cools.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-400 text-sm">{'\u8AAD\u307F\u8FBC\u307F\u4E2D...'}</p>
+          </div>
+        ) : !currentTimetable || !currentTimetable.cools || currentTimetable.cools.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">{'\uD83D\uDCCB'}</div>
             <p className="text-gray-400 text-sm">{'\u30BF\u30A4\u30E0\u30C6\u30FC\u30D6\u30EB\u304C\u307E\u3060\u4F5C\u6210\u3055\u308C\u3066\u3044\u307E\u305B\u3093'}</p>
@@ -570,6 +689,7 @@ export const MobileTimetableView = ({
                 selectedCustomEvent={selectedCustomEvent}
                 expandedEntryId={expandedEntryId}
                 violationsByEntry={violationsByEntry}
+                overEntryId={overEntryId}
                 onToggleExpand={(entryId) =>
                   setExpandedEntryId(prev => prev === entryId ? null : entryId)
                 }
@@ -754,6 +874,40 @@ export const MobileTimetableView = ({
         )}
       </AnimatePresence>
     </div>
+
+      {/* D&D\u30c9\u30e9\u30c3\u30b0\u30aa\u30fc\u30d0\u30fc\u30ec\u30a4 */}
+      <TimetableDragOverlay
+        activeBand={activeBand}
+        activeCustomEvent={activeCustomEvent}
+        activeEntry={activeEntry}
+        bands={bands}
+        dropSucceeded={dropSucceeded}
+      />
+
+      {/* \u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\uff08\u30d0\u30f3\u30c9\u30d0\u30f3\u30af\uff09- DndContext\u5185\u306b\u914d\u7f6e */}
+      <MobileBottomSheet
+        height={bottomSheetHeight}
+        onHeightChange={onBottomSheetHeightChange}
+        title="バンドバンク"
+      >
+        <MobileBandBank
+          bands={bands}
+          timetableType={timetableType}
+          performanceTimetable={performanceTimetable}
+          rehearsalTimetable={rehearsalTimetable}
+          selectedBandId={selectedBandId}
+          onSelectBand={onSelectBand}
+          customEvents={customEvents}
+          selectedCustomEvent={selectedCustomEvent}
+          onSelectCustomEvent={(event) => {
+            setSelectedCustomEvent(event);
+            if (event) onSelectBand(null);
+          }}
+          onDeleteCustomEvent={handleDeleteCustomEvent}
+          onShowCreateCustomEvent={() => setShowCustomEventSheet(true)}
+        />
+      </MobileBottomSheet>
+    </DndContext>
   );
 };
 
@@ -826,6 +980,79 @@ const ViolationList = ({ violations }: { violations: ConstraintViolation[] }) =>
   );
 };
 
+// \u30c9\u30ed\u30c3\u30d7\u53ef\u80fd\u306a\u30a8\u30f3\u30c8\u30ea\u30fc\u30e9\u30c3\u30d1\u30fc
+const SortableEntry = ({
+  entryId,
+  overEntryId,
+  children,
+}: {
+  entryId: string;
+  overEntryId: string | null;
+  children: (props: { dragHandleProps: Record<string, unknown> }) => React.ReactNode;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `entry-${entryId}` });
+
+  const isDropBefore = overEntryId === `entry-${entryId}`;
+  const isDropAfter = overEntryId === `entry-${entryId}-after`;
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    position: isDragging ? 'relative' as const : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      {isDropBefore && (
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-center">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 -ml-1" />
+          <div className="flex-1 h-0.5 bg-emerald-500" />
+        </div>
+      )}
+      {children({ dragHandleProps: { ...listeners, ...attributes, style: { touchAction: 'none' } } })}
+      {isDropAfter && (
+        <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 -ml-1" />
+          <div className="flex-1 h-0.5 bg-emerald-500" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// \u30c9\u30ed\u30c3\u30d7\u53ef\u80fd\u306a\u30af\u30fc\u30eb\u30d8\u30c3\u30c0\u30fc
+const DroppableCoolHeader = ({
+  coolIndex,
+  children,
+}: {
+  coolIndex: number;
+  children: React.ReactNode;
+}) => {
+  const { setNodeRef } = useDroppable({ id: `cool-header-${coolIndex}` });
+  return <div ref={setNodeRef}>{children}</div>;
+};
+
+// \u30c9\u30ed\u30c3\u30d7\u53ef\u80fd\u306a\u30af\u30fc\u30eb\u30be\u30fc\u30f3\uff08\u7a7a\u306e\u30af\u30fc\u30eb\u306e\u672b\u5c3e\uff09
+const DroppableCoolZone = ({
+  coolIndex,
+  children,
+}: {
+  coolIndex: number;
+  children: React.ReactNode;
+}) => {
+  const { setNodeRef } = useDroppable({ id: `cool-droppable-${coolIndex}` });
+  return <div ref={setNodeRef}>{children}</div>;
+};
+
 // \u30af\u30fc\u30eb\u30ab\u30fc\u30c9
 const CoolCard = ({
   cool,
@@ -838,6 +1065,7 @@ const CoolCard = ({
   selectedCustomEvent,
   expandedEntryId,
   violationsByEntry,
+  overEntryId,
   onToggleExpand,
   onPlaceBand,
   onInsertBandAt,
@@ -858,6 +1086,7 @@ const CoolCard = ({
   selectedCustomEvent: CustomEvent | null;
   expandedEntryId: string | null;
   violationsByEntry: Map<string, ConstraintViolation[]>;
+  overEntryId: string | null;
   onToggleExpand: (entryId: string) => void;
   onPlaceBand: () => void;
   onInsertBandAt: (insertIndex: number) => void;
@@ -906,6 +1135,7 @@ const CoolCard = ({
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       {/* \u30af\u30fc\u30eb\u30d8\u30c3\u30c0\u30fc */}
+      <DroppableCoolHeader coolIndex={coolIndex}>
       <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 border-b border-emerald-100">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-emerald-700">
@@ -953,9 +1183,11 @@ const CoolCard = ({
         </div>
         <span className="text-xs text-gray-400">{cool.entries.length}{'\u7D44'}</span>
       </div>
+      </DroppableCoolHeader>
 
       {/* \u30a8\u30f3\u30c8\u30ea\u30fc\u30ea\u30b9\u30c8 */}
       {cool.entries.length === 0 ? (
+        <DroppableCoolZone coolIndex={coolIndex}>
         <div className="px-3 py-4">
           {isPlacing ? (
             <button
@@ -974,7 +1206,9 @@ const CoolCard = ({
             </div>
           )}
         </div>
+        </DroppableCoolZone>
       ) : (
+        <SortableContext items={cool.entries.map(e => `entry-${e.id}`)} strategy={verticalListSortingStrategy}>
         <div>
           {cool.entries.map((entry, entryIndex) => {
             const isBand = entry.type === 'band';
@@ -989,7 +1223,8 @@ const CoolCard = ({
             }, 'low' as 'high' | 'medium' | 'low');
 
             return (
-              <div key={entry.id}>
+              <SortableEntry key={entry.id} entryId={entry.id} overEntryId={overEntryId}>
+                {({ dragHandleProps }) => (<>
                 {/* \u633f\u5165\u30be\u30fc\u30f3 */}
                 <InsertionZone insertIndex={entryIndex} />
 
@@ -1004,6 +1239,22 @@ const CoolCard = ({
                     'border-l-2 border-l-blue-400'
                   ) : ''}`}
                 >
+                  {/* \u30c9\u30e9\u30c3\u30b0\u30cf\u30f3\u30c9\u30eb */}
+                  <div
+                    {...dragHandleProps}
+                    className="flex-shrink-0 touch-manipulation cursor-grab active:cursor-grabbing text-gray-300 active:text-emerald-500 p-0.5 -ml-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="9" cy="6" r="1.5" />
+                      <circle cx="15" cy="6" r="1.5" />
+                      <circle cx="9" cy="12" r="1.5" />
+                      <circle cx="15" cy="12" r="1.5" />
+                      <circle cx="9" cy="18" r="1.5" />
+                      <circle cx="15" cy="18" r="1.5" />
+                    </svg>
+                  </div>
+
                   {/* \u6642\u523b */}
                   <div className="flex-shrink-0 w-12 text-right">
                     <span className="text-xs font-mono text-gray-500">
@@ -1155,7 +1406,8 @@ const CoolCard = ({
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
+                </>)}
+              </SortableEntry>
             );
           })}
 
@@ -1175,6 +1427,7 @@ const CoolCard = ({
             </div>
           )}
         </div>
+        </SortableContext>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { arrayMove } from '@dnd-kit/sortable';
 import type { Band, DailyTimetable, TimetableEntry, Cool, CustomEvent } from '../types';
+import { generateUUID } from '../utils/generateUUID';
 
 interface UseTimetableDragDropProps {
   bands: Band[];
@@ -25,15 +26,18 @@ export const useTimetableDragDrop = ({
   // バンドをクール分けされたタイムテーブルに追加
   const handleBandDropToCool = useCallback((bandId: string, overId: string) => {
     const band = bands.find((b) => b.id === bandId);
-    if (!band) return;
+    if (!band) {
+      return;
+    }
 
     const updatedCools = [...currentTimetable.cools!];
+    let inserted = false;
     
     // クールのドロップゾーンへのドロップ
     if (overId.startsWith('cool-droppable-')) {
       const coolIndex = parseInt(overId.replace('cool-droppable-', ''));
       const newEntry: TimetableEntry = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         type: 'band',
         bandId: band.id,
         order: updatedCools[coolIndex].entries.length,
@@ -43,6 +47,7 @@ export const useTimetableDragDrop = ({
         ...updatedCools[coolIndex],
         entries: [...updatedCools[coolIndex].entries, newEntry],
       };
+      inserted = true;
     } else if (overId.startsWith('entry-')) {
       // entry-{id}-afterの場合の処理
       const isAfter = overId.includes('-after');
@@ -53,7 +58,7 @@ export const useTimetableDragDrop = ({
         const targetIndex = updatedCools[coolIndex].entries.findIndex((e) => `entry-${e.id}` === entryId);
         if (targetIndex !== -1) {
           const newEntry: TimetableEntry = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             type: 'band',
             bandId: band.id,
             order: isAfter ? targetIndex + 1 : targetIndex,
@@ -66,9 +71,14 @@ export const useTimetableDragDrop = ({
             ...updatedCools[coolIndex],
             entries,
           };
+          inserted = true;
           break;
         }
       }
+    }
+
+    if (!inserted) {
+      return;
     }
 
     // 時刻を再計算
@@ -95,7 +105,7 @@ export const useTimetableDragDrop = ({
       if (targetIndex !== -1) {
         const insertIndex = isAfter ? targetIndex + 1 : targetIndex;
         const newEntry: TimetableEntry = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           type: 'band',
           bandId: band.id,
           order: insertIndex,
@@ -115,7 +125,7 @@ export const useTimetableDragDrop = ({
     
     // タイムテーブルの最後に追加
     const newEntry: TimetableEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: 'band',
       bandId: band.id,
       order: currentTimetable.entries.length,
@@ -273,7 +283,7 @@ export const useTimetableDragDrop = ({
     if (overId.startsWith('cool-droppable-')) {
       const coolIndex = parseInt(overId.replace('cool-droppable-', ''));
       const newEntry: TimetableEntry = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         type: 'custom',
         customEvent,
         order: updatedCools[coolIndex].entries.length,
@@ -293,7 +303,7 @@ export const useTimetableDragDrop = ({
         const targetIndex = updatedCools[coolIndex].entries.findIndex((e) => `entry-${e.id}` === entryId);
         if (targetIndex !== -1) {
           const newEntry: TimetableEntry = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             type: 'custom',
             customEvent,
             order: isAfter ? targetIndex + 1 : targetIndex,
@@ -335,7 +345,7 @@ export const useTimetableDragDrop = ({
       if (targetIndex !== -1) {
         const insertIndex = isAfter ? targetIndex + 1 : targetIndex;
         const newEntry: TimetableEntry = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           type: 'custom',
           customEvent,
           order: insertIndex,
@@ -355,7 +365,7 @@ export const useTimetableDragDrop = ({
     
     // タイムテーブルの最後に追加
     const newEntry: TimetableEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: 'custom',
       customEvent,
       order: currentTimetable.entries.length,

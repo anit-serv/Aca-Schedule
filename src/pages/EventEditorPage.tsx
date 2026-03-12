@@ -5,14 +5,14 @@ import { TimetableEditing } from '../components/TimetableEditing';
 import { EventSettingsModal } from '../components/EventSettingsModal';
 import { bandService, timetableService, eventService, collaboratorService } from '../services/firestore';
 import { timetableToCSV, downloadCSV } from '../utils/timetableExport';
+import { generateUUID } from '../utils/generateUUID';
 import { useAuth } from '../hooks/useAuth';
 import { useMobileDetect } from '../hooks/useMobileDetect';
 import { MobileHeader } from '../components/mobile/MobileHeader';
 import { MobileTabBar } from '../components/mobile/MobileTabBar';
-import { MobileBottomSheet, type SheetHeight } from '../components/mobile/MobileBottomSheet';
+import { type SheetHeight } from '../components/mobile/MobileBottomSheet';
 import { MobileBandManagement } from '../components/mobile/MobileBandManagement';
 import { MobileTimetableView } from '../components/mobile/MobileTimetableView';
-import { MobileBandBank } from '../components/mobile/MobileBandBank';
 import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry } from '../types';
 
 // モードを定義するための型
@@ -31,6 +31,7 @@ export const EventEditorPage = () => {
   const [bands, setBands] = useState<Band[]>([]);
   const [eventSettings, setEventSettings] = useState<EventSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [bandsLoaded, setBandsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // タイムテーブルの状態管理
@@ -60,8 +61,6 @@ export const EventEditorPage = () => {
   const [showMobileSettings, setShowMobileSettings] = useState(false);
   // モバイル用: 選択中バンドID（タップ to プレース）
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
-  // モバイル用: MobileTimetableViewで選択中のタイムテーブルタイプ
-  const [mobileTimetableType, setMobileTimetableType] = useState<'performance' | 'rehearsal'>('performance');
 
   // オーナー権限移譲リクエストがある場合、自動的に通知モーダルを表示
   useEffect(() => {
@@ -141,6 +140,7 @@ export const EventEditorPage = () => {
       eventId,
       (fetchedBands) => {
         setBands(fetchedBands);
+        setBandsLoaded(true);
         // 初回読み込み時: バンドが1つ以上あればタイムテーブル編集画面を開く
         if (!initialModeSetRef.current) {
           initialModeSetRef.current = true;
@@ -434,7 +434,7 @@ export const EventEditorPage = () => {
             date,
             startTime: '10:00',
             cools: [{
-              id: crypto.randomUUID(),
+              id: generateUUID(),
               number: baseCoolNumber,
               entries: [],
             }],
@@ -494,7 +494,7 @@ export const EventEditorPage = () => {
           dailyTimetable = {
             ...dailyTimetable,
             cools: [{
-              id: crypto.randomUUID(),
+              id: generateUUID(),
               number: baseCoolNumber,
               entries: [],
             }],
@@ -503,7 +503,7 @@ export const EventEditorPage = () => {
         
         // 新しいバンドをエントリーとして作成
         const newEntries = bandsToAdd.map((band) => ({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           type: 'band' as const,
           bandId: band.id,
           startTime: '',
@@ -595,7 +595,7 @@ export const EventEditorPage = () => {
       // このクールのリハーサルエントリを作成
       const rehearsalEntries: TimetableEntry[] = bandIdsInCool.map(bandId => {
         return {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           type: 'band' as const,
           bandId: bandId,
           startTime: '',
@@ -1093,6 +1093,7 @@ export const EventEditorPage = () => {
               bands={bands}
               eventSettings={eventSettings}
               onBandsChange={handleBandsChange}
+              isLoading={isLoading || !bandsLoaded}
             />
           ) : (
             <MobileTimetableView
@@ -1105,31 +1106,16 @@ export const EventEditorPage = () => {
               selectedBandId={selectedBandId}
               onBandPlaced={() => setSelectedBandId(null)}
               onOpenBandBank={() => setBottomSheetHeight(bottomSheetHeight === 'peek' ? 'half' : 'peek')}
-              onTimetableTypeChange={setMobileTimetableType}
               onEventSettingsChange={(updates) => {
                 setEventSettings(prev => prev ? { ...prev, ...updates } : null);
               }}
+              bottomSheetHeight={bottomSheetHeight}
+              onBottomSheetHeightChange={setBottomSheetHeight}
+              onSelectBand={setSelectedBandId}
+              isLoading={isLoading || !bandsLoaded}
             />
           )}
         </main>
-
-        {/* ボトムシート（タイムテーブルモード時のバンドバンク） */}
-        {mode === 'timetable-editing' && (
-          <MobileBottomSheet
-            height={bottomSheetHeight}
-            onHeightChange={setBottomSheetHeight}
-            title="バンドバンク"
-          >
-            <MobileBandBank
-              bands={bands}
-              timetableType={mobileTimetableType}
-              performanceTimetable={performanceTimetable}
-              rehearsalTimetable={rehearsalTimetable}
-              selectedBandId={selectedBandId}
-              onSelectBand={setSelectedBandId}
-            />
-          </MobileBottomSheet>
-        )}
 
         {/* モバイルタブバー */}
         <MobileTabBar mode={mode} onModeChange={setMode} />

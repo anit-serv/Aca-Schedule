@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { Cool, DailyTimetable, Timetable, EventSettings } from '../types';
+import { generateUUID } from '../utils/generateUUID';
 
 interface UseCoolManagementProps {
   timetableType: 'performance' | 'rehearsal';
@@ -75,14 +76,14 @@ export const useCoolManagement = ({
         // クールが1つもない場合は新規作成（既存のentriesがあれば最初のクールに移行）
         const existingEntries = currentTimetable.entries || [];
         updatedCools.push({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           number: baseNumber,
           entries: existingEntries,
         });
         // 2つ目以降のクールを追加
         for (let i = 1; i < newCount; i++) {
           updatedCools.push({
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             number: baseNumber + i,
             entries: [],
           });
@@ -92,7 +93,7 @@ export const useCoolManagement = ({
         updatedCools = [...currentCools];
         for (let i = currentCount; i < newCount; i++) {
           updatedCools.push({
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             number: baseNumber + i,
             entries: [],
           });

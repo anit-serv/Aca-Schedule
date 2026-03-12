@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 
-const MOBILE_BREAKPOINT = 768;
+const MOBILE_BREAKPOINT = 1024;
 
 /**
  * モバイルデバイス検出フック
- * ウィンドウ幅が768px未満の場合にtrueを返す
+ * ウィンドウ幅が1024px未満の場合にtrueを返す（タブレット含む）
  */
 export const useMobileDetect = (): boolean => {
   const [isMobile, setIsMobile] = useState(() => {

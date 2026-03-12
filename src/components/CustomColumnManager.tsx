@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { CustomFieldsSettings, CustomColumn, CustomColumnBindingType } from '../types';
+import { generateUUID } from '../utils/generateUUID';
 import {
   getTypeData,
   addColumn,
@@ -40,7 +41,7 @@ export const CustomColumnManager = ({
     if (!newColumnName.trim()) return;
 
     const settings = customFields || createEmptyCustomFieldsSettings();
-    const columnId = crypto.randomUUID();
+    const columnId = generateUUID();
     const columnData = {
       id: columnId,
       name: newColumnName.trim(),
