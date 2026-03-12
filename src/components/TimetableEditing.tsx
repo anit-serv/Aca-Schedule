@@ -17,7 +17,7 @@ import { CustomColumnManager } from './CustomColumnManager';
 import { useCoolManagement } from '../hooks/useCoolManagement';
 import { useTimetableDragDrop } from '../hooks/useTimetableDragDrop';
 import { useTimetableHelpers } from '../hooks/useTimetableHelpers';
-import { useConstraintCheck } from '../hooks/useConstraintCheck';
+import { useAllViolations } from '../hooks/useConstraintCheck';
 import { useDragHandlers } from '../hooks/useDragHandlers';
 import { createTimetableCollisionDetection } from '../utils/timetableCollisionDetection';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
@@ -246,8 +246,8 @@ export const TimetableEditing = ({
   // バンド番号の計算（本番/リハごとに、日付をまたいで連番）
   const bandNumbers = useMemo(() => calculateBandNumbers(timetable), [timetable]);
 
-  // 制約チェック（bandNumbersを使用するため、この順序が必要）
-  const violations = useConstraintCheck(currentTimetable, bands, bandNumbers);
+  // 制約チェック（本番・リハーサル両方の全日程）
+  const violations = useAllViolations(performanceTimetable, rehearsalTimetable, bands);
 
   // 読み取り専用モード判定（クール直前リハーサルの場合、リハーサル編集は読み取り専用）
   const isReadOnly = (timetableType === 'rehearsal' && eventSettings.rehearsalType === 'cool-pre-rehearsal') || isCustomMode;
@@ -486,22 +486,53 @@ export const TimetableEditing = ({
 
   // 制約違反クリック時にエントリーまでスクロール＆ハイライト
   const handleViolationClick = useCallback((violation: ConstraintViolation) => {
-    const entryId = violation.entryId;
-    const row = document.querySelector(`[data-entry-id="${entryId}"]`);
-    if (row) {
-      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // グラデーション点滅ハイライト
-      row.classList.remove('violation-highlight');
-      // reflow を強制して再アニメーション
-      void (row as HTMLElement).offsetWidth;
-      row.classList.add('violation-highlight');
-      const onEnd = () => {
+    // メッセージから本番/リハを判定
+    const isRehearsal = violation.message.startsWith('[リハ');
+    const targetType = isRehearsal ? 'rehearsal' : 'performance';
+    const targetDate = violation.date;
+
+    // タイムテーブルタイプや日付が異なる場合は切り替える
+    const needsTypeChange = timetableType !== targetType;
+    const needsDateChange = selectedDate !== targetDate;
+
+    if (needsTypeChange || needsDateChange) {
+      if (needsTypeChange) {
+        setTimetableType(targetType);
+      }
+      if (needsDateChange) {
+        setSelectedDate(targetDate);
+      }
+      // 状態変更後にスクロール
+      setTimeout(() => {
+        const row = document.querySelector(`[data-entry-id="${violation.entryId}"]`);
+        if (row) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          row.classList.remove('violation-highlight');
+          void (row as HTMLElement).offsetWidth;
+          row.classList.add('violation-highlight');
+          const onEnd = () => {
+            row.classList.remove('violation-highlight');
+            row.removeEventListener('animationend', onEnd);
+          };
+          row.addEventListener('animationend', onEnd);
+        }
+      }, 100);
+    } else {
+      // 同じタイムテーブル内の場合は即座にスクロール
+      const row = document.querySelector(`[data-entry-id="${violation.entryId}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.classList.remove('violation-highlight');
-        row.removeEventListener('animationend', onEnd);
-      };
-      row.addEventListener('animationend', onEnd);
+        void (row as HTMLElement).offsetWidth;
+        row.classList.add('violation-highlight');
+        const onEnd = () => {
+          row.classList.remove('violation-highlight');
+          row.removeEventListener('animationend', onEnd);
+        };
+        row.addEventListener('animationend', onEnd);
+      }
     }
-  }, []);
+  }, [timetableType, selectedDate]);
 
   // カスタムフィールドデータがあるエントリーの削除確認
   const handleRemoveEntryWithConfirm = useCallback((entryId: string, coolIndex?: number) => {

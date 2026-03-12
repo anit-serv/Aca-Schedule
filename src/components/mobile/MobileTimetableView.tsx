@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+﻿import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
@@ -14,7 +14,7 @@ import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEnt
 import { calculateBandNumbers } from '../../utils/calculateBandNumbers';
 import { generateUUID } from '../../utils/generateUUID';
 import { useTimetableHelpers } from '../../hooks/useTimetableHelpers';
-import { useConstraintCheck } from '../../hooks/useConstraintCheck';
+import { useAllViolations } from '../../hooks/useConstraintCheck';
 import { useTimetableDragDrop } from '../../hooks/useTimetableDragDrop';
 import { useDragHandlers } from '../../hooks/useDragHandlers';
 import { createTimetableCollisionDetection } from '../../utils/timetableCollisionDetection';
@@ -241,7 +241,7 @@ export const MobileTimetableView = ({
   const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
 
   // \u5236\u7d04\u30c1\u30a7\u30c3\u30af
-  const violations = useConstraintCheck(currentTimetable, bands, bandNumbers);
+  const violations = useAllViolations(performanceTimetable, rehearsalTimetable, bands);
 
   // \u30a8\u30f3\u30c8\u30ea\u30fcID\u3054\u3068\u306e\u9055\u53cdMap
   const violationsByEntry = useMemo(() => {
@@ -268,6 +268,57 @@ export const MobileTimetableView = ({
     });
     return uniqueIds.size;
   }, [violations]);
+
+  // 最も重大な違反の判定
+  const mostSevereSeverity = useMemo(() => {
+    if (violations.some(v => v.severity === 'high')) return 'high';
+    if (violations.some(v => v.severity === 'medium')) return 'medium';
+    if (violations.some(v => v.severity === 'low')) return 'low';
+    return null;
+  }, [violations]);
+
+  // 制約違反クリック時にシートを閉じて該当エントリーにスクロール＆ハイライト
+  const handleViolationClick = useCallback((violation: ConstraintViolation) => {
+    setShowViolationSheet(false);
+
+    // メッセージから本番/リハを判定
+    const isRehearsal = violation.message.startsWith('[リハ');
+    const targetType = isRehearsal ? 'rehearsal' : 'performance';
+    const targetDate = violation.date;
+
+    // タイムテーブルタイプや日付が異なる場合は切り替える
+    const needsTypeChange = timetableType !== targetType;
+    const needsDateChange = selectedDate !== targetDate;
+
+    const scrollToEntry = () => {
+      const row = document.querySelector(`[data-entry-id="${violation.entryId}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.remove('violation-highlight');
+        void (row as HTMLElement).offsetWidth;
+        row.classList.add('violation-highlight');
+        const onEnd = () => {
+          row.classList.remove('violation-highlight');
+          row.removeEventListener('animationend', onEnd);
+        };
+        row.addEventListener('animationend', onEnd);
+      }
+    };
+
+    if (needsTypeChange || needsDateChange) {
+      if (needsTypeChange) {
+        handleTimetableTypeChange(targetType);
+      }
+      if (needsDateChange) {
+        setSelectedDate(targetDate);
+      }
+      // 状態変更＋シート閉じ後にスクロール
+      setTimeout(scrollToEntry, 400);
+    } else {
+      // 同じタイムテーブル内の場合はシート閉じ後にスクロール
+      setTimeout(scrollToEntry, 350);
+    }
+  }, [timetableType, selectedDate, handleTimetableTypeChange]);
 
   // \u65e5\u4ed8\u30d5\u30a9\u30fc\u30de\u30c3\u30c8
   const formatDate = (dateStr: string) => {
@@ -656,11 +707,15 @@ export const MobileTimetableView = ({
               {uniqueViolationCount > 0 && (
                 <button
                   onClick={() => setShowViolationSheet(true)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600 text-[10px] font-medium"
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                    mostSevereSeverity === 'high' ? 'bg-rose-50 border border-rose-200 text-rose-600' :
+                    mostSevereSeverity === 'medium' ? 'bg-amber-50 border border-amber-200 text-amber-600' :
+                    'bg-sky-50 border border-sky-200 text-sky-600'
+                  }`}
                 >
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
+                  <span className="text-xs">
+                    {mostSevereSeverity === 'high' ? '🚫' : mostSevereSeverity === 'medium' ? '⚠️' : 'ℹ️'}
+                  </span>
                   {uniqueViolationCount}
                 </button>
               )}
@@ -915,7 +970,7 @@ export const MobileTimetableView = ({
                 <h3 className="text-sm font-bold text-gray-900">{'\u5236\u7D04\u9055\u53CD'} ({uniqueViolationCount}{'\u4EF6'})</h3>
               </div>
               <div className="overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
-                <ViolationList violations={violations} />
+                <ViolationList violations={violations} onViolationClick={handleViolationClick} />
               </div>
             </motion.div>
           </motion.div>
@@ -969,9 +1024,11 @@ export const MobileTimetableView = ({
   );
 };
 
-// \u9055\u53cd\u30ea\u30b9\u30c8\u30b3\u30f3\u30dd\u30fc\u30cd\u30f3\u30c8
-const ViolationList = ({ violations }: { violations: ConstraintViolation[] }) => {
-  // \u4e00\u610f\u306e\u9055\u53cd\u306e\u307f\u3092\u62bd\u51fa
+// 違反リストコンポーネント（アコーディオン形式）
+const ViolationList = ({ violations, onViolationClick }: { violations: ConstraintViolation[]; onViolationClick?: (v: ConstraintViolation) => void }) => {
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['performance', 'rehearsal']));
+
+  // 一意の違反のみを抽出
   const uniqueViolations = useMemo(() => {
     const map = new Map<string, ConstraintViolation>();
     violations.forEach(v => {
@@ -988,52 +1045,126 @@ const ViolationList = ({ violations }: { violations: ConstraintViolation[] }) =>
     return Array.from(map.values());
   }, [violations]);
 
-  const highViolations = uniqueViolations.filter(v => v.severity === 'high');
-  const mediumViolations = uniqueViolations.filter(v => v.severity === 'medium');
-  const lowViolations = uniqueViolations.filter(v => v.severity === 'low');
+  // 本番・リハに分類
+  const performanceViolations = uniqueViolations.filter(v => v.message.startsWith('[本番'));
+  const rehearsalViolations = uniqueViolations.filter(v => v.message.startsWith('[リハ'));
 
-  const renderViolation = (v: ConstraintViolation) => {
-    const severityStyles = {
-      high: 'bg-red-50 border-red-200 text-red-700',
-      medium: 'bg-amber-50 border-amber-200 text-amber-700',
-      low: 'bg-blue-50 border-blue-200 text-blue-700',
-    };
-    const severityIcons = {
-      high: '\u26A0\uFE0F',
-      medium: '\u26A1',
-      low: '\u2139\uFE0F',
-    };
+  // 最も重大な違反を判定
+  const getMostSeverity = (list: ConstraintViolation[]): 'high' | 'medium' | 'low' | null => {
+    if (list.some(v => v.severity === 'high')) return 'high';
+    if (list.some(v => v.severity === 'medium')) return 'medium';
+    if (list.some(v => v.severity === 'low')) return 'low';
+    return null;
+  };
+
+  const performanceSeverity = getMostSeverity(performanceViolations);
+  const rehearsalSeverity = getMostSeverity(rehearsalViolations);
+
+  // 重大度ごとの色・記号
+  const severityConfig = {
+    high: { icon: '🚫', bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-600' },
+    medium: { icon: '⚠️', bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-600' },
+    low: { icon: 'ℹ️', bg: 'bg-sky-100', border: 'border-sky-300', text: 'text-sky-600' },
+  };
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
+  };
+
+  // 重大度でソートしたviolationsを返す
+  const sortByPriority = (list: ConstraintViolation[]) => {
+    const priority = { high: 0, medium: 1, low: 2 };
+    return [...list].sort((a, b) => priority[a.severity] - priority[b.severity]);
+  };
+
+  // セクションのレンダリング
+  const renderSection = (
+    title: string,
+    sectionKey: string,
+    sectionViolations: ConstraintViolation[],
+    severity: 'high' | 'medium' | 'low' | null
+  ) => {
+    if (sectionViolations.length === 0) return null;
+
+    const config = severity ? severityConfig[severity] : severityConfig.medium;
+    const isExpanded = expandedSections.has(sectionKey);
+    const sorted = sortByPriority(sectionViolations);
+    const highCount = sectionViolations.filter(v => v.severity === 'high').length;
+    const mediumCount = sectionViolations.filter(v => v.severity === 'medium').length;
+    const lowCount = sectionViolations.filter(v => v.severity === 'low').length;
 
     return (
-      <div
-        key={v.id}
-        className={`rounded-lg border px-3 py-2 text-xs ${severityStyles[v.severity]}`}
-      >
-        <span>{severityIcons[v.severity]} {v.message}</span>
+      <div className="mb-3">
+        <button
+          onClick={() => toggleSection(sectionKey)}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg ${config.bg} ${config.border} border active:opacity-80`}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{config.icon}</span>
+            <span className={`font-bold text-sm ${config.text}`}>{title}</span>
+            <span className="text-[10px] text-gray-500">
+              ({sectionViolations.length}件)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 text-[9px]">
+              {highCount > 0 && <span className="text-rose-600">🚫{highCount}</span>}
+              {mediumCount > 0 && <span className="text-amber-600">⚠️{mediumCount}</span>}
+              {lowCount > 0 && <span className="text-sky-600">ℹ️{lowCount}</span>}
+            </div>
+            <motion.span
+              animate={{ rotate: isExpanded ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="text-xs"
+            >▼</motion.span>
+          </div>
+        </button>
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2 space-y-1.5 pl-1">
+                {sorted.map((v) => {
+                  const itemConfig = severityConfig[v.severity];
+                  return (
+                    <div
+                      key={v.id}
+                      className={`text-xs px-2 py-1.5 rounded cursor-pointer active:opacity-70 ${
+                        v.severity === 'high' ? 'bg-rose-50 text-rose-700' :
+                        v.severity === 'medium' ? 'bg-amber-50 text-amber-700' :
+                        'bg-sky-50 text-sky-700'
+                      }`}
+                      onClick={() => onViolationClick?.(v)}
+                    >
+                      {itemConfig.icon} {v.message}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   };
 
   return (
-    <div className="space-y-2">
-      {highViolations.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-bold text-red-600 uppercase">{'\u91CD\u5927'} ({highViolations.length})</p>
-          {highViolations.map(renderViolation)}
-        </div>
-      )}
-      {mediumViolations.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-bold text-amber-600 uppercase">{'\u6CE8\u610F'} ({mediumViolations.length})</p>
-          {mediumViolations.map(renderViolation)}
-        </div>
-      )}
-      {lowViolations.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-bold text-blue-600 uppercase">{'\u60C5\u5831'} ({lowViolations.length})</p>
-          {lowViolations.map(renderViolation)}
-        </div>
-      )}
+    <div>
+      {renderSection('本番', 'performance', performanceViolations, performanceSeverity)}
+      {renderSection('リハーサル', 'rehearsal', rehearsalViolations, rehearsalSeverity)}
     </div>
   );
 };
@@ -1288,6 +1419,7 @@ const CoolCard = ({
 
                 {/* \u30a8\u30f3\u30c8\u30ea\u30fc\u884c */}
                 <div
+                  data-entry-id={entry.id}
                   onClick={() => onToggleExpand(entry.id)}
                   className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
                     isExpanded ? 'bg-gray-50' : 'active:bg-gray-50'
