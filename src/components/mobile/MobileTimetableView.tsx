@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, CustomEvent, ConstraintViolation } from '../../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, CustomEvent, ConstraintViolation, CustomFieldsSettings } from '../../types';
 import { calculateBandNumbers } from '../../utils/calculateBandNumbers';
 import { generateUUID } from '../../utils/generateUUID';
 import { useTimetableHelpers } from '../../hooks/useTimetableHelpers';
@@ -19,6 +19,8 @@ import { useTimetableDragDrop } from '../../hooks/useTimetableDragDrop';
 import { useDragHandlers } from '../../hooks/useDragHandlers';
 import { createTimetableCollisionDetection } from '../../utils/timetableCollisionDetection';
 import { TimetableDragOverlay } from '../TimetableDragOverlay';
+import { CustomFieldsTable } from '../CustomFieldsTable';
+import { CustomColumnManager } from '../CustomColumnManager';
 import { MobileBottomSheet, type SheetHeight } from './MobileBottomSheet';
 import { MobileBandBank } from './MobileBandBank';
 import { eventService } from '../../services/firestore';
@@ -69,6 +71,8 @@ export const MobileTimetableView = ({
   const [selectedCustomEvent, setSelectedCustomEvent] = useState<CustomEvent | null>(null);
   // \u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u30ea\u30b9\u30c8
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
+  // \u30ab\u30b9\u30bf\u30e0\u30e2\u30fc\u30c9\uff08\u30c6\u30fc\u30d6\u30eb\u8868\u793a\uff09
+  const [isCustomMode, setIsCustomMode] = useState(false);
 
   // eventSettings.customEvents\u304c\u5916\u90e8\u304b\u3089\u5909\u66f4\u3055\u308c\u305f\u3089\u30ed\u30fc\u30ab\u30eb\u72b6\u614b\u3092\u540c\u671f
   useEffect(() => {
@@ -144,7 +148,22 @@ export const MobileTimetableView = ({
 
   const bandNumbers = useMemo(() => calculateBandNumbers(timetable), [timetable]);
 
-  // --- D&D\u30bb\u30c3\u30c8\u30a2\u30c3\u30d7 ---
+  // カスタムフィールド変更ハンドラ
+  const handleCustomFieldsChange = useCallback(
+    async (customFields: CustomFieldsSettings) => {
+      try {
+        await eventService.updateEvent(eventSettings.id, { customFields });
+        if (onEventSettingsChange) {
+          onEventSettingsChange({ customFields });
+        }
+      } catch (error) {
+        console.error('カスタムフィールドの保存に失敗しました:', error);
+      }
+    },
+    [eventSettings.id, onEventSettingsChange]
+  );
+
+  // --- D&Dセットアップ ---
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 200, tolerance: 8 },
   });
@@ -619,6 +638,20 @@ export const MobileTimetableView = ({
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* \u30ab\u30b9\u30bf\u30e0\u30e2\u30fc\u30c9\u30c8\u30b0\u30eb */}
+              <button
+                onClick={() => setIsCustomMode(!isCustomMode)}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                  isCustomMode
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                    : 'bg-gray-100 text-gray-500 border border-gray-200'
+                }`}
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                {'\u30C6\u30FC\u30D6\u30EB'}
+              </button>
               {/* \u9055\u53cd\u30d0\u30c3\u30b8 */}
               {uniqueViolationCount > 0 && (
                 <button
@@ -631,26 +664,28 @@ export const MobileTimetableView = ({
                   {uniqueViolationCount}
                 </button>
               )}
-              {/* \u30af\u30fc\u30eb\u6570\u30b3\u30f3\u30c8\u30ed\u30fc\u30eb */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-500">{'\u30AF\u30FC\u30EB'}:</span>
-                <button
-                  onClick={() => handleCoolCountChange(currentTimetable.cools.length - 1)}
-                  disabled={currentTimetable.cools.length <= 1}
-                  className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-sm font-bold flex items-center justify-center disabled:opacity-30 active:bg-gray-200"
-                >
-                  {'\u2212'}
-                </button>
-                <span className="text-xs font-medium text-gray-700 w-4 text-center">
-                  {currentTimetable.cools.length}
-                </span>
-                <button
-                  onClick={() => handleCoolCountChange(currentTimetable.cools.length + 1)}
-                  className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold flex items-center justify-center active:bg-emerald-200"
-                >
-                  +
-                </button>
-              </div>
+              {/* \u30af\u30fc\u30eb\u6570\u30b3\u30f3\u30c8\u30ed\u30fc\u30eb\uff08\u30ab\u30b9\u30bf\u30e0\u30e2\u30fc\u30c9\u6642\u306f\u975e\u8868\u793a\uff09 */}
+              {!isCustomMode && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500">{'\u30AF\u30FC\u30EB'}:</span>
+                  <button
+                    onClick={() => handleCoolCountChange(currentTimetable.cools.length - 1)}
+                    disabled={currentTimetable.cools.length <= 1}
+                    className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-sm font-bold flex items-center justify-center disabled:opacity-30 active:bg-gray-200"
+                  >
+                    {'\u2212'}
+                  </button>
+                  <span className="text-xs font-medium text-gray-700 w-4 text-center">
+                    {currentTimetable.cools.length}
+                  </span>
+                  <button
+                    onClick={() => handleCoolCountChange(currentTimetable.cools.length + 1)}
+                    className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold flex items-center justify-center active:bg-emerald-200"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -673,6 +708,19 @@ export const MobileTimetableView = ({
             >
               {'\u30D0\u30F3\u30C9\u3092\u914D\u7F6E\u3059\u308B'}
             </button>
+          </div>
+        ) : isCustomMode ? (
+          <div className="px-2 py-2">
+            <CustomFieldsTable
+              currentTimetable={currentTimetable}
+              bands={bands}
+              timetable={timetable}
+              eventSettings={eventSettings}
+              timetableType={timetableType}
+              selectedDate={selectedDate}
+              onCustomFieldsChange={handleCustomFieldsChange}
+              readOnly={false}
+            />
           </div>
         ) : (
           <div className="px-3 py-3 space-y-3">
@@ -884,28 +932,38 @@ export const MobileTimetableView = ({
         dropSucceeded={dropSucceeded}
       />
 
-      {/* \u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\uff08\u30d0\u30f3\u30c9\u30d0\u30f3\u30af\uff09- DndContext\u5185\u306b\u914d\u7f6e */}
+      {/* ボトムシート（バンドバンク / 列管理）- DndContext内に配置 */}
       <MobileBottomSheet
         height={bottomSheetHeight}
         onHeightChange={onBottomSheetHeightChange}
-        title="バンドバンク"
+        title={isCustomMode ? '列管理' : 'バンドバンク'}
       >
-        <MobileBandBank
-          bands={bands}
-          timetableType={timetableType}
-          performanceTimetable={performanceTimetable}
-          rehearsalTimetable={rehearsalTimetable}
-          selectedBandId={selectedBandId}
-          onSelectBand={onSelectBand}
-          customEvents={customEvents}
-          selectedCustomEvent={selectedCustomEvent}
-          onSelectCustomEvent={(event) => {
-            setSelectedCustomEvent(event);
-            if (event) onSelectBand(null);
-          }}
-          onDeleteCustomEvent={handleDeleteCustomEvent}
-          onShowCreateCustomEvent={() => setShowCustomEventSheet(true)}
-        />
+        {isCustomMode ? (
+          <CustomColumnManager
+            customFields={eventSettings.customFields}
+            timetableType={timetableType}
+            onCustomFieldsChange={handleCustomFieldsChange}
+            applyToBoth={false}
+            mobile
+          />
+        ) : (
+          <MobileBandBank
+            bands={bands}
+            timetableType={timetableType}
+            performanceTimetable={performanceTimetable}
+            rehearsalTimetable={rehearsalTimetable}
+            selectedBandId={selectedBandId}
+            onSelectBand={onSelectBand}
+            customEvents={customEvents}
+            selectedCustomEvent={selectedCustomEvent}
+            onSelectCustomEvent={(event) => {
+              setSelectedCustomEvent(event);
+              if (event) onSelectBand(null);
+            }}
+            onDeleteCustomEvent={handleDeleteCustomEvent}
+            onShowCreateCustomEvent={() => setShowCustomEventSheet(true)}
+          />
+        )}
       </MobileBottomSheet>
     </DndContext>
   );

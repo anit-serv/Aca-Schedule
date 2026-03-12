@@ -16,6 +16,8 @@ interface CustomColumnManagerProps {
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
   /** trueの場合、操作をperformanceとrehearsal両方に適用 */
   applyToBoth?: boolean;
+  /** モバイル表示用（全幅、ボーダー/シャドウなし） */
+  mobile?: boolean;
 }
 
 export const CustomColumnManager = ({
@@ -23,6 +25,7 @@ export const CustomColumnManager = ({
   timetableType,
   onCustomFieldsChange,
   applyToBoth = false,
+  mobile = false,
 }: CustomColumnManagerProps) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
@@ -116,11 +119,11 @@ export const CustomColumnManager = ({
   };
 
   return (
-    <div className="w-72 bg-white rounded-lg border border-gray-200 flex flex-col h-full overflow-hidden shadow">
+    <div className={mobile ? 'w-full flex flex-col h-full overflow-hidden' : 'w-72 bg-white rounded-lg border border-gray-200 flex flex-col h-full overflow-hidden shadow'}>
       {/* ヘッダー */}
-      <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-gray-700">列管理</h3>
-        <p className="text-xs text-gray-500 mt-0.5">
+      <div className={mobile ? 'px-4 py-2 flex-shrink-0' : 'px-4 py-3 border-b border-gray-200 flex-shrink-0'}>
+        {!mobile && <h3 className="text-sm font-semibold text-gray-700">列管理</h3>}
+        <p className="text-xs text-gray-500">
           {applyToBoth ? '本番+リハ共通' : (timetableType === 'performance' ? '本番用' : 'リハ用')} · {columns.length}列
         </p>
       </div>

@@ -72,6 +72,16 @@ export const CustomFieldsTable = ({
   const tableRef = useRef<HTMLDivElement>(null);
   // ドラッグ開始位置（結合セル情報含む）
   const dragStartRef = useRef<{ seq: number; colId: string; mergedEndSeq?: number; startY: number } | null>(null);
+  // タッチ長押し検出用
+  const touchStartRef = useRef<{ seq: number; colId: string; col: CustomColumn; x: number; y: number; timer: ReturnType<typeof setTimeout> | null } | null>(null);
+  // タッチ長押し待機中フラグ（ネイティブテキスト選択を抑制するため）
+  const [isTouchPending, setIsTouchPending] = useState(false);
+  // タッチ端末で編集中のセル（ダブルタップ後のみ入力可能）
+  const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
+  // タッチデバイスかどうかの検出
+  const isTouchDevice = useRef(false);
+  // ダブルタップ検出用：前回タップされたセルキー
+  const lastTappedCellRef = useRef<string | null>(null);
   // input要素のrefマップ
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   // IME変換中フラグ（キー: "seq:colId"）
@@ -394,6 +404,135 @@ export const CustomFieldsTable = ({
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
   }, [isDragging]);
 
+  // ===== タッチ操作による範囲選択 =====
+
+  const handleTouchStart = useCallback(
+    (seq: number, colId: string, col: CustomColumn, e: React.TouchEvent) => {
+      if (isReadOnly) return;
+      if (col.bindingType !== 'sequence') return;
+
+      isTouchDevice.current = true;
+      const touch = e.touches[0];
+      setIsTouchPending(true);
+      const timer = setTimeout(() => {
+        // 長押し確定
+        if (navigator.vibrate) navigator.vibrate(50);
+
+        // ネイティブテキスト選択をクリア
+        window.getSelection()?.removeAllRanges();
+
+        // 結合セルかチェック
+        const cellData = getCellData(customFields, timetableType, selectedDate, col, seq, '');
+        const isMergedCell = cellData.rowSpan && cellData.rowSpan > 1;
+        const mergedEndSeq = isMergedCell ? seq + (cellData.rowSpan || 1) - 1 : undefined;
+
+        if (isMergedCell) {
+          // 結合セルの長押し → コンテキストメニュー表示
+          setContextMenu({ x: touch.clientX, y: touch.clientY, seq, colId });
+        } else {
+          // 通常セルの長押し → 範囲選択モード開始
+          setSelection({ colId, startSeq: seq, endSeq: seq });
+          dragStartRef.current = { seq, colId, mergedEndSeq, startY: touch.clientY };
+          setToolbarY(touch.clientY);
+          setIsDragging(true);
+        }
+
+        // inputからフォーカスを外す（キーボードを閉じる）
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+
+        setIsTouchPending(false);
+        touchStartRef.current = null;
+      }, 500);
+
+      touchStartRef.current = { seq, colId, col, x: touch.clientX, y: touch.clientY, timer };
+    },
+    [isReadOnly, customFields, timetableType, selectedDate]
+  );
+
+  const handleTouchMoveCell = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchStartRef.current) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartRef.current.x;
+      const dy = touch.clientY - touchStartRef.current.y;
+      // 8px以上動いたら長押しキャンセル（通常スクロール）
+      if (Math.sqrt(dx * dx + dy * dy) > 8) {
+        if (touchStartRef.current.timer) {
+          clearTimeout(touchStartRef.current.timer);
+        }
+        touchStartRef.current = null;
+        setIsTouchPending(false);
+      }
+    },
+    []
+  );
+
+  const handleTouchEndCell = useCallback(() => {
+    if (touchStartRef.current?.timer) {
+      clearTimeout(touchStartRef.current.timer);
+    }
+    touchStartRef.current = null;
+    setIsTouchPending(false);
+  }, []);
+
+  // タッチドラッグで範囲拡張（isDragging時のみグローバルリスナーを登録）
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+
+      if (e.cancelable) e.preventDefault(); // スクロール抑制
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!el) return;
+
+      const td = el.closest('td[data-seq][data-col-id]');
+      if (!td) return;
+
+      const seqAttr = td.getAttribute('data-seq');
+      const colIdAttr = td.getAttribute('data-col-id');
+      if (!seqAttr || !colIdAttr || colIdAttr !== start.colId) return;
+
+      const seq = parseInt(seqAttr, 10);
+      if (isNaN(seq)) return;
+
+      const startSeq = start.seq;
+      const startEndSeq = start.mergedEndSeq ?? start.seq;
+
+      // 起点範囲内に戻った場合は起点のみ選択
+      if (seq >= startSeq && seq <= startEndSeq) {
+        setSelection({ colId: start.colId, startSeq, endSeq: startEndSeq });
+        return;
+      }
+
+      if (isSameCool(startSeq, seq)) {
+        const dragTargetSpan = getMergedSpan(start.colId, seq);
+        const dragTargetEnd = seq + dragTargetSpan - 1;
+        if (seq > startEndSeq) {
+          setSelection({ colId: start.colId, startSeq, endSeq: dragTargetEnd });
+        } else if (seq < startSeq) {
+          setSelection({ colId: start.colId, startSeq: startEndSeq, endSeq: seq });
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+      dragStartRef.current = null;
+    };
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isDragging, isSameCool, getMergedSpan]);
+
   // セルが選択範囲内かどうか
   const isCellSelected = useCallback(
     (seq: number, colId: string): boolean => {
@@ -706,6 +845,41 @@ export const CustomFieldsTable = ({
     []
   );
 
+  // タッチ端末でのセルタップ処理（ダブルタップで編集モードに入る）
+  const handleCellTap = useCallback(
+    (key: string) => {
+      if (lastTappedCellRef.current === key) {
+        // 同じセルの2回目タップ → 編集モード
+        setEditingCellKey(key);
+      } else {
+        // 別のセルをタップ → 選択のみ
+        setEditingCellKey(null);
+      }
+      lastTappedCellRef.current = key;
+    },
+    []
+  );
+
+  // editingCellKeyが設定されたらinputを再フォーカスしてキーボードを表示
+  useEffect(() => {
+    if (!editingCellKey || !isTouchDevice.current) return;
+    const input = inputRefs.current.get(editingCellKey);
+    if (!input) return;
+    // blur→re-focusでモバイルキーボードを確実に表示
+    input.blur();
+    requestAnimationFrame(() => {
+      input.focus();
+    });
+  }, [editingCellKey]);
+
+  // 長押し待機中はネイティブのコンテキストメニューを抑制（テキスト選択防止）
+  useEffect(() => {
+    if (!isTouchPending) return;
+    const handler = (e: Event) => e.preventDefault();
+    document.addEventListener('contextmenu', handler, { capture: true });
+    return () => document.removeEventListener('contextmenu', handler, { capture: true });
+  }, [isTouchPending]);
+
   // inputRef登録
   const registerInputRef = useCallback(
     (key: string, el: HTMLInputElement | null) => {
@@ -869,7 +1043,11 @@ export const CustomFieldsTable = ({
         </div>
       )}
 
-      <div className={`flex-1 overflow-auto ${isDragging ? 'select-none' : ''}`} ref={tableRef}>
+      <div
+        className={`flex-1 overflow-auto ${isDragging || isTouchPending ? 'select-none' : ''}`}
+        ref={tableRef}
+        style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}
+      >
         <table className="w-full text-sm border-collapse table-fixed">
           {/* 列幅固定用（結合セルのみでも幅を維持） */}
           <colgroup>
@@ -929,10 +1107,16 @@ export const CustomFieldsTable = ({
                 handleKeyDown={handleKeyDown}
                 handleCellFocus={handleCellFocus}
                 handleContextMenu={handleContextMenu}
+                handleTouchStart={handleTouchStart}
+                handleTouchMoveCell={handleTouchMoveCell}
+                handleTouchEndCell={handleTouchEndCell}
                 handleCompositionStart={handleCompositionStart}
                 handleCompositionEnd={handleCompositionEnd}
                 registerInputRef={registerInputRef}
                 readOnly={isReadOnly}
+                editingCellKey={editingCellKey}
+                isTouchDevice={isTouchDevice.current}
+                onCellTap={handleCellTap}
                 bands={bands}
                 searchQuery={searchQuery}
                 bandNumbers={bandNumbers}
@@ -969,10 +1153,16 @@ interface CoolGroupProps {
   handleKeyDown: (e: React.KeyboardEvent, seq: number, entryId: string, colIndex: number, col: CustomColumn) => void;
   handleCellFocus: (seq: number, colIndex: number) => void;
   handleContextMenu: (e: React.MouseEvent, seq: number, colId: string) => void;
+  handleTouchStart: (seq: number, colId: string, col: CustomColumn, e: React.TouchEvent) => void;
+  handleTouchMoveCell: (e: React.TouchEvent) => void;
+  handleTouchEndCell: () => void;
   handleCompositionStart: (seq: number, colId: string) => void;
   handleCompositionEnd: (seq: number, entryId: string, col: CustomColumn, value: string) => void;
   registerInputRef: (key: string, el: HTMLInputElement | null) => void;
   readOnly: boolean;
+  editingCellKey: string | null;
+  isTouchDevice: boolean;
+  onCellTap: (key: string) => void;
   bands: Band[];
   searchQuery: string;
   bandNumbers: Map<string, number>;
@@ -998,10 +1188,16 @@ const CoolGroup = ({
   handleKeyDown,
   handleCellFocus,
   handleContextMenu,
+  handleTouchStart,
+  handleTouchMoveCell,
+  handleTouchEndCell,
   handleCompositionStart,
   handleCompositionEnd,
   registerInputRef,
   readOnly: isReadOnly,
+  editingCellKey,
+  isTouchDevice: isTouchDeviceFlag,
+  onCellTap,
   bands,
   searchQuery,
   bandNumbers,
@@ -1105,8 +1301,10 @@ const CoolGroup = ({
               return (
                 <td
                   key={col.id}
+                  data-seq={entry.sequenceNumber}
+                  data-col-id={col.id}
                   rowSpan={hasMerge ? cellData.rowSpan : undefined}
-                  className={`border-l border-gray-200 p-0 relative transition-colors ${
+                  className={`border-l border-gray-200 p-0 relative transition-colors select-none ${
                     hasMerge ? 'align-middle' : ''
                   } ${
                     mergedCellBgClass
@@ -1117,33 +1315,62 @@ const CoolGroup = ({
                   }`}
                   onMouseDown={(e) => handleMouseDown(entry.sequenceNumber, col.id, col, e)}
                   onMouseMove={() => handleMouseMove(entry.sequenceNumber, col.id)}
-                  onContextMenu={(e) => handleContextMenu(e, entry.sequenceNumber, col.id)}
+                  onContextMenu={(e) => {
+                    handleContextMenu(e, entry.sequenceNumber, col.id);
+                    // タッチデバイスではネイティブコンテキストメニューを常に抑制
+                    if (isTouchDeviceFlag) e.preventDefault();
+                  }}
+                  onTouchStart={(e) => handleTouchStart(entry.sequenceNumber, col.id, col, e)}
+                  onTouchMove={handleTouchMoveCell}
+                  onTouchEnd={handleTouchEndCell}
                 >
                   <div className={`w-full ${
                     hasMerge ? 'absolute inset-0 flex items-center' : 'flex items-center min-h-[28px]'
                   }`}>
-                    <input
-                      ref={(el) => registerInputRef(key, el)}
-                      type="text"
-                      value={value}
-                      onChange={(e) => handleCellChange(entry.sequenceNumber, entry.entryId, col, e.target.value)}
-                      onBlur={() => handleCellBlur(entry.sequenceNumber, entry.entryId, col)}
-                      onKeyDown={(e) => handleKeyDown(e, entry.sequenceNumber, entry.entryId, colIndex, col)}
-                      onFocus={() => handleCellFocus(entry.sequenceNumber, colIndex)}
-                      onCompositionStart={() => handleCompositionStart(entry.sequenceNumber, col.id)}
-                      onCompositionEnd={(e) => handleCompositionEnd(entry.sequenceNumber, entry.entryId, col, e.currentTarget.value)}
-                      className={`w-full h-full px-2 text-sm bg-transparent border-0 outline-none text-gray-900 placeholder-gray-400 transition-colors ${
-                        hasMerge ? 'py-0' : 'py-1'
-                      } ${
-                        isFocused ? '' : 'hover:bg-gray-100'
-                      } ${
-                        isSelected && !isFocused ? 'bg-emerald-50' : ''
-                      }`}
-                      placeholder="-"
-                      maxLength={100}
-                      readOnly={isReadOnly}
-                      tabIndex={isReadOnly ? -1 : undefined}
-                    />
+                    {/* タッチデバイスで編集中でないセルはdivで表示（テキスト選択を完全に防ぐ） */}
+                    {isTouchDeviceFlag && editingCellKey !== key && !isReadOnly ? (
+                      <div
+                        className={`w-full h-full px-2 text-sm text-gray-900 select-none cursor-default ${
+                          hasMerge ? 'py-0 flex items-center' : 'py-1'
+                        } ${
+                          isFocused ? '' : 'hover:bg-gray-100'
+                        } ${
+                          isSelected && !isFocused ? 'bg-emerald-50' : ''
+                        }`}
+                        onClick={() => onCellTap(key)}
+                        style={{ WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' } as React.CSSProperties}
+                      >
+                        {value || <span className="text-gray-400">-</span>}
+                      </div>
+                    ) : (
+                      <input
+                        ref={(el) => registerInputRef(key, el)}
+                        type="text"
+                        value={value}
+                        onChange={(e) => handleCellChange(entry.sequenceNumber, entry.entryId, col, e.target.value)}
+                        onBlur={() => handleCellBlur(entry.sequenceNumber, entry.entryId, col)}
+                        onKeyDown={(e) => handleKeyDown(e, entry.sequenceNumber, entry.entryId, colIndex, col)}
+                        onFocus={() => handleCellFocus(entry.sequenceNumber, colIndex)}
+                        onClick={() => {
+                          if (isTouchDeviceFlag) {
+                            onCellTap(key);
+                          }
+                        }}
+                        onCompositionStart={() => handleCompositionStart(entry.sequenceNumber, col.id)}
+                        onCompositionEnd={(e) => handleCompositionEnd(entry.sequenceNumber, entry.entryId, col, e.currentTarget.value)}
+                        className={`w-full h-full px-2 text-sm bg-transparent border-0 outline-none text-gray-900 placeholder-gray-400 transition-colors ${
+                          hasMerge ? 'py-0' : 'py-1'
+                        } ${
+                          isFocused ? '' : 'hover:bg-gray-100'
+                        } ${
+                          isSelected && !isFocused ? 'bg-emerald-50' : ''
+                        }`}
+                        placeholder="-"
+                        maxLength={100}
+                        readOnly={isReadOnly}
+                        tabIndex={isReadOnly ? -1 : undefined}
+                      />
+                    )}
                   </div>
                 </td>
               );
