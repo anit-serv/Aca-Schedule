@@ -282,7 +282,7 @@ export const useAllViolations = (
       const bandNumbers = calculateBandNumbers(timetable);
       
       timetable.dailyTimetables.forEach(dailyTimetable => {
-        checkDailyTimetable(dailyTimetable, bands, bandMap, bandNumbers, violations, prefix);
+        checkDailyTimetable(dailyTimetable, bandMap, bandNumbers, violations, prefix);
       });
     };
 
@@ -298,7 +298,6 @@ export const useAllViolations = (
  */
 function checkDailyTimetable(
   dailyTimetable: DailyTimetable,
-  bands: Band[],
   bandMap: Map<string, Band>,
   bandNumbers: Map<string, number>,
   violations: ConstraintViolation[],
