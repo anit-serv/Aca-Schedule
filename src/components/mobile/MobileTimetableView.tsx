@@ -226,7 +226,7 @@ export const MobileTimetableView = ({
     // \u30d0\u30f3\u30c9\u30d0\u30f3\u30af\u304b\u3089\u30c9\u30e9\u30c3\u30b0\u958b\u59cb\u6642\u3001\u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\u3092peek\u306b\u7e2e\u5c0f
     const activeId = event.active.id as string;
     if (activeId.startsWith('band-') || activeId.startsWith('custom-')) {
-      onBottomSheetHeightChange('peek');
+      onBottomSheetHeightChange('closed');
     }
     // \u30bf\u30c3\u30d7\u914d\u7f6e\u30e2\u30fc\u30c9\u3092\u89e3\u9664
     if (selectedBandId) onBandPlaced();
@@ -337,6 +337,21 @@ export const MobileTimetableView = ({
 
   // \u9078\u629e\u4e2d\u30d0\u30f3\u30c9\u306e\u540d\u524d
   const selectedBandName = selectedBandId ? getBandName(selectedBandId) : null;
+
+  // \u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\u306b\u96a0\u308c\u306a\u3044\u3088\u3046\u3001\u8868\u793a\u9ad8\u3055\u306b\u5fdc\u3058\u3066\u30bf\u30a4\u30e0\u30c6\u30fc\u30d6\u30eb\u4e0b\u4f59\u767d\u3092\u8abf\u6574
+  const timetableBottomPadding = useMemo(() => {
+    switch (bottomSheetHeight) {
+      case 'full':
+        return 'calc(92vh + env(safe-area-inset-bottom,0px))';
+      case 'half':
+        return 'calc(54vh + env(safe-area-inset-bottom,0px))';
+      case 'third':
+        return 'calc(38vh + env(safe-area-inset-bottom,0px))';
+      case 'closed':
+      default:
+        return 'calc(110px + env(safe-area-inset-bottom,0px))';
+    }
+  }, [bottomSheetHeight]);
 
   // --- \u7de8\u96c6\u30cf\u30f3\u30c9\u30e9\u30fc ---
 
@@ -747,7 +762,7 @@ export const MobileTimetableView = ({
       </div>
 
       {/* \u30bf\u30a4\u30e0\u30c6\u30fc\u30d6\u30eb\u672c\u4f53 */}
-      <div className="flex-1 overflow-y-auto pb-32">
+      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: timetableBottomPadding }}>
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>

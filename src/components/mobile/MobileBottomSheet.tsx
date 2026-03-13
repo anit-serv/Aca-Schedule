@@ -1,14 +1,17 @@
-import { useRef, useCallback, useEffect, type ReactNode } from 'react';
+import { useRef, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { motion, useMotionValue, useAnimation, type PanInfo } from 'framer-motion';
 
 // ボトムシートの高さ段階
-export type SheetHeight = 'peek' | 'half' | 'full';
+export type SheetHeight = 'closed' | 'third' | 'half' | 'full';
+
+const SHEET_LEVEL_ORDER: SheetHeight[] = ['closed', 'third', 'half', 'full'];
 
 // 各段階のピクセル値
 const getHeightPx = (height: SheetHeight): number => {
   const vh = window.innerHeight;
   switch (height) {
-    case 'peek': return 120;
+    case 'closed': return 28;
+    case 'third': return vh * 0.33;
     case 'half': return vh * 0.5;
     case 'full': return vh * 0.9;
   }
@@ -30,6 +33,8 @@ export const MobileBottomSheet = ({
   const controls = useAnimation();
   const dragY = useMotionValue(0);
   const isDraggingRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const isClosed = height === 'closed';
 
   // height stateが変更されたら高さを更新
   useEffect(() => {
@@ -45,19 +50,22 @@ export const MobileBottomSheet = ({
   // ドラッグ中のリアルタイム高さ更新
   const handleDrag = useCallback((_: unknown, info: PanInfo) => {
     const basePx = getHeightPx(height);
+    const closedPx = getHeightPx('closed');
     // 下にドラッグ → offset.y > 0 → 高さ減少
     // 上にドラッグ → offset.y < 0 → 高さ増加
-    const newHeight = Math.max(60, Math.min(window.innerHeight * 0.92, basePx - info.offset.y));
+    const newHeight = Math.max(closedPx, Math.min(window.innerHeight * 0.92, basePx - info.offset.y));
     controls.set({ height: newHeight });
   }, [height, controls]);
 
   const handleDragEnd = useCallback((_: unknown, info: PanInfo) => {
     isDraggingRef.current = false;
+    setIsDragging(false);
     const velocity = info.velocity.y;
     const basePx = getHeightPx(height);
     const finalPx = basePx - info.offset.y;
 
-    const peekPx = getHeightPx('peek');
+    const closedPx = getHeightPx('closed');
+    const thirdPx = getHeightPx('third');
     const halfPx = getHeightPx('half');
     const fullPx = getHeightPx('full');
 
@@ -65,17 +73,21 @@ export const MobileBottomSheet = ({
 
     // 高速スワイプ判定（速度が速い場合は勢いに従う）
     if (Math.abs(velocity) > 500) {
+      const currentIndex = SHEET_LEVEL_ORDER.indexOf(height);
       if (velocity > 0) {
         // 下方向 → 一段階下げる
-        target = height === 'full' ? 'half' : 'peek';
+        const nextIndex = Math.max(0, currentIndex - 1);
+        target = SHEET_LEVEL_ORDER[nextIndex];
       } else {
         // 上方向 → 一段階上げる
-        target = height === 'peek' ? 'half' : 'full';
+        const nextIndex = Math.min(SHEET_LEVEL_ORDER.length - 1, currentIndex + 1);
+        target = SHEET_LEVEL_ORDER[nextIndex];
       }
     } else {
       // ドラッグ距離で最も近い段階にスナップ
       const distances: { h: SheetHeight; d: number }[] = [
-        { h: 'peek', d: Math.abs(finalPx - peekPx) },
+        { h: 'closed', d: Math.abs(finalPx - closedPx) },
+        { h: 'third', d: Math.abs(finalPx - thirdPx) },
         { h: 'half', d: Math.abs(finalPx - halfPx) },
         { h: 'full', d: Math.abs(finalPx - fullPx) },
       ];
@@ -96,18 +108,19 @@ export const MobileBottomSheet = ({
 
   const handleDragStart = useCallback(() => {
     isDraggingRef.current = true;
+    setIsDragging(true);
   }, []);
 
   return (
     <>
       {/* オーバーレイ（half/full時） */}
-      {height !== 'peek' && (
+      {(height === 'half' || height === 'full') && (
         <motion.div
           className="fixed inset-0 bg-black/20 z-30"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={() => onHeightChange('peek')}
+          onClick={() => onHeightChange('third')}
         />
       )}
 
@@ -134,21 +147,19 @@ export const MobileBottomSheet = ({
         </motion.div>
 
         {/* タイトルバー */}
-        {title && (
+        {title && (!isClosed || isDragging) && (
           <div className="px-4 py-1.5 flex items-center justify-between flex-shrink-0 border-b border-gray-100">
             <h3 className="text-sm font-bold text-gray-900">{title}</h3>
             <div className="flex gap-1">
-              {height !== 'peek' && (
-                <button
-                  onClick={() => onHeightChange('peek')}
-                  className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                  title="最小化"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              )}
+              <button
+                onClick={() => onHeightChange('closed')}
+                className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                title="閉じる"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
               {height !== 'full' && (
                 <button
                   onClick={() => onHeightChange('full')}
@@ -165,7 +176,7 @@ export const MobileBottomSheet = ({
         )}
 
         {/* コンテンツ */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-2">
+        <div className={`flex-1 overflow-y-auto overscroll-contain px-4 py-2 ${isClosed && !isDragging ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           {children}
         </div>
       </motion.div>
