@@ -14,7 +14,7 @@ import { TimetableContent } from './TimetableContent';
 import { BandBankDropZone } from './BandBankDropZone';
 import { CustomFieldsTable } from './CustomFieldsTable';
 import { CustomColumnManager } from './CustomColumnManager';
-import { useCoolManagement } from '../hooks/useCoolManagement';
+import { useCoolManagement, type CoolReductionAction } from '../hooks/useCoolManagement';
 import { useTimetableDragDrop } from '../hooks/useTimetableDragDrop';
 import { useTimetableHelpers } from '../hooks/useTimetableHelpers';
 import { useAllViolations } from '../hooks/useConstraintCheck';
@@ -75,6 +75,10 @@ export const TimetableEditing = ({
   } | null>(null);
   // 挿入時の通知
   const [insertionNotification, setInsertionNotification] = useState<string | null>(null);
+  const [coolReductionModal, setCoolReductionModal] = useState<{
+    pendingCount: number;
+    entryCount: number;
+  } | null>(null);
 
   // カスタムイベントが変更されたらFirestoreのeventSettingsを更新
   useEffect(() => {
@@ -365,6 +369,30 @@ export const TimetableEditing = ({
     onTimetableChange,
     recalculateTimes,
   });
+
+  const handleCoolCountChangeWithConfirm = useCallback((newCount: number) => {
+    const currentCount = currentTimetable.cools.length;
+    if (newCount < 1 || newCount === currentCount) return;
+
+    if (newCount < currentCount) {
+      const bottomCool = currentTimetable.cools[currentCount - 1];
+      if (bottomCool && bottomCool.entries.length > 0) {
+        const removedEntryCount = currentTimetable.cools
+          .slice(newCount)
+          .reduce((sum, cool) => sum + cool.entries.length, 0);
+        setCoolReductionModal({ pendingCount: newCount, entryCount: removedEntryCount });
+        return;
+      }
+    }
+
+    handleCoolCountChange(newCount, 'move');
+  }, [currentTimetable, handleCoolCountChange]);
+
+  const executeCoolReduction = useCallback((action: CoolReductionAction) => {
+    if (!coolReductionModal) return;
+    handleCoolCountChange(coolReductionModal.pendingCount, action);
+    setCoolReductionModal(null);
+  }, [coolReductionModal, handleCoolCountChange]);
 
   // 挿入・reorder検知付きのtimetable変更ハンドラー
   const onTimetableChangeWithInsertionTracking = useCallback((newDailyTimetable: DailyTimetable) => {
@@ -659,7 +687,7 @@ export const TimetableEditing = ({
           onTimetableTypeChange={handleTimetableTypeChange}
           onDateChange={setSelectedDate}
           onStartTimeChange={handleStartTimeChange}
-          onCoolCountChange={handleCoolCountChange}
+          onCoolCountChange={handleCoolCountChangeWithConfirm}
           onCoolCountInputChange={setInputCoolCount}
           onCustomModeChange={setIsCustomMode}
           bands={bands}
@@ -828,6 +856,38 @@ export const TimetableEditing = ({
                 className="px-4 py-2 text-sm font-medium rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors"
               >
                 削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* クール削減時の選択モーダル */}
+      {coolReductionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-3">クール数を減らす確認</h3>
+            <p className="text-gray-600 text-sm mb-4">
+              一番下の削除対象クールに {coolReductionModal.entryCount} 件の項目があります。どのように処理しますか？
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => executeCoolReduction('move')}
+                className="w-full px-4 py-2 text-sm font-medium rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+              >
+                ひとつ前のクール末尾に追加
+              </button>
+              <button
+                onClick={() => executeCoolReduction('bank')}
+                className="w-full px-4 py-2 text-sm font-medium rounded-md bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+              >
+                バンドバンクに戻す
+              </button>
+              <button
+                onClick={() => setCoolReductionModal(null)}
+                className="w-full px-4 py-2 text-sm font-medium rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+              >
+                キャンセル
               </button>
             </div>
           </div>

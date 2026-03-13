@@ -2,6 +2,8 @@ import { useCallback } from 'react';
 import type { Cool, DailyTimetable, Timetable, EventSettings } from '../types';
 import { generateUUID } from '../utils/generateUUID';
 
+export type CoolReductionAction = 'move' | 'bank';
+
 interface UseCoolManagementProps {
   timetableType: 'performance' | 'rehearsal';
   eventSettings: EventSettings;
@@ -55,7 +57,7 @@ export const useCoolManagement = ({
   }, [recalculateTimes]);
   
   // クール数を変更
-  const handleCoolCountChange = useCallback((newCount: number) => {
+  const handleCoolCountChange = useCallback((newCount: number, reductionAction: CoolReductionAction = 'move') => {
     // 最小値を1に制限
     if (newCount < 1) return;
     
@@ -102,37 +104,22 @@ export const useCoolManagement = ({
       
       console.log('[クール追加] 新しいクール数:', updatedCools.length);
     } else {
-      // クールを削除する場合：削除されるクールのエントリーを前のクールに移行
-      updatedCools = [...currentCools];
-      
-      // 削除するクールのインデックス範囲
-      for (let i = currentCount - 1; i >= newCount; i--) {
-        const removedCool = updatedCools[i];
-        
-        if (removedCool.entries.length > 0) {
-          // 移行先のクールを決定
-          let targetIndex: number;
-          
-          if (i === 0) {
-            // 最初のクールを削除する場合は次のクール（削除前の第2クール）へ
-            targetIndex = 1;
-          } else {
-            // それ以外は前のクールへ
-            targetIndex = i - 1;
-          }
-          
-          // エントリーを移行（削除前に確保）
-          if (targetIndex < updatedCools.length && targetIndex >= 0) {
-            updatedCools[targetIndex] = {
-              ...updatedCools[targetIndex],
-              entries: [...updatedCools[targetIndex].entries, ...removedCool.entries],
-            };
-          }
+      const keptCools = currentCools.slice(0, newCount);
+      const removedCools = currentCools.slice(newCount);
+
+      if (reductionAction === 'move' && keptCools.length > 0) {
+        const movedEntries = removedCools.flatMap(cool => cool.entries);
+        if (movedEntries.length > 0) {
+          const lastIndex = keptCools.length - 1;
+          keptCools[lastIndex] = {
+            ...keptCools[lastIndex],
+            entries: [...keptCools[lastIndex].entries, ...movedEntries],
+          };
         }
       }
-      
-      // 不要なクールを削除
-      updatedCools = updatedCools.slice(0, newCount);
+
+      // 'bank' の場合は removedCools の項目を破棄（= バンドバンクへ戻す）
+      updatedCools = keptCools;
       
       console.log('[クール削除] 残りのクール数:', updatedCools.length);
     }

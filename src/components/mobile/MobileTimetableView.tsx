@@ -67,6 +67,10 @@ export const MobileTimetableView = ({
   const [customEventName, setCustomEventName] = useState('');
   const [customEventDuration, setCustomEventDuration] = useState('5');
   const [showViolationSheet, setShowViolationSheet] = useState(false);
+  const [coolReductionModal, setCoolReductionModal] = useState<{
+    pendingCount: number;
+    entryCount: number;
+  } | null>(null);
   // \u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u914d\u7f6e\u30e2\u30fc\u30c9
   const [selectedCustomEvent, setSelectedCustomEvent] = useState<CustomEvent | null>(null);
   // \u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u30ea\u30b9\u30c8
@@ -505,8 +509,8 @@ export const MobileTimetableView = ({
     });
   }, [currentTimetable, updateTimetable, recalculateTimes]);
 
-  // \u30af\u30fc\u30eb\u6570\u5909\u66f4
-  const handleCoolCountChange = useCallback((newCount: number) => {
+  // クール数変更を実行
+  const applyCoolCountChange = useCallback((newCount: number, reductionAction: 'move' | 'bank' = 'move') => {
     if (!currentTimetable) return;
     const currentCount = currentTimetable.cools.length;
     if (newCount < 1 || newCount === currentCount) return;
@@ -523,12 +527,53 @@ export const MobileTimetableView = ({
           });
         }
       } else {
-        newCools = dt.cools.slice(0, newCount);
+        const keptCools = dt.cools.slice(0, newCount);
+        const removedCools = dt.cools.slice(newCount);
+
+        if (reductionAction === 'move' && keptCools.length > 0) {
+          const movedEntries = removedCools.flatMap(cool => cool.entries);
+          if (movedEntries.length > 0) {
+            const lastIndex = keptCools.length - 1;
+            keptCools[lastIndex] = {
+              ...keptCools[lastIndex],
+              entries: [...keptCools[lastIndex].entries, ...movedEntries],
+            };
+          }
+        }
+
+        // 'bank' の場合は removedCools の項目を破棄（= バンドバンクへ戻す）
+        newCools = keptCools;
       }
       const recalculated = recalculateTimes(newCools, dt.startTime);
       return { ...dt, cools: recalculated };
     });
   }, [currentTimetable, selectedDate, updateTimetable, recalculateTimes]);
+
+  // クール数変更（必要なら選択モーダルを表示）
+  const handleCoolCountChange = useCallback((newCount: number) => {
+    if (!currentTimetable) return;
+    const currentCount = currentTimetable.cools.length;
+    if (newCount < 1 || newCount === currentCount) return;
+
+    if (newCount < currentCount) {
+      const bottomCool = currentTimetable.cools[currentCount - 1];
+      if (bottomCool && bottomCool.entries.length > 0) {
+        const removedEntryCount = currentTimetable.cools
+          .slice(newCount)
+          .reduce((sum, cool) => sum + cool.entries.length, 0);
+        setCoolReductionModal({ pendingCount: newCount, entryCount: removedEntryCount });
+        return;
+      }
+    }
+
+    applyCoolCountChange(newCount, 'move');
+  }, [currentTimetable, applyCoolCountChange]);
+
+  const executeCoolReduction = useCallback((action: 'move' | 'bank') => {
+    if (!coolReductionModal) return;
+    applyCoolCountChange(coolReductionModal.pendingCount, action);
+    setCoolReductionModal(null);
+  }, [coolReductionModal, applyCoolCountChange]);
 
   // \u8ee2\u63db\u6642\u9593\u5909\u66f4
   const handleTransitionTimeChange = useCallback((coolIndex: number, entryId: string, newTime: number) => {
@@ -962,6 +1007,55 @@ export const MobileTimetableView = ({
               </div>
               <div className="overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
                 <ViolationList violations={violations} onViolationClick={handleViolationClick} />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {coolReductionModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 z-50"
+            onClick={() => setCoolReductionModal(null)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto mt-2" />
+              <div className="px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+                <h3 className="text-sm font-bold text-gray-900 mb-2">クール数を減らす確認</h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  一番下の削除対象クールに {coolReductionModal.entryCount} 件の項目があります。処理方法を選択してください。
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => executeCoolReduction('move')}
+                    className="w-full px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-medium active:bg-emerald-700"
+                  >
+                    ひとつ前のクール末尾に追加
+                  </button>
+                  <button
+                    onClick={() => executeCoolReduction('bank')}
+                    className="w-full px-4 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-medium active:bg-amber-700"
+                  >
+                    バンドバンクに戻す
+                  </button>
+                  <button
+                    onClick={() => setCoolReductionModal(null)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium active:bg-gray-200"
+                  >
+                    キャンセル
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
