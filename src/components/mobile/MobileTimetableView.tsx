@@ -810,31 +810,7 @@ export const MobileTimetableView = ({
         )}
       </div>
 
-      {/* FAB\u30dc\u30bf\u30f3 */}
-      <div className="fixed bottom-[calc(60px+env(safe-area-inset-bottom,0px)+12px)] right-4 flex flex-col gap-2 z-30">
-        {/* \u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8FAB */}
-        <button
-          onClick={() => setShowCustomEventSheet(true)}
-          className="w-10 h-10 bg-purple-500 text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
-          title={'\u30AB\u30B9\u30BF\u30E0\u30A4\u30D9\u30F3\u30C8'}
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </button>
-        {/* \u30d0\u30f3\u30c9\u30d0\u30f3\u30afFAB */}
-        <button
-          onClick={onOpenBandBank}
-          className="w-12 h-12 bg-emerald-500 text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
-          title={'\u30D0\u30F3\u30C9\u30D0\u30F3\u30AF'}
-        >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-      </div>
-
-      {/* \u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u30b7\u30fc\u30c8 */}
+      {/* カスタムイベントシート */}
       <AnimatePresence>
         {showCustomEventSheet && (
           <motion.div
