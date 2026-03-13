@@ -207,6 +207,7 @@ export const MobileTimetableView = ({
 
   const {
     overEntryId,
+    isPointerOverCancelZone,
     dropSucceeded,
     handleDragStart: baseDragStart,
     handleDragOver,
@@ -224,18 +225,23 @@ export const MobileTimetableView = ({
     onEntryReorderFlat: handleEntryReorderFlat,
   });
 
+  const {
+    setNodeRef: setCancelDropRef,
+    isOver: isCancelDropOver,
+  } = useDroppable({ id: 'mobile-cancel-dropzone' });
+
   // \u30c9\u30e9\u30c3\u30b0\u958b\u59cb\u6642\u306b\u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\u3092\u6700\u5c0f\u5316
   const handleDragStart = useCallback((event: Parameters<typeof baseDragStart>[0]) => {
     baseDragStart(event);
     // \u30d0\u30f3\u30c9\u30d0\u30f3\u30af\u304b\u3089\u30c9\u30e9\u30c3\u30b0\u958b\u59cb\u6642\u3001\u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\u3092peek\u306b\u7e2e\u5c0f
     const activeId = event.active.id as string;
-    if (activeId.startsWith('band-') || activeId.startsWith('custom-')) {
+    if ((activeId.startsWith('band-') || activeId.startsWith('custom-')) && bottomSheetHeight !== 'third') {
       onBottomSheetHeightChange('closed');
     }
     // \u30bf\u30c3\u30d7\u914d\u7f6e\u30e2\u30fc\u30c9\u3092\u89e3\u9664
     if (selectedBandId) onBandPlaced();
     setSelectedCustomEvent(null);
-  }, [baseDragStart, onBottomSheetHeightChange, selectedBandId, onBandPlaced]);
+  }, [baseDragStart, onBottomSheetHeightChange, bottomSheetHeight, selectedBandId, onBandPlaced]);
 
   // \u30c9\u30e9\u30c3\u30b0\u7d42\u4e86\u6642\u306e\u30e9\u30c3\u30d7
   const handleDragEnd = useCallback((event: Parameters<typeof baseDragEnd>[0]) => {
@@ -243,6 +249,8 @@ export const MobileTimetableView = ({
   }, [baseDragEnd]);
 
   const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
+  const isDraggingFromBank = Boolean(activeBand || activeCustomEvent) && !activeEntry;
+  const isCancelZoneActive = isCancelDropOver || overEntryId === 'mobile-cancel-dropzone' || isPointerOverCancelZone;
 
   // \u5236\u7d04\u30c1\u30a7\u30c3\u30af
   const violations = useAllViolations(performanceTimetable, rehearsalTimetable, bands);
@@ -1061,6 +1069,39 @@ export const MobileTimetableView = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {isDraggingFromBank && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: isCancelZoneActive ? 1 : 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[60] bg-black/25 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        ref={setCancelDropRef}
+        id="mobile-cancel-dropzone"
+        className="fixed inset-x-0 z-[70] bottom-[calc(60px+env(safe-area-inset-bottom,0px)+6px)] h-28 flex items-end justify-center"
+        animate={{ opacity: isDraggingFromBank ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        style={{ pointerEvents: isDraggingFromBank ? 'auto' : 'none' }}
+      >
+        <motion.div
+          animate={{ scale: isCancelZoneActive ? 1.12 : 1, y: isDraggingFromBank ? 0 : 12 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+          className={`w-16 h-16 rounded-full border-2 shadow-xl flex items-center justify-center select-none ${
+            isCancelZoneActive
+              ? 'bg-red-600 border-red-500 text-white'
+              : 'bg-white border-red-300 text-red-500'
+          }`}
+        >
+          <span className="text-3xl leading-none">×</span>
+        </motion.div>
+      </motion.div>
     </div>
 
       {/* D&D\u30c9\u30e9\u30c3\u30b0\u30aa\u30fc\u30d0\u30fc\u30ec\u30a4 */}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { DragStartEvent, DragOverEvent, DragEndEvent } from '@dnd-kit/core';
 import type { Band, CustomEvent, DailyTimetable } from '../types';
 
@@ -28,17 +28,35 @@ export const useDragHandlers = ({
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [overEntryId, setOverEntryId] = useState<string | null>(null);
   const [dropSucceeded, setDropSucceeded] = useState(false);
+  const [isPointerOverCancelZone, setIsPointerOverCancelZone] = useState(false);
+  const [currentMouseX, setCurrentMouseX] = useState<number>(0);
   const [currentMouseY, setCurrentMouseY] = useState<number>(0);
+  const latestOverIdRef = useRef<string | null>(null);
+
+  const isPointerInCancelZone = (x: number, y: number): boolean => {
+    if (x <= 0 || y <= 0 || typeof document === 'undefined') return false;
+    const cancelZone = document.getElementById('mobile-cancel-dropzone');
+    if (!cancelZone) return false;
+    const rect = cancelZone.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  };
 
   // バンドバンクからのドラッグの場合のみポインタ位置をトラッキング
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent | MouseEvent | TouchEvent) => {
       if (activeDragId && (activeDragId.startsWith('band-') || activeDragId.startsWith('custom-'))) {
+        let x = 0;
+        let y = 0;
         if ('clientY' in e) {
-          setCurrentMouseY(e.clientY);
+          x = e.clientX;
+          y = e.clientY;
         } else if ('touches' in e && e.touches.length > 0) {
-          setCurrentMouseY(e.touches[0].clientY);
+          x = e.touches[0].clientX;
+          y = e.touches[0].clientY;
         }
+        setCurrentMouseX(x);
+        setCurrentMouseY(y);
+        setIsPointerOverCancelZone(isPointerInCancelZone(x, y));
       }
     };
 
@@ -58,18 +76,28 @@ export const useDragHandlers = ({
   const handleDragStart = (event: DragStartEvent) => {
     setActiveDragId(event.active.id as string);
     setDropSucceeded(false);
+    setIsPointerOverCancelZone(false);
   };
 
   // ドラッグ中
   const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
+    const activeId = active.id as string;
+
+    // overが不安定なモバイル向けフォールバック: 座標がキャンセルゾーン内なら最優先でキャンセル扱い
+    if ((activeId.startsWith('band-') || activeId.startsWith('custom-')) && isPointerInCancelZone(currentMouseX, currentMouseY)) {
+      latestOverIdRef.current = 'mobile-cancel-dropzone';
+      setOverEntryId('mobile-cancel-dropzone');
+      setIsPointerOverCancelZone(true);
+      return;
+    }
     
     if (over) {
       const overId = over.id as string;
-      const activeId = active.id as string;
       
       // エントリーの場合、ドラッグ元に応じて判定方法を変える
       if (overId.startsWith('entry-')) {
+        setIsPointerOverCancelZone(false);
         const overRect = over.rect;
         
         // バンドバンクからのドラッグ、またはタイムテーブル内での並び替え：マウス位置で判定
@@ -78,14 +106,19 @@ export const useDragHandlers = ({
             const overCenter = overRect.top + overRect.height / 2;
             
             if (currentMouseY > overCenter) {
-              setOverEntryId(`${overId}-after`);
+              const nextOverId = `${overId}-after`;
+              latestOverIdRef.current = nextOverId;
+              setOverEntryId(nextOverId);
             } else {
+              latestOverIdRef.current = overId;
               setOverEntryId(overId);
             }
           } else {
+            latestOverIdRef.current = overId;
             setOverEntryId(overId);
           }
         } else {
+          latestOverIdRef.current = overId;
           setOverEntryId(overId);
         }
       } else if (
@@ -94,8 +127,18 @@ export const useDragHandlers = ({
         overId.startsWith('cool-column-header-') ||
         overId.startsWith('cool-gap-before-') ||
         overId.startsWith('cool-gap-after-') ||
-        overId === 'timetable-droppable'
+        overId === 'timetable-droppable' ||
+        overId === 'mobile-cancel-dropzone'
       ) {
+        if (overId === 'mobile-cancel-dropzone') {
+          latestOverIdRef.current = overId;
+          setOverEntryId(overId);
+          setIsPointerOverCancelZone(true);
+          return;
+        }
+
+        setIsPointerOverCancelZone(false);
+
         // cool-droppableまたはcool-gap-afterの場合、そのクールに最後のエントリーがあれば、
         // そのエントリーの-afterに変換する
         if (overId.startsWith('cool-droppable-') || overId.startsWith('cool-gap-after-')) {
@@ -105,7 +148,9 @@ export const useDragHandlers = ({
           if (cool && cool.entries.length > 0) {
             const lastEntry = cool.entries[cool.entries.length - 1];
             setOverEntryId(`entry-${lastEntry.id}-after`);
+            latestOverIdRef.current = `entry-${lastEntry.id}-after`;
           } else {
+            latestOverIdRef.current = overId;
             setOverEntryId(overId);
           }
         } else if (overId === 'timetable-droppable') {
@@ -113,18 +158,26 @@ export const useDragHandlers = ({
           // エントリーがあれば最後のエントリーの-afterに変換
           if (currentTimetable.entries && currentTimetable.entries.length > 0) {
             const lastEntry = currentTimetable.entries[currentTimetable.entries.length - 1];
-            setOverEntryId(`entry-${lastEntry.id}-after`);
+            const nextOverId = `entry-${lastEntry.id}-after`;
+            latestOverIdRef.current = nextOverId;
+            setOverEntryId(nextOverId);
           } else {
+            latestOverIdRef.current = overId;
             setOverEntryId(overId);
           }
         } else {
+          latestOverIdRef.current = overId;
           setOverEntryId(overId);
         }
       } else {
+        latestOverIdRef.current = null;
         setOverEntryId(null);
+        setIsPointerOverCancelZone(false);
       }
     } else {
+      latestOverIdRef.current = null;
       setOverEntryId(null);
+      setIsPointerOverCancelZone(false);
     }
   };
 
@@ -135,11 +188,14 @@ export const useDragHandlers = ({
     // overEntryIdを保存（handleDragOverで計算済みの正確な挿入位置）
     // モバイルではタッチ離脱時にoverがnullになることがあるため、
     // overEntryIdをフォールバックとして使用する
-    const savedOverEntryId = overEntryId;
+    const savedOverEntryId = latestOverIdRef.current || overEntryId;
     
     setActiveDragId(null);
     setOverEntryId(null);
+    setIsPointerOverCancelZone(false);
+    setCurrentMouseX(0);
     setCurrentMouseY(0);
+    latestOverIdRef.current = null;
 
     const activeId = active.id as string;
     
@@ -147,11 +203,22 @@ export const useDragHandlers = ({
     // バンドバンクからタイムテーブルへの追加
     if (activeId.startsWith('band-')) {
       if (!over && !savedOverEntryId) {
+        if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
+          return;
+        }
         return;
       }
       
       // savedOverEntryIdを優先（-afterサフィックス含む正確な位置情報）
       const overId = savedOverEntryId || (over!.id as string);
+
+      if (overId === 'mobile-cancel-dropzone') {
+        return;
+      }
+
+      if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
+        return;
+      }
       
       if (overId === 'band-bank-droppable') {
         return;
@@ -215,10 +282,17 @@ export const useDragHandlers = ({
 
     // カスタムイベントをタイムテーブルへ追加
     if (activeId.startsWith('custom-')) {
-      if (!over && !savedOverEntryId) return;
+      if (!over && !savedOverEntryId) {
+        if (isPointerInCancelZone(currentMouseX, currentMouseY)) return;
+        return;
+      }
       
       // savedOverEntryIdを優先（-afterサフィックス含む正確な位置情報）
       const overId = savedOverEntryId || (over!.id as string);
+
+      if (overId === 'mobile-cancel-dropzone') return;
+
+      if (isPointerInCancelZone(currentMouseX, currentMouseY)) return;
       
       if (overId === 'band-bank-droppable') return;
       
@@ -317,6 +391,7 @@ export const useDragHandlers = ({
   return {
     activeDragId,
     overEntryId,
+    isPointerOverCancelZone,
     dropSucceeded,
     handleDragStart,
     handleDragOver,

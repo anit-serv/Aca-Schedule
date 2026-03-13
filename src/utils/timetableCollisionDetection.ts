@@ -15,6 +15,7 @@ export const createTimetableCollisionDetection = (): CollisionDetection => {
     /^cool-gap-after-/,          // クールの後のギャップ
     /^timetable-droppable$/,     // フラット構造の空タイムテーブル
     /^band-bank-droppable$/,     // バンドバンク（キャンセル用）
+    /^mobile-cancel-dropzone$/,  // モバイル用キャンセルドロップゾーン
   ];
 
   const filterValid = (collisions: ReturnType<CollisionDetection>) =>
@@ -23,17 +24,23 @@ export const createTimetableCollisionDetection = (): CollisionDetection => {
       return validDropTargetPatterns.some(pattern => pattern.test(id));
     });
 
+  const prioritizeCancelDropzone = (collisions: ReturnType<CollisionDetection>) => {
+    const cancelCollision = collisions.find(collision => String(collision.id) === 'mobile-cancel-dropzone');
+    if (!cancelCollision) return collisions;
+    return [cancelCollision];
+  };
+
   return (args) => {
     // 1. pointerWithin: ポインタが要素の内側にある場合（最も正確）
-    const pointerCollisions = filterValid(pointerWithin(args));
+    const pointerCollisions = prioritizeCancelDropzone(filterValid(pointerWithin(args)));
     if (pointerCollisions.length > 0) return pointerCollisions;
 
     // 2. rectIntersection: ドラッグ中の要素と重なるもの（ポインタがずれても検出）
-    const rectCollisions = filterValid(rectIntersection(args));
+    const rectCollisions = prioritizeCancelDropzone(filterValid(rectIntersection(args)));
     if (rectCollisions.length > 0) return rectCollisions;
 
     // 3. closestCenter: 最も近い要素（フォールバック）
-    const centerCollisions = filterValid(closestCenter(args));
+    const centerCollisions = prioritizeCancelDropzone(filterValid(closestCenter(args)));
     return centerCollisions;
   };
 };
