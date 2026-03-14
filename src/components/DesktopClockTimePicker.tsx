@@ -44,6 +44,15 @@ const handStyleFromAngle = (angle: number, length: number) => ({
   transform: `translateY(-50%) rotate(${(angle * 180) / Math.PI - 90}deg)`,
 });
 
+const tipStyleFromAngle = (angle: number, length: number) => {
+  const x = Math.sin(angle) * length;
+  const y = -Math.cos(angle) * length;
+  return {
+    left: `calc(50% + ${x}px)`,
+    top: `calc(50% + ${y}px)`,
+  };
+};
+
 const OUTER_HOURS = [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0];
 const INNER_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const MINUTE_TICKS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
@@ -162,6 +171,7 @@ export const DesktopClockTimePicker = ({
 
   const hourHandAngle = angleFromIndex(hourSelection.index, 12);
   const minuteHandAngle = angleFromIndex(draftMinute, 60);
+  const isOffFiveMinuteTick = draftMinute % 5 !== 0;
 
   const updateHourFromPoint = useCallback((clientX: number, clientY: number) => {
     const face = hourFaceRef.current;
@@ -342,6 +352,13 @@ export const DesktopClockTimePicker = ({
                   className="absolute left-1/2 top-1/2 h-[2px] -translate-y-1/2 origin-left bg-emerald-400 rounded-full"
                   style={handStyleFromAngle(minuteHandAngle, 86)}
                 />
+
+                {isOffFiveMinuteTick && (
+                  <div
+                    className="absolute -translate-x-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-white border border-emerald-500"
+                    style={tipStyleFromAngle(minuteHandAngle, 86)}
+                  />
+                )}
 
                 {MINUTE_TICKS.map((minute, i) => (
                   <button
