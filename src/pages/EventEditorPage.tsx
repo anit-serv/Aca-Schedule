@@ -23,6 +23,10 @@ export const EventEditorPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const isMobile = useMobileDetect();
+  const isMobileByViewport = typeof window !== 'undefined'
+    ? window.matchMedia('(max-width: 1023px)').matches
+    : false;
+  const shouldUseMobileLayout = isMobile || isMobileByViewport;
   
   // 現在のモードを管理するための状態
   const [mode, setMode] = useState<Mode>('band-management');
@@ -999,7 +1003,7 @@ export const EventEditorPage = () => {
   // ローディング中
   if (isLoading) {
     return (
-      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
+      <div className={`bg-gray-50 text-gray-900 flex items-center justify-center ${shouldUseMobileLayout ? 'h-screen px-4' : 'min-h-screen'}`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
           <p className="text-lg text-gray-500">イベントを読み込んでいます...</p>
@@ -1023,7 +1027,7 @@ export const EventEditorPage = () => {
         };
 
     return (
-      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
+      <div className={`bg-gray-50 text-gray-900 flex items-center justify-center ${shouldUseMobileLayout ? 'h-screen px-4' : 'min-h-screen'}`}>
         <div className="max-w-md w-full mx-auto p-6">
           <div className="text-center">
             <div className="text-6xl mb-4">{errorConfig.icon}</div>
@@ -1050,7 +1054,7 @@ export const EventEditorPage = () => {
 
   if (!canEdit) {
     return (
-      <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
+      <div className={`bg-gray-50 text-gray-900 flex items-center justify-center ${shouldUseMobileLayout ? 'h-screen px-4' : 'min-h-screen'}`}>
         <div className="max-w-md w-full mx-auto p-6">
           <div className="text-center">
             <div className="text-6xl mb-4">{'\uD83D\uDD12'}</div>
@@ -1073,7 +1077,7 @@ export const EventEditorPage = () => {
   }
 
   // ========== モバイルレイアウト ==========
-  if (isMobile) {
+  if (shouldUseMobileLayout) {
     return (
       <div className="bg-gray-50 text-gray-900 h-screen font-sans flex flex-col overflow-hidden">
         {/* モバイルヘッダー */}

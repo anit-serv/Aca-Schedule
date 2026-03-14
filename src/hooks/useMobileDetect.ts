@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
 const MOBILE_BREAKPOINT = 1024;
+const MOBILE_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
 
 /**
  * モバイルデバイス検出フック
@@ -9,23 +10,38 @@ const MOBILE_BREAKPOINT = 1024;
 export const useMobileDetect = (): boolean => {
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
-    return window.innerWidth < MOBILE_BREAKPOINT;
+    return window.matchMedia(MOBILE_QUERY).matches;
   });
 
   useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-    
-    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
-      setIsMobile(e.matches);
+    const mql = window.matchMedia(MOBILE_QUERY);
+
+    const update = () => {
+      setIsMobile(mql.matches);
     };
 
     // 初回チェック
-    handleChange(mql);
+    update();
 
     // イベントリスナー登録
-    mql.addEventListener('change', handleChange as (e: MediaQueryListEvent) => void);
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', update);
+    } else {
+      mql.addListener(update);
+    }
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    window.visualViewport?.addEventListener('resize', update);
+
     return () => {
-      mql.removeEventListener('change', handleChange as (e: MediaQueryListEvent) => void);
+      if (typeof mql.removeEventListener === 'function') {
+        mql.removeEventListener('change', update);
+      } else {
+        mql.removeListener(update);
+      }
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+      window.visualViewport?.removeEventListener('resize', update);
     };
   }, []);
 

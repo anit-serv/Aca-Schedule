@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTimetableRow } from './SortableTimetableRow';
+import { DesktopClockTimePicker } from './DesktopClockTimePicker';
 import type { Cool, Band, ConstraintViolation } from '../types';
 
 interface CoolSectionProps {
@@ -114,44 +115,32 @@ export const CoolSection = ({
     setIsMenuOpen(!isMenuOpen);
   };
 
-  const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+  const handleStartTimeCommit = (value: string | undefined) => {
+    if (!onCoolStartTimeChange) return;
+
+    if (!value || value.trim() === '') {
+      setStartTimeInput('');
+      onCoolStartTimeChange(coolIndex, undefined);
+      return;
+    }
+
+    // 開始時刻がdailyStartTimeより前でないか検証
+    const timeToMinutes = (time: string): number => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+
+    const inputMinutes = timeToMinutes(value);
+    const minMinutes = timeToMinutes(dailyStartTime);
+
+    if (inputMinutes < minMinutes) {
+      alert(`開始時刻は${dailyStartTime}以降に設定してください。`);
+      setStartTimeInput(cool.startTime || '');
+      return;
+    }
+
     setStartTimeInput(value);
-  };
-
-  const handleStartTimeFocus = () => {
-    // 現在値が空で、前のクールの終了時刻がある場合、デフォルト値として設定
-    if (startTimeInput === '' && previousCoolEndTime) {
-      setStartTimeInput(previousCoolEndTime);
-    }
-  };
-
-  const handleStartTimeBlur = () => {
-    if (onCoolStartTimeChange) {
-      // 空文字の場合はundefinedに変換（開始時刻未設定）
-      if (startTimeInput.trim() === '') {
-        onCoolStartTimeChange(coolIndex, undefined);
-        return;
-      }
-
-      // 開始時刻がdailyStartTimeより前でないか検証
-      const timeToMinutes = (time: string): number => {
-        const [hours, minutes] = time.split(':').map(Number);
-        return hours * 60 + minutes;
-      };
-
-      const inputMinutes = timeToMinutes(startTimeInput);
-      const minMinutes = timeToMinutes(dailyStartTime);
-
-      if (inputMinutes < minMinutes) {
-        // 最小値より前の場合は警告を表示し、元の値に戻す
-        alert(`開始時刻は${dailyStartTime}以降に設定してください。`);
-        setStartTimeInput(cool.startTime || '');
-        return;
-      }
-
-      onCoolStartTimeChange(coolIndex, startTimeInput);
-    }
+    onCoolStartTimeChange(coolIndex, value);
   };
 
   const handleClearStartTime = () => {
@@ -202,27 +191,14 @@ export const CoolSection = ({
                 開始時刻:
               </label>
               <div className="flex items-center gap-1">
-                <input
+                <DesktopClockTimePicker
                   id={`cool-start-time-${coolIndex}`}
-                  type="time"
                   value={startTimeInput}
-                  onChange={handleStartTimeChange}
-                  onFocus={handleStartTimeFocus}
-                  onBlur={handleStartTimeBlur}
-                  min={dailyStartTime}
-                  className="bg-white text-gray-900 px-2 py-1 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
+                  onChange={handleStartTimeCommit}
+                  allowClear
+                  inputClassName="bg-white text-gray-900 px-2 py-1 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none min-w-[96px] text-sm"
                   placeholder="未設定"
-                  title={`${dailyStartTime}以降の時刻を設定してください`}
                 />
-                {startTimeInput && (
-                  <button
-                    onClick={handleClearStartTime}
-                    className="text-gray-500 hover:text-gray-900 px-1 transition-colors"
-                    title="開始時刻をクリア"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
               {!startTimeInput && previousCoolEndTime && (
                 <span className="text-gray-500 text-xs">

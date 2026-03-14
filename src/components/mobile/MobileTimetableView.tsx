@@ -44,6 +44,104 @@ interface MobileTimetableViewProps {
   isLoading?: boolean;
 }
 
+interface MobileTimeInputProps {
+  value?: string;
+  onChange: (value: string | undefined) => void;
+  allowEmpty?: boolean;
+  nativeInputClassName?: string;
+  fallbackContainerClassName?: string;
+  fallbackSelectClassName?: string;
+}
+
+const MobileTimeInput = ({
+  value,
+  onChange,
+  allowEmpty = false,
+  nativeInputClassName,
+  fallbackContainerClassName,
+  fallbackSelectClassName,
+}: MobileTimeInputProps) => {
+  const canUseNativeTimeInput = useMemo(() => {
+    if (typeof document === 'undefined' || typeof navigator === 'undefined') return true;
+
+    const input = document.createElement('input');
+    input.setAttribute('type', 'time');
+    const supportsTimeType = input.type === 'time';
+
+    const platform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform
+      ?? navigator.platform
+      ?? '';
+    const isDesktopPlatform = /Win|Mac|Linux|X11/i.test(platform);
+    const isIPadLike = platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isDesktopEmulation = isDesktopPlatform && !isIPadLike && window.matchMedia('(max-width: 1023px)').matches;
+
+    // PCブラウザのモバイルエミュレーションではフォールバックUIを優先する
+    return supportsTimeType && !isDesktopEmulation;
+  }, []);
+
+  const currentValue = value ?? '';
+  const [rawHour = '', rawMinute = ''] = currentValue.split(':');
+  const hourValue = rawHour.padStart(2, '0');
+  const minuteValue = rawMinute.padStart(2, '0');
+
+  const buildTime = (hour: string, minute: string) => {
+    if (!hour || !minute) return undefined;
+    return `${hour}:${minute}`;
+  };
+
+  if (canUseNativeTimeInput) {
+    return (
+      <input
+        type="time"
+        value={currentValue}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        className={nativeInputClassName}
+      />
+    );
+  }
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+  return (
+    <div className={fallbackContainerClassName}>
+      <select
+        value={hourValue}
+        onChange={(e) => onChange(buildTime(e.target.value, minuteValue || '00'))}
+        className={fallbackSelectClassName}
+      >
+        {allowEmpty && !hourValue && <option value="">--</option>}
+        {hours.map((h) => (
+          <option key={h} value={h}>{h}</option>
+        ))}
+      </select>
+      <span className="text-gray-400 text-xs">:</span>
+      <select
+        value={minuteValue}
+        onChange={(e) => onChange(buildTime(hourValue || '00', e.target.value))}
+        className={fallbackSelectClassName}
+      >
+        {allowEmpty && !minuteValue && <option value="">--</option>}
+        {minutes.map((m) => (
+          <option key={m} value={m}>{m}</option>
+        ))}
+      </select>
+      {allowEmpty && (
+        <button
+          type="button"
+          onClick={() => onChange(undefined)}
+          className="text-emerald-400 hover:text-red-400 p-1"
+          title={'開始時刻を削除'}
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const MobileTimetableView = ({
   bands,
   eventSettings,
@@ -606,6 +704,12 @@ export const MobileTimetableView = ({
     updateTimetable((dt) => {
       const newCools = dt.cools.map((cool, ci) => {
         if (ci !== coolIndex) return cool;
+        if (startTime === undefined) {
+          // Firestoreはundefinedを保存できないため、キー自体を除去する
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { startTime: _removedStartTime, ...coolWithoutStartTime } = cool;
+          return coolWithoutStartTime;
+        }
         return { ...cool, startTime };
       });
       const recalculated = recalculateTimes(newCools, dt.startTime);
@@ -743,14 +847,18 @@ export const MobileTimetableView = ({
 
         {/* \u958b\u59cb\u6642\u523b + \u30af\u30fc\u30eb\u6570\u30b3\u30f3\u30c8\u30ed\u30fc\u30eb + \u9055\u53cd\u30d0\u30c3\u30b8 */}
         {currentTimetable && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>{'\u958B\u59CB'}:</span>
-              <input
-                type="time"
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs text-gray-500 min-w-0">
+              <span className="whitespace-nowrap">{'\u958B\u59CB'}:</span>
+              <MobileTimeInput
                 value={currentTimetable.startTime}
-                onChange={(e) => handleStartTimeChange(e.target.value)}
-                className="border border-gray-200 rounded px-1.5 py-0.5 text-xs text-gray-700 focus:outline-none focus:border-emerald-400 w-20"
+                onChange={(next) => {
+                  if (!next) return;
+                  handleStartTimeChange(next);
+                }}
+                nativeInputClassName="h-9 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 bg-white focus:outline-none focus:border-emerald-400 w-[120px]"
+                fallbackContainerClassName="flex items-center gap-1"
+                fallbackSelectClassName="h-9 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 bg-white focus:outline-none focus:border-emerald-400"
               />
               {dates.length === 1 && (
                 <span className="text-gray-400">{'\u2022'} {formatDate(selectedDate)}</span>
@@ -1082,13 +1190,20 @@ export const MobileTimetableView = ({
         )}
       </AnimatePresence>
 
-      <motion.div
+      <div
         ref={setCancelDropRef}
         id="mobile-cancel-dropzone"
-        className="fixed inset-x-0 z-[70] bottom-[calc(60px+env(safe-area-inset-bottom,0px)+6px)] h-28 flex items-end justify-center"
+        className="fixed inset-x-0 bottom-0 z-[65]"
+        style={{
+          height: 'calc(60px + env(safe-area-inset-bottom,0px) + 118px)',
+          pointerEvents: isDraggingFromBank ? 'auto' : 'none',
+        }}
+      />
+
+      <motion.div
+        className="fixed inset-x-0 z-[70] bottom-[calc(60px+env(safe-area-inset-bottom,0px)+6px)] h-28 flex items-end justify-center pointer-events-none"
         animate={{ opacity: isDraggingFromBank ? 1 : 0 }}
         transition={{ duration: 0.15 }}
-        style={{ pointerEvents: isDraggingFromBank ? 'auto' : 'none' }}
       >
         <motion.div
           animate={{ scale: isCancelZoneActive ? 1.12 : 1, y: isDraggingFromBank ? 0 : 12 }}
@@ -1461,24 +1576,21 @@ const CoolCard = ({
             <div className="flex items-center gap-1">
               {showCoolStartTime ? (
                 <div className="flex items-center gap-1">
-                  <input
-                    type="time"
+                  <MobileTimeInput
                     value={cool.startTime || ''}
-                    onChange={(e) => onCoolStartTimeChange(e.target.value || undefined)}
-                    className="border border-emerald-200 rounded px-1 py-0.5 text-[10px] text-emerald-700 focus:outline-none focus:border-emerald-400 w-[70px] bg-white"
-                  />
-                  <button
-                    onClick={() => {
-                      setShowCoolStartTime(false);
-                      onCoolStartTimeChange(undefined);
+                    onChange={(next) => {
+                      if (!next) {
+                        setShowCoolStartTime(false);
+                        onCoolStartTimeChange(undefined);
+                        return;
+                      }
+                      onCoolStartTimeChange(next);
                     }}
-                    className="text-emerald-400 hover:text-red-400 p-0.5"
-                    title={'\u958B\u59CB\u6642\u523B\u3092\u524A\u9664'}
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                    allowEmpty
+                    nativeInputClassName="h-8 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 focus:outline-none focus:border-emerald-400 w-[112px] bg-white"
+                    fallbackContainerClassName="flex items-center gap-1"
+                    fallbackSelectClassName="h-8 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 focus:outline-none focus:border-emerald-400 bg-white"
+                  />
                 </div>
               ) : (
                 <button

@@ -1,6 +1,7 @@
 import type { Band, EventSettings, DailyTimetable } from '../types';
 import { ToggleSwitch } from './ToggleSwitch';
 import { TimetableSearch } from './TimetableSearch';
+import { DesktopClockTimePicker } from './DesktopClockTimePicker';
 
 interface TimetableContextBarProps {
   timetableType: 'performance' | 'rehearsal';
@@ -109,13 +110,15 @@ export const TimetableContextBar = ({
             <label htmlFor="startTime" className="text-sm text-gray-500 whitespace-nowrap">
               開始時刻:
             </label>
-            <input
+            <DesktopClockTimePicker
               id="startTime"
-              type="time"
               value={currentTimetable.startTime}
-              onChange={(e) => onStartTimeChange(e.target.value)}
+              onChange={(time) => {
+                if (!time) return;
+                onStartTimeChange(time);
+              }}
               disabled={isCustomMode}
-              className={`px-2 py-1 bg-white border border-gray-300 rounded text-sm text-gray-900 ${
+              inputClassName={`px-2 py-1 bg-white border border-gray-300 rounded text-sm text-gray-900 min-w-[96px] ${
                 isCustomMode ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             />
