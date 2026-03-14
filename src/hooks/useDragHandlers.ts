@@ -14,6 +14,28 @@ interface UseDragHandlersParams {
   onEntryReorderFlat: (activeId: string, targetId: string) => void;
 }
 
+export interface CancelAbsorbAnimation {
+  id: number;
+  label: string;
+  subLabel: string;
+  kind: 'band' | 'custom';
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  cardWidth?: number;
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Size {
+  width: number;
+  height: number;
+}
+
 export const useDragHandlers = ({
   bands,
   customEvents,
@@ -28,6 +50,7 @@ export const useDragHandlers = ({
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [overEntryId, setOverEntryId] = useState<string | null>(null);
   const [dropSucceeded, setDropSucceeded] = useState(false);
+  const [cancelAbsorbAnimation, setCancelAbsorbAnimation] = useState<CancelAbsorbAnimation | null>(null);
   const [isPointerOverCancelZone, setIsPointerOverCancelZone] = useState(false);
   const [currentMouseX, setCurrentMouseX] = useState<number>(0);
   const [currentMouseY, setCurrentMouseY] = useState<number>(0);
@@ -39,6 +62,44 @@ export const useDragHandlers = ({
     if (!cancelZone) return false;
     const rect = cancelZone.getBoundingClientRect();
     return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  };
+
+  const triggerCancelAbsorbAnimation = (activeId: string, startPoint?: Point, size?: Size) => {
+    if (!(activeId.startsWith('band-') || activeId.startsWith('custom-'))) return;
+
+    const isBand = activeId.startsWith('band-');
+    const sourceId = activeId.replace(isBand ? 'band-' : 'custom-', '');
+
+    const source = isBand
+      ? bands.find((b) => b.id === sourceId)
+      : customEvents.find((ce) => ce.id === sourceId);
+
+    if (!source) return;
+
+    const iconEl = typeof document !== 'undefined'
+      ? document.getElementById('mobile-cancel-icon') || document.getElementById('mobile-cancel-dropzone')
+      : null;
+
+    const iconRect = iconEl?.getBoundingClientRect();
+    const endX = iconRect ? iconRect.left + iconRect.width / 2 : window.innerWidth / 2;
+    const endY = iconRect ? iconRect.top + iconRect.height / 2 : window.innerHeight - 80;
+
+    const startX = startPoint?.x ?? (currentMouseX > 0 ? currentMouseX : window.innerWidth / 2);
+    const startY = startPoint?.y ?? (currentMouseY > 0 ? currentMouseY : window.innerHeight / 2);
+
+    setCancelAbsorbAnimation({
+      id: Date.now(),
+      label: isBand ? source.name : source.name,
+      subLabel: `${isBand ? source.performanceDuration : source.duration}分`,
+      kind: isBand ? 'band' : 'custom',
+      startX,
+      startY,
+      endX,
+      endY,
+      cardWidth: size?.width,
+    });
+    // 元位置へ戻るドロップアニメーションを抑止
+    setDropSucceeded(true);
   };
 
   // バンドバンクからのドラッグの場合のみポインタ位置をトラッキング
@@ -76,6 +137,7 @@ export const useDragHandlers = ({
   const handleDragStart = (event: DragStartEvent) => {
     setActiveDragId(event.active.id as string);
     setDropSucceeded(false);
+    setCancelAbsorbAnimation(null);
     setIsPointerOverCancelZone(false);
   };
 
@@ -184,6 +246,19 @@ export const useDragHandlers = ({
   // ドラッグ終了
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    const translatedRect = active.rect.current.translated;
+    const dragCenter = translatedRect
+      ? {
+          x: translatedRect.left + translatedRect.width / 2,
+          y: translatedRect.top + translatedRect.height / 2,
+        }
+      : undefined;
+    const dragSize = translatedRect
+      ? {
+          width: translatedRect.width,
+          height: translatedRect.height,
+        }
+      : undefined;
     
     // overEntryIdを保存（handleDragOverで計算済みの正確な挿入位置）
     // モバイルではタッチ離脱時にoverがnullになることがあるため、
@@ -204,6 +279,7 @@ export const useDragHandlers = ({
     if (activeId.startsWith('band-')) {
       if (!over && !savedOverEntryId) {
         if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
+          triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
           return;
         }
         return;
@@ -213,10 +289,12 @@ export const useDragHandlers = ({
       const overId = savedOverEntryId || (over!.id as string);
 
       if (overId === 'mobile-cancel-dropzone') {
+        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
         return;
       }
 
       if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
+        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
         return;
       }
       
@@ -283,16 +361,25 @@ export const useDragHandlers = ({
     // カスタムイベントをタイムテーブルへ追加
     if (activeId.startsWith('custom-')) {
       if (!over && !savedOverEntryId) {
-        if (isPointerInCancelZone(currentMouseX, currentMouseY)) return;
+        if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
+          triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+          return;
+        }
         return;
       }
       
       // savedOverEntryIdを優先（-afterサフィックス含む正確な位置情報）
       const overId = savedOverEntryId || (over!.id as string);
 
-      if (overId === 'mobile-cancel-dropzone') return;
+      if (overId === 'mobile-cancel-dropzone') {
+        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+        return;
+      }
 
-      if (isPointerInCancelZone(currentMouseX, currentMouseY)) return;
+      if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
+        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+        return;
+      }
       
       if (overId === 'band-bank-droppable') return;
       
@@ -393,6 +480,8 @@ export const useDragHandlers = ({
     overEntryId,
     isPointerOverCancelZone,
     dropSucceeded,
+    cancelAbsorbAnimation,
+    clearCancelAbsorbAnimation: () => setCancelAbsorbAnimation(null),
     handleDragStart,
     handleDragOver,
     handleDragEnd,

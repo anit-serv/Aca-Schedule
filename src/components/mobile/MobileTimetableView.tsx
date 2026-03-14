@@ -307,6 +307,8 @@ export const MobileTimetableView = ({
     overEntryId,
     isPointerOverCancelZone,
     dropSucceeded,
+    cancelAbsorbAnimation,
+    clearCancelAbsorbAnimation,
     handleDragStart: baseDragStart,
     handleDragOver,
     handleDragEnd: baseDragEnd,
@@ -348,6 +350,7 @@ export const MobileTimetableView = ({
 
   const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
   const isDraggingFromBank = Boolean(activeBand || activeCustomEvent) && !activeEntry;
+  const isCancelTargetVisible = isDraggingFromBank || Boolean(cancelAbsorbAnimation);
   const isCancelZoneActive = isCancelDropOver || overEntryId === 'mobile-cancel-dropzone' || isPointerOverCancelZone;
 
   // \u5236\u7d04\u30c1\u30a7\u30c3\u30af
@@ -1202,11 +1205,12 @@ export const MobileTimetableView = ({
 
       <motion.div
         className="fixed inset-x-0 z-[70] bottom-[calc(60px+env(safe-area-inset-bottom,0px)+6px)] h-28 flex items-end justify-center pointer-events-none"
-        animate={{ opacity: isDraggingFromBank ? 1 : 0 }}
+        animate={{ opacity: isCancelTargetVisible ? 1 : 0 }}
         transition={{ duration: 0.15 }}
       >
         <motion.div
-          animate={{ scale: isCancelZoneActive ? 1.12 : 1, y: isDraggingFromBank ? 0 : 12 }}
+          id="mobile-cancel-icon"
+          animate={{ scale: isCancelZoneActive ? 1.12 : 1, y: isCancelTargetVisible ? 0 : 12 }}
           transition={{ type: 'spring', stiffness: 380, damping: 24 }}
           className={`w-16 h-16 rounded-full border-2 shadow-xl flex items-center justify-center select-none ${
             isCancelZoneActive
@@ -1217,6 +1221,69 @@ export const MobileTimetableView = ({
           <span className="text-3xl leading-none">×</span>
         </motion.div>
       </motion.div>
+
+      <AnimatePresence>
+        {cancelAbsorbAnimation && (
+          <motion.div
+            key={cancelAbsorbAnimation.id}
+            initial={{
+              left: cancelAbsorbAnimation.startX,
+              top: cancelAbsorbAnimation.startY,
+              opacity: 0.95,
+            }}
+            animate={{
+              left: cancelAbsorbAnimation.endX,
+              top: cancelAbsorbAnimation.endY,
+              opacity: 0,
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            onAnimationComplete={clearCancelAbsorbAnimation}
+            className="fixed z-[130] pointer-events-none"
+          >
+            <div className="-translate-x-1/2 -translate-y-1/2">
+              <motion.div
+                initial={{ scale: 1 }}
+                animate={{ scale: 0.14 }}
+                exit={{ scale: 0.14 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                style={{ width: cancelAbsorbAnimation.cardWidth }}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 shadow-xl border ${
+                  cancelAbsorbAnimation.kind === 'band'
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-purple-50 border-purple-200'
+                }`}
+              >
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    cancelAbsorbAnimation.kind === 'band'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-purple-500 text-white'
+                  }`}
+                >
+                  {cancelAbsorbAnimation.kind === 'band' ? (cancelAbsorbAnimation.label.charAt(0) || 'B') : '★'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm font-medium truncate ${
+                      cancelAbsorbAnimation.kind === 'band' ? 'text-gray-900' : 'text-gray-900'
+                    }`}
+                  >
+                    {cancelAbsorbAnimation.label}
+                  </p>
+                  <p
+                    className={`text-[10px] ${
+                      cancelAbsorbAnimation.kind === 'band' ? 'text-gray-500' : 'text-gray-500'
+                    }`}
+                  >
+                    {cancelAbsorbAnimation.subLabel}
+                  </p>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
 
       {/* D&D\u30c9\u30e9\u30c3\u30b0\u30aa\u30fc\u30d0\u30fc\u30ec\u30a4 */}
