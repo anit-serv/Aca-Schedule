@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useCallback, useEffect } from 'react';
+﻿import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
@@ -47,6 +47,7 @@ interface MobileTimetableViewProps {
 interface MobileTimeInputProps {
   value?: string;
   onChange: (value: string | undefined) => void;
+  disabled?: boolean;
   allowEmpty?: boolean;
   nativeInputClassName?: string;
   fallbackContainerClassName?: string;
@@ -56,6 +57,7 @@ interface MobileTimeInputProps {
 const MobileTimeInput = ({
   value,
   onChange,
+  disabled = false,
   allowEmpty = false,
   nativeInputClassName,
   fallbackContainerClassName,
@@ -94,6 +96,7 @@ const MobileTimeInput = ({
       <input
         type="time"
         value={currentValue}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value || undefined)}
         className={nativeInputClassName}
       />
@@ -107,6 +110,7 @@ const MobileTimeInput = ({
     <div className={fallbackContainerClassName}>
       <select
         value={hourValue}
+        disabled={disabled}
         onChange={(e) => onChange(buildTime(e.target.value, minuteValue || '00'))}
         className={fallbackSelectClassName}
       >
@@ -118,6 +122,7 @@ const MobileTimeInput = ({
       <span className="text-gray-400 text-xs">:</span>
       <select
         value={minuteValue}
+        disabled={disabled}
         onChange={(e) => onChange(buildTime(hourValue || '00', e.target.value))}
         className={fallbackSelectClassName}
       >
@@ -129,6 +134,7 @@ const MobileTimeInput = ({
       {allowEmpty && (
         <button
           type="button"
+          disabled={disabled}
           onClick={() => onChange(undefined)}
           className="text-emerald-400 hover:text-red-400 p-1"
           title={'開始時刻を削除'}
@@ -306,10 +312,12 @@ export const MobileTimetableView = ({
   const {
     overEntryId,
     isPointerOverCancelZone,
+    currentPointerY,
     dropSucceeded,
     cancelAbsorbAnimation,
     clearCancelAbsorbAnimation,
     handleDragStart: baseDragStart,
+    handleDragMove,
     handleDragOver,
     handleDragEnd: baseDragEnd,
     getActiveItems,
@@ -350,8 +358,52 @@ export const MobileTimetableView = ({
 
   const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
   const isDraggingFromBank = Boolean(activeBand || activeCustomEvent) && !activeEntry;
+  const isDraggingBandFromBank = Boolean(activeBand) && !activeEntry;
   const isCancelTargetVisible = isDraggingFromBank || Boolean(cancelAbsorbAnimation);
   const isCancelZoneActive = isCancelDropOver || overEntryId === 'mobile-cancel-dropzone' || isPointerOverCancelZone;
+  const timetableScrollRef = useRef<HTMLDivElement | null>(null);
+  const currentPointerYRef = useRef(0);
+
+  useEffect(() => {
+    currentPointerYRef.current = currentPointerY;
+  }, [currentPointerY]);
+
+  // バンドをキャンセルゾーン直上へドラッグしたときのみ、タイムテーブルを下スクロール
+  useEffect(() => {
+    if (!isDraggingBandFromBank) return;
+
+    let rafId = 0;
+    const SCROLL_ACTIVATION_HEIGHT = 110;
+
+    const loop = () => {
+      const pointerY = currentPointerYRef.current;
+      const scroller = timetableScrollRef.current;
+      const cancelIcon = document.getElementById('mobile-cancel-icon');
+      const dragCard = document.getElementById('mobile-drag-overlay-card');
+
+      if (scroller && cancelIcon) {
+        const iconRect = cancelIcon.getBoundingClientRect();
+        const activationTop = iconRect.top - SCROLL_ACTIVATION_HEIGHT;
+        const activationBottom = iconRect.top;
+        const dragProbeY = dragCard
+          ? dragCard.getBoundingClientRect().bottom
+          : pointerY;
+        const isInActivationBand = dragProbeY >= activationTop && dragProbeY < activationBottom;
+
+        // ×アイコン直上だけスクロールし、アイコン上/下ではスクロールしない
+        if (isInActivationBand) {
+          const nearRatio = 1 - Math.min(Math.max((activationBottom - dragProbeY) / SCROLL_ACTIVATION_HEIGHT, 0), 1);
+          const delta = 3 + nearRatio * 15;
+          scroller.scrollBy({ top: delta, left: 0, behavior: 'auto' });
+        }
+      }
+
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, [isDraggingBandFromBank]);
 
   // \u5236\u7d04\u30c1\u30a7\u30c3\u30af
   const violations = useAllViolations(performanceTimetable, rehearsalTimetable, bands);
@@ -613,10 +665,13 @@ export const MobileTimetableView = ({
   const handleStartTimeChange = useCallback((newStartTime: string) => {
     if (!currentTimetable) return;
     updateTimetable((dt) => {
-      const recalculated = recalculateTimes(dt.cools, newStartTime);
+      const baseCools = eventSettings.rehearsalType === 'cool-pre-rehearsal'
+        ? dt.cools.map((cool, index) => index === 0 ? { ...cool, startTime: newStartTime } : cool)
+        : dt.cools;
+      const recalculated = recalculateTimes(baseCools, newStartTime);
       return { ...dt, startTime: newStartTime, cools: recalculated };
     });
-  }, [currentTimetable, updateTimetable, recalculateTimes]);
+  }, [currentTimetable, updateTimetable, recalculateTimes, eventSettings.rehearsalType]);
 
   // クール数変更を実行
   const applyCoolCountChange = useCallback((newCount: number, reductionAction: 'move' | 'bank' = 'move') => {
@@ -755,12 +810,10 @@ export const MobileTimetableView = ({
       sensors={sensors}
       collisionDetection={customCollisionDetection}
       onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      autoScroll={{
-        threshold: { x: 0, y: 0.15 },
-        acceleration: 5,
-      }}
+      autoScroll={false}
     >
     <div className="flex flex-col h-full">
       {/* \u914d\u7f6e\u4e2d\u30d0\u30ca\u30fc */}
@@ -926,7 +979,7 @@ export const MobileTimetableView = ({
       </div>
 
       {/* \u30bf\u30a4\u30e0\u30c6\u30fc\u30d6\u30eb\u672c\u4f53 */}
-      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: timetableBottomPadding }}>
+      <div ref={timetableScrollRef} className="flex-1 overflow-y-auto" style={{ paddingBottom: timetableBottomPadding }}>
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -1306,7 +1359,7 @@ export const MobileTimetableView = ({
             customFields={eventSettings.customFields}
             timetableType={timetableType}
             onCustomFieldsChange={handleCustomFieldsChange}
-            applyToBoth={false}
+            applyToBoth={eventSettings.rehearsalType === 'cool-pre-rehearsal' || eventSettings.rehearsalType === 'day-start-rehearsal'}
             mobile
           />
         ) : (

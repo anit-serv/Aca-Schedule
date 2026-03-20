@@ -7,6 +7,8 @@ interface BandRowProps {
   presetDurations: number[];
   allMembers: string[];
   performanceDates: string[];
+  shouldAutoFocusName?: boolean;
+  onNameFocused?: () => void;
   onUpdate: (updates: Partial<Band>) => void;
   onDelete: () => void;
   onOpenAvailability: () => void;
@@ -17,6 +19,8 @@ export const BandRow = ({
   index,
   presetDurations,
   allMembers,
+  shouldAutoFocusName = false,
+  onNameFocused,
   onUpdate,
   onDelete,
   onOpenAvailability,
@@ -24,9 +28,17 @@ export const BandRow = ({
   const [memberInput, setMemberInput] = useState('');
   const [showMemberSuggestions, setShowMemberSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const memberInputRef = useRef<HTMLInputElement>(null);
   const searchQueryRef = useRef(''); // Tab選択中も元の検索文字列を保持
   const [suggestionsStyle, setSuggestionsStyle] = useState<{ top?: number; bottom?: number; left: number; width: number }>({ left: 0, width: 0 });
+
+  useEffect(() => {
+    if (!shouldAutoFocusName || !nameInputRef.current) return;
+    nameInputRef.current.focus();
+    nameInputRef.current.select();
+    onNameFocused?.();
+  }, [shouldAutoFocusName, onNameFocused]);
 
   // サジェストの位置を計算
   const updateSuggestionsPosition = useCallback(() => {
@@ -112,9 +124,16 @@ export const BandRow = ({
       {/* バンド名 */}
       <td className="px-4 py-3">
         <input
+          ref={nameInputRef}
           type="text"
           value={band.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              (e.currentTarget as HTMLInputElement).blur();
+            }
+          }}
           placeholder="バンド名を入力"
           className="w-full bg-white text-gray-900 px-3 py-2 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
         />

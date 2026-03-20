@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { DragStartEvent, DragOverEvent, DragEndEvent } from '@dnd-kit/core';
+import type { DragStartEvent, DragOverEvent, DragEndEvent, DragMoveEvent } from '@dnd-kit/core';
 import type { Band, CustomEvent, DailyTimetable } from '../types';
 
 interface UseDragHandlersParams {
@@ -142,12 +142,44 @@ export const useDragHandlers = ({
   };
 
   // ドラッグ中
+  const handleDragMove = (event: DragMoveEvent) => {
+    const { active } = event;
+    const activeId = active.id as string;
+    if (!(activeId.startsWith('band-') || activeId.startsWith('custom-') || activeId.startsWith('entry-'))) {
+      return;
+    }
+
+    const translatedRect = active.rect.current.translated;
+    if (!translatedRect) return;
+
+    const centerX = translatedRect.left + translatedRect.width / 2;
+    const centerY = translatedRect.top + translatedRect.height / 2;
+    setCurrentMouseX(centerX);
+    setCurrentMouseY(centerY);
+    setIsPointerOverCancelZone(isPointerInCancelZone(centerX, centerY));
+  };
+
   const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
     const activeId = active.id as string;
+    let pointerX = currentMouseX;
+    let pointerY = currentMouseY;
+
+    // touch環境でpointer/touchイベント座標が取れない場合に備えて、
+    // dnd-kitが持つ現在のドラッグ矩形から中心座標を補完する
+    const translatedRect = active.rect.current.translated;
+    if (translatedRect) {
+      const centerX = translatedRect.left + translatedRect.width / 2;
+      const centerY = translatedRect.top + translatedRect.height / 2;
+      pointerX = centerX;
+      pointerY = centerY;
+      setCurrentMouseX(centerX);
+      setCurrentMouseY(centerY);
+      setIsPointerOverCancelZone(isPointerInCancelZone(centerX, centerY));
+    }
 
     // overが不安定なモバイル向けフォールバック: 座標がキャンセルゾーン内なら最優先でキャンセル扱い
-    if ((activeId.startsWith('band-') || activeId.startsWith('custom-')) && isPointerInCancelZone(currentMouseX, currentMouseY)) {
+    if ((activeId.startsWith('band-') || activeId.startsWith('custom-')) && isPointerInCancelZone(pointerX, pointerY)) {
       latestOverIdRef.current = 'mobile-cancel-dropzone';
       setOverEntryId('mobile-cancel-dropzone');
       setIsPointerOverCancelZone(true);
@@ -164,10 +196,10 @@ export const useDragHandlers = ({
         
         // バンドバンクからのドラッグ、またはタイムテーブル内での並び替え：マウス位置で判定
         if (activeId.startsWith('band-') || activeId.startsWith('custom-') || activeId.startsWith('entry-')) {
-          if (overRect && currentMouseY > 0) {
+          if (overRect && pointerY > 0) {
             const overCenter = overRect.top + overRect.height / 2;
             
-            if (currentMouseY > overCenter) {
+            if (pointerY > overCenter) {
               const nextOverId = `${overId}-after`;
               latestOverIdRef.current = nextOverId;
               setOverEntryId(nextOverId);
@@ -479,10 +511,12 @@ export const useDragHandlers = ({
     activeDragId,
     overEntryId,
     isPointerOverCancelZone,
+    currentPointerY: currentMouseY,
     dropSucceeded,
     cancelAbsorbAnimation,
     clearCancelAbsorbAnimation: () => setCancelAbsorbAnimation(null),
     handleDragStart,
+    handleDragMove,
     handleDragOver,
     handleDragEnd,
     getActiveItems,

@@ -10,7 +10,9 @@ interface TimetableContentProps {
   violations: ConstraintViolation[];
   bandNumbers: Map<string, number>;
   isReadOnly: boolean;
+  timetableType: 'performance' | 'rehearsal';
   rehearsalType: 'rehearsal-day' | 'cool-pre-rehearsal' | 'day-start-rehearsal' | 'none';
+  linkedRehearsalDailyTimetable?: DailyTimetable;
   onRemoveEntry: (entryId: string, coolIndex?: number) => void;
   onDeleteCool: (coolIndex: number) => void;
   onMoveCoolUp: (coolIndex: number) => void;
@@ -27,7 +29,9 @@ export const TimetableContent = ({
   violations,
   bandNumbers,
   isReadOnly,
+  timetableType,
   rehearsalType,
+  linkedRehearsalDailyTimetable,
   onRemoveEntry,
   onDeleteCool,
   onMoveCoolUp,
@@ -42,18 +46,24 @@ export const TimetableContent = ({
         {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
           <div>
             {currentTimetable.cools.map((cool, coolIndex) => {
-              // 前のクールの終了時刻を取得（デフォルト値として使用）
-              // 第1クールの場合は本番/リハーサル開始時刻を使用
-              const previousCoolEndTime = coolIndex > 0
-                ? (() => {
-                    const prevCool = currentTimetable.cools![coolIndex - 1];
-                    if (prevCool.entries.length > 0) {
-                      const lastEntry = prevCool.entries[prevCool.entries.length - 1];
-                      return lastEntry.endTime;
-                    }
-                    return undefined;
-                  })()
-                : currentTimetable.startTime; // 第1クールの場合は開始時刻を使用
+              const getCoolEndTime = (targetCool?: DailyTimetable['cools'][number]) => {
+                if (!targetCool || targetCool.entries.length === 0) return undefined;
+                return targetCool.entries[targetCool.entries.length - 1]?.endTime;
+              };
+
+              // クール直前リハの本番表示では、同じクールのリハ終了時刻を継続元として優先
+              const linkedRehearsalEndTime =
+                rehearsalType === 'cool-pre-rehearsal' && timetableType === 'performance'
+                  ? getCoolEndTime(linkedRehearsalDailyTimetable?.cools?.[coolIndex])
+                  : undefined;
+
+              // 前のクール終了時刻（通常の継続元）
+              const previousCoolEndTimeInSameTable = coolIndex > 0
+                ? getCoolEndTime(currentTimetable.cools?.[coolIndex - 1])
+                : currentTimetable.startTime;
+
+              const previousCoolEndTime = linkedRehearsalEndTime || previousCoolEndTimeInSameTable;
+              const overlapBaselineTime = linkedRehearsalEndTime || previousCoolEndTimeInSameTable;
 
               // 次のクールの開始時刻を取得（警告表示用）
               const nextCoolStartTime = coolIndex < currentTimetable.cools!.length - 1
@@ -89,6 +99,7 @@ export const TimetableContent = ({
                     onTransitionTimeChange={onTransitionTimeChange}
                     onCoolStartTimeChange={onCoolStartTimeChange}
                     previousCoolEndTime={previousCoolEndTime}
+                    overlapBaselineTime={overlapBaselineTime}
                     nextCoolStartTime={nextCoolStartTime}
                     dailyStartTime={currentTimetable.startTime}
                     violations={violations.filter(v => v.coolId === cool.id)}

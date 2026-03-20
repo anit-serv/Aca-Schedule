@@ -21,6 +21,8 @@ interface CustomFieldsTableProps {
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
   readOnly?: boolean;
   searchQuery?: string;
+  visibleCoolIds?: string[];
+  disablePerformanceBottomSpacer?: boolean;
 }
 
 // 範囲選択の状態
@@ -46,6 +48,8 @@ export const CustomFieldsTable = ({
   onCustomFieldsChange,
   readOnly,
   searchQuery = '',
+  visibleCoolIds,
+  disablePerformanceBottomSpacer = false,
 }: CustomFieldsTableProps) => {
   // 読み取り専用モード
   const isReadOnly = readOnly ?? false;
@@ -95,10 +99,14 @@ export const CustomFieldsTable = ({
   );
 
   // エントリー一覧（クール情報付き）
-  const entries = useMemo(
-    () => getEntriesWithCoolInfo(currentTimetable),
-    [currentTimetable]
-  );
+  const entries = useMemo(() => {
+    const allEntries = getEntriesWithCoolInfo(currentTimetable);
+    if (!visibleCoolIds || visibleCoolIds.length === 0) {
+      return allEntries;
+    }
+    const visibleSet = new Set(visibleCoolIds);
+    return allEntries.filter(entry => entry.coolId && visibleSet.has(entry.coolId));
+  }, [currentTimetable, visibleCoolIds]);
 
   // バンド番号マップ（全日程を通した連番、カスタムイベントは含まない）
   const bandNumbers = useMemo(
@@ -1125,7 +1133,7 @@ export const CustomFieldsTable = ({
           </tbody>
         </table>
         {/* ツールバー表示用の余白（本番のみ） */}
-        {timetableType === 'performance' && <div className="h-32" />}
+        {timetableType === 'performance' && !disablePerformanceBottomSpacer && <div className="h-32" />}
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ interface CoolSectionProps {
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
   onCoolStartTimeChange?: (coolIndex: number, startTime: string | undefined) => void;
   previousCoolEndTime?: string; // 前のクールの終了時刻（デフォルト値として使用）
+  overlapBaselineTime?: string; // 開始時刻の重なり判定に使う基準時刻
   nextCoolStartTime?: string; // 次のクールの開始時刻（警告表示用）
   dailyStartTime: string; // その日の開始時刻（最小値として使用）
   violations?: ConstraintViolation[]; // このクール内の制約違反
@@ -42,6 +43,7 @@ export const CoolSection = ({
   onTransitionTimeChange,
   onCoolStartTimeChange,
   previousCoolEndTime,
+  overlapBaselineTime,
   nextCoolStartTime,
   dailyStartTime,
   violations = [],
@@ -172,13 +174,26 @@ export const CoolSection = ({
     return timeToMinutes(lastEndTime) > timeToMinutes(nextCoolStartTime);
   };
 
+  // 開始時刻が前タイムラインと重なるかどうかを判定
+  const isOverlappingPreviousTimeline = (): boolean => {
+    if (!cool.startTime || !overlapBaselineTime) return false;
+
+    const timeToMinutes = (time: string): number => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+
+    return timeToMinutes(cool.startTime) < timeToMinutes(overlapBaselineTime);
+  };
+
   const showWarning = isTimeExceeded();
+  const showOverlapWarning = isOverlappingPreviousTimeline();
 
   // 別日リハーサルイベントの場合は常にクール名を表示、それ以外は複数クールかつ編集可能な場合のみ表示
   const shouldShowCoolHeader = rehearsalType === 'rehearsal-day' || (totalCools > 1 && !isReadOnly);
 
   return (
-    <div className={`bg-emerald-50/50 rounded-lg overflow-hidden border border-emerald-100 ${showWarning ? 'ring-2 ring-red-500' : ''}`}>
+    <div className={`bg-emerald-50/50 rounded-lg overflow-hidden border border-emerald-100 ${(showWarning || showOverlapWarning) ? 'ring-2 ring-red-500' : ''}`}>
       {shouldShowCoolHeader && (
         <div className="relative">
           {/* クール名ヘッダーの上に表示する線は削除（ドロップ可能だがハイライトなし） */}
@@ -211,6 +226,11 @@ export const CoolSection = ({
               {showWarning && (
                 <span className="text-red-400 text-xs flex items-center gap-1">
                   ⚠️ 次のクール開始時刻を超過
+                </span>
+              )}
+              {showOverlapWarning && (
+                <span className="text-red-400 text-xs flex items-center gap-1">
+                  ⚠️ 前のタイムラインと時刻が重複
                 </span>
               )}
             </div>

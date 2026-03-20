@@ -36,6 +36,9 @@ export const EventEditorPage = () => {
   const [eventSettings, setEventSettings] = useState<EventSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [bandsLoaded, setBandsLoaded] = useState(false);
+  const [hasCompletedInitialTimetableSync, setHasCompletedInitialTimetableSync] = useState(false);
+  const [performanceTimetableLoaded, setPerformanceTimetableLoaded] = useState(false);
+  const [rehearsalTimetableLoaded, setRehearsalTimetableLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // タイムテーブルの状態管理
@@ -48,6 +51,7 @@ export const EventEditorPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   // 初回モード自動判定用
   const initialModeSetRef = useRef(false);
+  const isInitialTimetableSyncInFlightRef = useRef(false);
   // 共有パネルの表示状態
   const [showSharePanel, setShowSharePanel] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
@@ -65,6 +69,13 @@ export const EventEditorPage = () => {
   const [showMobileSettings, setShowMobileSettings] = useState(false);
   // モバイル用: 選択中バンドID（タップ to プレース）
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHasCompletedInitialTimetableSync(false);
+    setPerformanceTimetableLoaded(false);
+    setRehearsalTimetableLoaded(false);
+    isInitialTimetableSyncInFlightRef.current = false;
+  }, [eventId]);
 
   // オーナー権限移譲リクエストがある場合、自動的に通知モーダルを表示
   useEffect(() => {
@@ -277,6 +288,7 @@ export const EventEditorPage = () => {
       'performance',
       (fetchedTimetable) => {
         setPerformanceTimetable(fetchedTimetable);
+        setPerformanceTimetableLoaded(true);
       },
       (err) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -296,6 +308,14 @@ export const EventEditorPage = () => {
   const hasEventSettings = !!eventSettings;
   useEffect(() => {
     if (!eventId || !hasEventSettings) return;
+
+    if (eventSettings?.rehearsalType === 'none') {
+      setRehearsalTimetable(null);
+      setRehearsalTimetableLoaded(true);
+      return;
+    }
+
+    setRehearsalTimetableLoaded(false);
     
     // リアルタイム監視を設定
     const unsubscribe = timetableService.subscribeTimetable(
@@ -303,6 +323,7 @@ export const EventEditorPage = () => {
       'rehearsal',
       (fetchedTimetable) => {
         setRehearsalTimetable(fetchedTimetable);
+        setRehearsalTimetableLoaded(true);
       },
       (err) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -316,7 +337,7 @@ export const EventEditorPage = () => {
     // クリーンアップ
     return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId, hasEventSettings]);
+  }, [eventId, hasEventSettings, eventSettings?.rehearsalType]);
 
   // タイムテーブルが存在しない場合は作成
   useEffect(() => {
@@ -542,25 +563,74 @@ export const EventEditorPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bands, performanceTimetable, eventSettings, eventId]);
 
+  const getFirstCoolStartTime = (dailyTimetable?: DailyTimetable): string | undefined => {
+    return dailyTimetable?.cools?.[0]?.startTime;
+  };
+
+  const normalizeFirstCoolStartTime = (dailyTimetable: DailyTimetable, unifiedStartTime: string): DailyTimetable => {
+    // cool.startTime の未設定（継続）を保持するため、日付開始時刻のみ正規化する
+    return {
+      ...dailyTimetable,
+      startTime: unifiedStartTime,
+    };
+  };
+
+  const isSameDailyTimetable = (a: DailyTimetable, b: DailyTimetable): boolean => {
+    return JSON.stringify(a) === JSON.stringify(b);
+  };
+
   // クール直前リハーサルの場合、本番タイムテーブルの変更を監視してリハーサルタイムテーブルを同期
   useEffect(() => {
     if (!eventSettings || !performanceTimetable || !rehearsalTimetable) return;
     if (eventSettings.rehearsalType !== 'cool-pre-rehearsal') return;
+    if (hasCompletedInitialTimetableSync) return;
+    if (isInitialTimetableSyncInFlightRef.current) return;
+
+    isInitialTimetableSyncInFlightRef.current = true;
+
+    let cancelled = false;
+    const releaseTimeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        console.warn('[クール直前リハ自動同期] 初回同期の待機をタイムアウト解除');
+        setHasCompletedInitialTimetableSync(true);
+      }
+      isInitialTimetableSyncInFlightRef.current = false;
+    }, 8000);
 
     const syncAllDates = async () => {
       console.log('[クール直前リハ自動同期] 開始');
+      const performanceDailyTimetables = performanceTimetable.dailyTimetables || [];
       
       // すべての本番日付について同期
-      for (const performanceDailyTimetable of performanceTimetable.dailyTimetables) {
+      for (const performanceDailyTimetable of performanceDailyTimetables) {
         await syncCoolPreRehearsalTimetableInternal(performanceDailyTimetable);
       }
       
       console.log('[クール直前リハ自動同期] 完了');
+
+      if (!cancelled) {
+        window.clearTimeout(releaseTimeoutId);
+        setHasCompletedInitialTimetableSync(true);
+      }
+      isInitialTimetableSyncInFlightRef.current = false;
     };
 
-    syncAllDates();
+    syncAllDates().catch((error) => {
+      console.error('[クール直前リハ自動同期] 失敗:', error);
+      if (!cancelled) {
+        window.clearTimeout(releaseTimeoutId);
+        setHasCompletedInitialTimetableSync(true);
+      }
+      isInitialTimetableSyncInFlightRef.current = false;
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(releaseTimeoutId);
+      isInitialTimetableSyncInFlightRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [performanceTimetable?.dailyTimetables, eventSettings?.rehearsalType]);
+  }, [eventId, eventSettings?.rehearsalType, performanceTimetable?.id, rehearsalTimetable?.id, hasCompletedInitialTimetableSync]);
 
   // クール直前リハーサルのタイムテーブルを本番と同期（内部用）
   const syncCoolPreRehearsalTimetableInternal = async (performanceDailyTimetable: DailyTimetable) => {
@@ -587,38 +657,63 @@ export const EventEditorPage = () => {
       dt => dt.date === performanceDailyTimetable.date
     ) || {
       date: performanceDailyTimetable.date,
-      startTime: performanceDailyTimetable.startTime,
+      startTime: '10:00',
       cools: [],
       entries: [],
     };
+
+    const unifiedStartTime = performanceDailyTimetable.startTime
+      || getFirstCoolStartTime(performanceDailyTimetable)
+      || getFirstCoolStartTime(rehearsalDailyTimetable)
+      || rehearsalDailyTimetable.startTime
+      || '10:00';
     
     // リハーサルのクールを本番と同じ数にする
     const rehearsalCools: Cool[] = performanceCools.map((performanceCool, index) => {
       const bandIdsInCool = coolBandIds[index];
+      const existingCool = rehearsalDailyTimetable.cools?.[index];
       
-      // このクールのリハーサルエントリを作成
-      const rehearsalEntries: TimetableEntry[] = bandIdsInCool.map(bandId => {
+      // このクールのリハーサルエントリを作成（既存IDを優先して保持）
+      const rehearsalEntries: TimetableEntry[] = bandIdsInCool.map((bandId, entryIndex) => {
+        const existingEntry = existingCool?.entries.find(
+          entry => entry.type === 'band' && entry.bandId === bandId
+        );
         return {
-          id: generateUUID(),
+          id: existingEntry?.id || generateUUID(),
           type: 'band' as const,
           bandId: bandId,
-          startTime: '',
-          endTime: '',
-          order: 0,
+          startTime: existingEntry?.startTime || '',
+          endTime: existingEntry?.endTime || '',
+          order: entryIndex,
         };
       });
       
-      return {
-        id: performanceCool.id,
+      const rehearsalCool: Cool = {
+        id: existingCool?.id || performanceCool.id,
         number: performanceCool.number,
         entries: rehearsalEntries,
       };
+
+      if (existingCool?.startTime) {
+        return {
+          ...rehearsalCool,
+          startTime: existingCool.startTime,
+        };
+      }
+
+      return rehearsalCool;
     });
     
     const updatedRehearsalDailyTimetable: DailyTimetable = {
       ...rehearsalDailyTimetable,
-      cools: rehearsalCools,
+      startTime: unifiedStartTime,
+      cools: recalculateRehearsalCoolTimes(rehearsalCools, unifiedStartTime, performanceCools),
     };
+
+    if (isSameDailyTimetable(rehearsalDailyTimetable, updatedRehearsalDailyTimetable)) {
+      console.log('[クール直前リハ同期] 差分なしのため保存スキップ');
+      return;
+    }
     
     // Firestoreに保存
     try {
@@ -694,11 +789,41 @@ export const EventEditorPage = () => {
     });
   };
 
-  const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: string): Cool[] => {
+  // リハーサル用のエントリー時刻を再計算するヘルパー
+  const recalculateRehearsalEntryTimes = (entries: TimetableEntry[], startTime: string): TimetableEntry[] => {
+    let currentTime = startTime;
+    const rehearsalDuration = eventSettings?.rehearsalDuration || 0;
+
+    return entries.map((entry, index) => {
+      const duration = entry.customEvent?.duration || rehearsalDuration;
+      const transitionTime = entry.transitionTime || 0;
+      const [hours, minutes] = currentTime.split(':').map(Number);
+      const startMinutes = hours * 60 + minutes + transitionTime;
+      const endMinutes = startMinutes + duration;
+      const entryStart = `${Math.floor(startMinutes / 60).toString().padStart(2, '0')}:${(startMinutes % 60).toString().padStart(2, '0')}`;
+      const entryEnd = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
+      currentTime = entryEnd;
+      return { ...entry, startTime: entryStart, endTime: entryEnd, order: index };
+    });
+  };
+
+  const getCoolEndTime = (cool?: Cool): string | undefined => {
+    if (!cool || !cool.entries || cool.entries.length === 0) return undefined;
+    return cool.entries[cool.entries.length - 1].endTime;
+  };
+
+  const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: string, linkedRehearsalCools?: Cool[]): Cool[] => {
     if (!cools || cools.length === 0) return cools;
     let currentTime = dailyStartTime;
-    return cools.map((cool) => {
+    return cools.map((cool, index) => {
       if (cool.startTime) currentTime = cool.startTime;
+
+      // クール直前リハーサル: 対応するリハ終了時刻を本番開始に反映
+      const linkedRehearsalEndTime = getCoolEndTime(linkedRehearsalCools?.[index]);
+      if (linkedRehearsalEndTime) {
+        currentTime = linkedRehearsalEndTime;
+      }
+
       const updatedEntries = recalculatePerformanceEntryTimes(cool.entries, currentTime);
       if (updatedEntries.length > 0) {
         const lastEntry = updatedEntries[updatedEntries.length - 1];
@@ -708,25 +833,70 @@ export const EventEditorPage = () => {
     });
   };
 
+  const recalculateRehearsalCoolTimes = (cools: Cool[], dailyStartTime: string, linkedPerformanceCools?: Cool[]): Cool[] => {
+    if (!cools || cools.length === 0) return cools;
+    let currentTime = dailyStartTime;
+
+    return cools.map((cool, index) => {
+      if (cool.startTime) currentTime = cool.startTime;
+
+      // クール直前リハーサル: 前クール本番終了時刻を次クールリハ開始に反映
+      if (index > 0) {
+        const previousPerformanceEndTime = getCoolEndTime(linkedPerformanceCools?.[index - 1]);
+        if (previousPerformanceEndTime) {
+          currentTime = previousPerformanceEndTime;
+        }
+      }
+
+      const updatedEntries = recalculateRehearsalEntryTimes(cool.entries, currentTime);
+      if (updatedEntries.length > 0) {
+        const lastEntry = updatedEntries[updatedEntries.length - 1];
+        currentTime = lastEntry.endTime || currentTime;
+      }
+
+      return { ...cool, entries: updatedEntries };
+    });
+  };
+
   // 日別タイムテーブルの変更を処理（本番用）
   const handlePerformanceTimetableChange = async (updatedDailyTimetable: DailyTimetable) => {
     if (!performanceTimetable || !eventSettings) return;
+
+    let normalizedDailyTimetable = updatedDailyTimetable;
+    if (eventSettings.rehearsalType === 'cool-pre-rehearsal') {
+      const linkedRehearsalTimetable = rehearsalTimetable?.dailyTimetables.find(
+        dt => dt.date === updatedDailyTimetable.date
+      );
+      const unifiedStartTime = updatedDailyTimetable.startTime
+        || getFirstCoolStartTime(updatedDailyTimetable)
+        || getFirstCoolStartTime(linkedRehearsalTimetable)
+        || linkedRehearsalTimetable?.startTime
+        || '10:00';
+
+      const normalized = normalizeFirstCoolStartTime(updatedDailyTimetable, unifiedStartTime);
+      normalizedDailyTimetable = {
+        ...normalized,
+        cools: normalized.cools && normalized.cools.length > 0
+          ? recalculatePerformanceCoolTimes(normalized.cools, unifiedStartTime, linkedRehearsalTimetable?.cools)
+          : normalized.cools,
+      };
+    }
     
-    console.log('[本番TT変更] 日付:', updatedDailyTimetable.date, 'クール数:', updatedDailyTimetable.cools?.length || 0);
+    console.log('[本番TT変更] 日付:', normalizedDailyTimetable.date, 'クール数:', normalizedDailyTimetable.cools?.length || 0);
     
     // 楽観的更新: ローカル状態を即座に更新
     const updatedDailyTimetables = performanceTimetable.dailyTimetables.map(dt =>
-      dt.date === updatedDailyTimetable.date ? updatedDailyTimetable : dt
+      dt.date === normalizedDailyTimetable.date ? normalizedDailyTimetable : dt
     ).concat(
       // 新しい日付の場合は追加
-      performanceTimetable.dailyTimetables.some(dt => dt.date === updatedDailyTimetable.date)
+      performanceTimetable.dailyTimetables.some(dt => dt.date === normalizedDailyTimetable.date)
         ? []
-        : [updatedDailyTimetable]
+        : [normalizedDailyTimetable]
     );
     
     // 変更された日付以降の全ての日付のクール番号を再計算
     const sortedDates = [...eventSettings.performanceDates].sort();
-    const changedIndex = sortedDates.indexOf(updatedDailyTimetable.date);
+    const changedIndex = sortedDates.indexOf(normalizedDailyTimetable.date);
     
     console.log('[本番TT変更] 変更日付インデックス:', changedIndex, '全日付数:', sortedDates.length);
     
@@ -786,26 +956,40 @@ export const EventEditorPage = () => {
       alert('タイムテーブルの更新に失敗しました。');
     }
     
-    // クール直前リハーサルの場合、リハーサルタイムテーブルを本番と同期
-    if (eventSettings.rehearsalType === 'cool-pre-rehearsal' && rehearsalTimetable) {
-      syncCoolPreRehearsalTimetableInternal(updatedDailyTimetable);
-    }
+    // クール直前リハーサルの同期は useEffect 側で一元実行（相互更新ループを防止）
   };
 
   // 日別タイムテーブルの変更を処理（リハーサル用）
   const handleRehearsalTimetableChange = async (updatedDailyTimetable: DailyTimetable) => {
     if (!rehearsalTimetable || !eventSettings) return;
+
+    let normalizedDailyTimetable = updatedDailyTimetable;
+    if (eventSettings.rehearsalType === 'cool-pre-rehearsal') {
+      const unifiedStartTime = updatedDailyTimetable.startTime
+        || getFirstCoolStartTime(updatedDailyTimetable)
+        || '10:00';
+      const normalized = normalizeFirstCoolStartTime(updatedDailyTimetable, unifiedStartTime);
+      const linkedPerformanceDaily = performanceTimetable?.dailyTimetables.find(
+        dt => dt.date === updatedDailyTimetable.date
+      );
+      normalizedDailyTimetable = {
+        ...normalized,
+        cools: normalized.cools && normalized.cools.length > 0
+          ? recalculateRehearsalCoolTimes(normalized.cools, unifiedStartTime, linkedPerformanceDaily?.cools)
+          : normalized.cools,
+      };
+    }
     
-    console.log('[リハTT変更] 日付:', updatedDailyTimetable.date, 'クール数:', updatedDailyTimetable.cools?.length || 0);
+    console.log('[リハTT変更] 日付:', normalizedDailyTimetable.date, 'クール数:', normalizedDailyTimetable.cools?.length || 0);
     
     // 楽観的更新: ローカル状態を即座に更新
     const updatedDailyTimetables = rehearsalTimetable.dailyTimetables.map(dt =>
-      dt.date === updatedDailyTimetable.date ? updatedDailyTimetable : dt
+      dt.date === normalizedDailyTimetable.date ? normalizedDailyTimetable : dt
     ).concat(
       // 新しい日付の場合は追加
-      rehearsalTimetable.dailyTimetables.some(dt => dt.date === updatedDailyTimetable.date)
+      rehearsalTimetable.dailyTimetables.some(dt => dt.date === normalizedDailyTimetable.date)
         ? []
-        : [updatedDailyTimetable]
+        : [normalizedDailyTimetable]
     );
     
     // 日付リストを取得
@@ -815,7 +999,7 @@ export const EventEditorPage = () => {
     
     // 変更された日付以降の全ての日付のクール番号を再計算
     const sortedDates = [...dateList].sort();
-    const changedIndex = sortedDates.indexOf(updatedDailyTimetable.date);
+    const changedIndex = sortedDates.indexOf(normalizedDailyTimetable.date);
     
     console.log('[リハTT変更] 変更日付インデックス:', changedIndex, '全日付数:', sortedDates.length);
     
@@ -873,12 +1057,46 @@ export const EventEditorPage = () => {
       alert('タイムテーブルの更新に失敗しました。');
     }
 
+    // クール直前リハーサルでは、開始時刻を「第1クールのリハ開始時刻」に統一して本番へ反映
+    if (eventSettings.rehearsalType === 'cool-pre-rehearsal' && performanceTimetable) {
+      const unifiedStartTime = normalizedDailyTimetable.startTime
+        || getFirstCoolStartTime(normalizedDailyTimetable)
+        || '10:00';
+      const performanceDt = performanceTimetable.dailyTimetables.find(
+        dt => dt.date === normalizedDailyTimetable.date
+      );
+
+      if (performanceDt) {
+        const normalizedPerformanceDt = normalizeFirstCoolStartTime(performanceDt, unifiedStartTime);
+        const updatedPerformanceDt: DailyTimetable = {
+          ...normalizedPerformanceDt,
+          ...(normalizedPerformanceDt.cools && normalizedPerformanceDt.cools.length > 0
+            ? { cools: recalculatePerformanceCoolTimes(normalizedPerformanceDt.cools, unifiedStartTime, normalizedDailyTimetable.cools) }
+            : { entries: recalculatePerformanceEntryTimes(normalizedPerformanceDt.entries || [], unifiedStartTime) }
+          ),
+        };
+
+        if (isSameDailyTimetable(performanceDt, updatedPerformanceDt)) {
+          console.log('[リハTT変更] 本番側は差分なしのため同期スキップ');
+        } else {
+        try {
+          await timetableService.updateDailyTimetable(
+            performanceTimetable.id, updatedPerformanceDt
+          );
+          console.log('[リハTT変更] クール直前リハの本番開始時刻を同期:', unifiedStartTime);
+        } catch (error) {
+          console.error('[リハTT変更] クール直前リハ同期エラー:', error);
+        }
+        }
+      }
+    }
+
     // 当日一括リハーサルの場合、リハーサル終了時刻が本番開始時刻を超えるときのみ自動反映
     if (eventSettings.rehearsalType === 'day-start-rehearsal' && performanceTimetable) {
-      const rehearsalEndTime = getRehearsalEndTime(updatedDailyTimetable);
+      const rehearsalEndTime = getRehearsalEndTime(normalizedDailyTimetable);
       if (rehearsalEndTime) {
         const performanceDt = performanceTimetable.dailyTimetables.find(
-          dt => dt.date === updatedDailyTimetable.date
+          dt => dt.date === normalizedDailyTimetable.date
         );
         // リハーサル終了時刻が本番開始時刻を超える場合のみ更新（早く終わった場合は変更しない）
         if (performanceDt && rehearsalEndTime > performanceDt.startTime) {
@@ -1000,13 +1218,26 @@ export const EventEditorPage = () => {
     }
   };
 
+  const needsInitialTimetableSync =
+    eventSettings?.rehearsalType === 'cool-pre-rehearsal' &&
+    !!performanceTimetable &&
+    !!rehearsalTimetable;
+  const needsRehearsalTimetable = !!eventSettings && eventSettings.rehearsalType !== 'none';
+  const isWaitingTimetableSubscriptions =
+    !performanceTimetableLoaded ||
+    (needsRehearsalTimetable && !rehearsalTimetableLoaded);
+  const isWaitingInitialTimetableSync = needsInitialTimetableSync && !hasCompletedInitialTimetableSync;
+  const isEditorLoading = isLoading || !bandsLoaded || isWaitingTimetableSubscriptions || isWaitingInitialTimetableSync;
+
   // ローディング中
-  if (isLoading) {
+  if (isEditorLoading) {
     return (
       <div className={`bg-gray-50 text-gray-900 flex items-center justify-center ${shouldUseMobileLayout ? 'h-screen px-4' : 'min-h-screen'}`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-500">イベントを読み込んでいます...</p>
+          <p className="text-lg text-gray-500">
+            {isWaitingInitialTimetableSync ? 'タイムテーブルを準備しています...' : 'イベントを読み込んでいます...'}
+          </p>
         </div>
       </div>
     );
@@ -1097,7 +1328,7 @@ export const EventEditorPage = () => {
               bands={bands}
               eventSettings={eventSettings}
               onBandsChange={handleBandsChange}
-              isLoading={isLoading || !bandsLoaded}
+              isLoading={isEditorLoading}
             />
           ) : (
             <MobileTimetableView
@@ -1116,7 +1347,7 @@ export const EventEditorPage = () => {
               bottomSheetHeight={bottomSheetHeight}
               onBottomSheetHeightChange={setBottomSheetHeight}
               onSelectBand={setSelectedBandId}
-              isLoading={isLoading || !bandsLoaded}
+              isLoading={isEditorLoading}
             />
           )}
         </main>

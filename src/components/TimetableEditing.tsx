@@ -79,6 +79,7 @@ export const TimetableEditing = ({
     pendingCount: number;
     entryCount: number;
   } | null>(null);
+  const hasSkippedInitialAutoRecalcRef = useRef(false);
 
   // カスタムイベントが変更されたらFirestoreのeventSettingsを更新
   useEffect(() => {
@@ -217,6 +218,20 @@ export const TimetableEditing = ({
 
   // 当日一括リハーサル＋カスタムモードで両方表示するかどうか
   const showCombinedView = isCustomMode && eventSettings.rehearsalType === 'day-start-rehearsal';
+  // クール直前リハーサル＋カスタムモードではクール単位でリハ→本番を交互表示
+  const showInterleavedCoolPreView = isCustomMode && eventSettings.rehearsalType === 'cool-pre-rehearsal';
+
+  const rehearsalCoolIds = useMemo(
+    () => (rehearsalDailyTimetable.cools || []).map(cool => cool.id),
+    [rehearsalDailyTimetable]
+  );
+
+  const performanceCoolIds = useMemo(
+    () => (performanceDailyTimetable.cools || []).map(cool => cool.id),
+    [performanceDailyTimetable]
+  );
+
+  const interleavedCoolCount = Math.max(rehearsalCoolIds.length, performanceCoolIds.length);
 
   // クール数の現在値を計算
   const coolCount = useMemo(() => {
@@ -259,6 +274,12 @@ export const TimetableEditing = ({
   // バンドの演奏時間が変更されたら、タイムテーブルの時刻を再計算
   // または日付が切り替わったときも再計算
   useEffect(() => {
+    // 初回表示時の自動再計算はスキップし、読み込み直後の時刻チラつきを防ぐ
+    if (!hasSkippedInitialAutoRecalcRef.current) {
+      hasSkippedInitialAutoRecalcRef.current = true;
+      return;
+    }
+
     if (!currentTimetable || !bands || bands.length === 0) return;
     
     if (currentTimetable.cools && currentTimetable.cools.length > 0) {
@@ -281,13 +302,16 @@ export const TimetableEditing = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bands, selectedDate, currentTimetable.startTime]); // bandsの変更、日付の切り替え、開始時刻の変更を監視
+  }, [bands, selectedDate, currentTimetable.startTime, recalculateTimes]); // bandsの変更、日付の切り替え、開始時刻/デフォルト計算ロジックの変更を監視
 
 
   // 開始時刻の変更
   const handleStartTimeChange = (newStartTime: string) => {
     if (currentTimetable.cools && currentTimetable.cools.length > 0) {
-      const calculatedCools = recalculateTimes(currentTimetable.cools, newStartTime);
+      const baseCools = eventSettings.rehearsalType === 'cool-pre-rehearsal'
+        ? currentTimetable.cools.map((cool, index) => index === 0 ? { ...cool, startTime: newStartTime } : cool)
+        : currentTimetable.cools;
+      const calculatedCools = recalculateTimes(baseCools, newStartTime);
       onTimetableChange({
         ...currentTimetable,
         startTime: newStartTime,
@@ -714,7 +738,7 @@ export const TimetableEditing = ({
             {isCustomMode ? (
               showCombinedView ? (
                 // 当日一括リハーサル：リハーサルと本番を縦に並べて表示
-                <div className="flex-1 flex flex-col gap-4 overflow-auto">
+                <div className="flex-1 flex flex-col gap-4 overflow-auto pb-8">
                   {/* リハーサルセクション */}
                   <div className="flex-shrink-0">
                     <div className="flex items-center gap-2 mb-2">
@@ -731,6 +755,7 @@ export const TimetableEditing = ({
                       selectedDate={selectedDate}
                       onCustomFieldsChange={handleCustomFieldsChange}
                       searchQuery={searchQuery}
+                      disablePerformanceBottomSpacer
                     />
                   </div>
                   {/* 本番セクション */}
@@ -749,8 +774,65 @@ export const TimetableEditing = ({
                       selectedDate={selectedDate}
                       onCustomFieldsChange={handleCustomFieldsChange}
                       searchQuery={searchQuery}
+                      disablePerformanceBottomSpacer
                     />
                   </div>
+                </div>
+              ) : showInterleavedCoolPreView ? (
+                // クール直前リハーサル：リハ→本番をクール単位で交互表示
+                <div className="flex-1 flex flex-col gap-4 overflow-auto pb-8">
+                  {Array.from({ length: interleavedCoolCount }, (_, coolIndex) => {
+                    const rehearsalCoolId = rehearsalCoolIds[coolIndex];
+                    const performanceCoolId = performanceCoolIds[coolIndex];
+
+                    return (
+                      <div key={`cool-pair-${coolIndex}`} className="space-y-3">
+                        {rehearsalCoolId && (
+                          <div className="flex-shrink-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm font-medium text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded">
+                                第{coolIndex + 1}クール リハーサル
+                              </span>
+                            </div>
+                            <CustomFieldsTable
+                              currentTimetable={rehearsalDailyTimetable}
+                              bands={bands}
+                              timetable={rehearsalTimetable}
+                              eventSettings={eventSettings}
+                              timetableType="rehearsal"
+                              selectedDate={selectedDate}
+                              onCustomFieldsChange={handleCustomFieldsChange}
+                              searchQuery={searchQuery}
+                              visibleCoolIds={[rehearsalCoolId]}
+                              disablePerformanceBottomSpacer
+                            />
+                          </div>
+                        )}
+
+                        {performanceCoolId && (
+                          <div className="flex-shrink-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm font-medium text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">
+                                第{coolIndex + 1}クール 本番
+                              </span>
+                            </div>
+                            <CustomFieldsTable
+                              currentTimetable={performanceDailyTimetable}
+                              bands={bands}
+                              timetable={performanceTimetable}
+                              eventSettings={eventSettings}
+                              timetableType="performance"
+                              selectedDate={selectedDate}
+                              onCustomFieldsChange={handleCustomFieldsChange}
+                              searchQuery={searchQuery}
+                              visibleCoolIds={[performanceCoolId]}
+                              disablePerformanceBottomSpacer
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <CustomFieldsTable
@@ -772,7 +854,9 @@ export const TimetableEditing = ({
                 violations={violations}
                 bandNumbers={bandNumbers}
                 isReadOnly={isReadOnly}
+                timetableType={timetableType}
                 rehearsalType={eventSettings.rehearsalType}
+                linkedRehearsalDailyTimetable={eventSettings.rehearsalType === 'cool-pre-rehearsal' ? rehearsalDailyTimetable : undefined}
                 onRemoveEntry={handleRemoveEntryWithConfirm}
                 onDeleteCool={handleDeleteCool}
                 onMoveCoolUp={handleMoveCoolUp}
@@ -789,7 +873,7 @@ export const TimetableEditing = ({
               customFields={eventSettings.customFields}
               timetableType={timetableType}
               onCustomFieldsChange={handleCustomFieldsChange}
-              applyToBoth={showCombinedView}
+              applyToBoth={showCombinedView || showInterleavedCoolPreView}
             />
           ) : (
             <BandBankDropZone 

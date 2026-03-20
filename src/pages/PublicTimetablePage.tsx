@@ -206,6 +206,12 @@ export const PublicTimetablePage = () => {
   
   // 当日一括リハーサルの場合、リハと本番を1ページに表示
   const showCombinedView = eventSettings.rehearsalType === 'day-start-rehearsal';
+  // クール直前リハーサルの場合、クール単位でリハ→本番の交互表示
+  const showInterleavedCoolPreView = eventSettings.rehearsalType === 'cool-pre-rehearsal';
+
+  const rehearsalCoolIds = (rehearsalDailyTimetable.cools || []).map(cool => cool.id);
+  const performanceCoolIds = (performanceDailyTimetable.cools || []).map(cool => cool.id);
+  const interleavedCoolCount = Math.max(rehearsalCoolIds.length, performanceCoolIds.length);
 
   return (
     <div className="bg-gray-50 text-gray-900 min-h-screen sm:h-screen font-sans flex flex-col sm:overflow-hidden">
@@ -230,7 +236,7 @@ export const PublicTimetablePage = () => {
       <div className="bg-white border-b border-gray-200 flex-shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center gap-2 sm:gap-4">
           {/* 本番/リハーサル切り替え - 当日一括リハーサルでは非表示（両方表示するため） */}
-          {hasRehearsal && !showCombinedView && (
+          {hasRehearsal && !showCombinedView && !showInterleavedCoolPreView && (
             <div className="flex items-center gap-1">
               <button
                 onClick={() => handleTypeChange('performance')}
@@ -258,7 +264,7 @@ export const PublicTimetablePage = () => {
           {/* 日付セレクター */}
           {dateList.length > 0 && (
             <div className="flex items-center gap-1 overflow-x-auto">
-              {(showCombinedView ? eventSettings.performanceDates : dateList).map(date => (
+              {((showCombinedView || showInterleavedCoolPreView) ? eventSettings.performanceDates : dateList).map(date => (
                 <button
                   key={date}
                   onClick={() => setSelectedDate(date)}
@@ -289,7 +295,7 @@ export const PublicTimetablePage = () => {
       <main className="flex-1 flex flex-col min-h-0 overflow-auto p-4">
         {showCombinedView ? (
           // 当日一括リハーサル：リハーサルと本番を縦に並べて表示
-          <div className="flex-1 flex flex-col gap-4 overflow-auto">
+          <div className="flex-1 flex flex-col gap-4 overflow-auto pb-8">
             {/* リハーサルセクション */}
             <div className="flex-shrink-0">
               <div className="flex items-center gap-2 mb-2">
@@ -307,6 +313,7 @@ export const PublicTimetablePage = () => {
                 onCustomFieldsChange={() => {}}
                 readOnly
                 searchQuery={searchQuery}
+                disablePerformanceBottomSpacer
               />
             </div>
             {/* 本番セクション */}
@@ -326,8 +333,67 @@ export const PublicTimetablePage = () => {
                 onCustomFieldsChange={() => {}}
                 readOnly
                 searchQuery={searchQuery}
+                disablePerformanceBottomSpacer
               />
             </div>
+          </div>
+        ) : showInterleavedCoolPreView ? (
+          // クール直前リハーサル：クール単位でリハ→本番を交互表示
+          <div className="flex-1 flex flex-col gap-4 overflow-auto pb-8">
+            {Array.from({ length: interleavedCoolCount }, (_, coolIndex) => {
+              const rehearsalCoolId = rehearsalCoolIds[coolIndex];
+              const performanceCoolId = performanceCoolIds[coolIndex];
+
+              return (
+                <div key={`public-cool-pair-${coolIndex}`} className="space-y-3">
+                  {rehearsalCoolId && (
+                    <div className="flex-shrink-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                          第{coolIndex + 1}クール リハーサル
+                        </span>
+                      </div>
+                      <CustomFieldsTable
+                        currentTimetable={rehearsalDailyTimetable}
+                        bands={bands}
+                        timetable={rehearsalTimetable}
+                        eventSettings={eventSettings}
+                        timetableType="rehearsal"
+                        selectedDate={selectedDate}
+                        onCustomFieldsChange={() => {}}
+                        readOnly
+                        searchQuery={searchQuery}
+                        visibleCoolIds={[rehearsalCoolId]}
+                        disablePerformanceBottomSpacer
+                      />
+                    </div>
+                  )}
+
+                  {performanceCoolId && (
+                    <div className="flex-shrink-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          第{coolIndex + 1}クール 本番
+                        </span>
+                      </div>
+                      <CustomFieldsTable
+                        currentTimetable={performanceDailyTimetable}
+                        bands={bands}
+                        timetable={performanceTimetable}
+                        eventSettings={eventSettings}
+                        timetableType="performance"
+                        selectedDate={selectedDate}
+                        onCustomFieldsChange={() => {}}
+                        readOnly
+                        searchQuery={searchQuery}
+                        visibleCoolIds={[performanceCoolId]}
+                        disablePerformanceBottomSpacer
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <CustomFieldsTable

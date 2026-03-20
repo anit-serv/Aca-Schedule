@@ -322,7 +322,7 @@ export const EventCreationWizard = () => {
                       rehearsalDuration: parseInt(e.target.value) 
                     }))}
                     className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    min="5"
+                    min="1"
                     max="120"
                   />
                   <p className="text-sm text-gray-500 mt-1">

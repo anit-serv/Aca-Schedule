@@ -9,7 +9,7 @@ export const useBandManagement = (
   onBandsChange: (bands: Band[]) => void
 ) => {
   // 新しいバンドを追加
-  const handleAddBand = async (): Promise<string | null> => {
+  const handleAddBand = (): Promise<string | null> => {
     const newBand: Band = {
       id: generateUUID(),
       name: '',
@@ -23,18 +23,20 @@ export const useBandManagement = (
     
     // 楽観的更新（UIを即座に更新）
     onBandsChange([...bands, newBand]);
-    
-    // Firestoreに追加
-    try {
-      await bandService.addBand(newBand, eventSettings.id);
-      return newBand.id;
-    } catch (error) {
-      console.error('バンド追加エラー:', error);
-      // 失敗時はロールバック
-      onBandsChange(bands);
-      alert('バンドの追加に失敗しました。');
-      return null;
-    }
+
+    // Firestoreへの保存はバックグラウンドで実行
+    void (async () => {
+      try {
+        await bandService.addBand(newBand, eventSettings.id);
+      } catch (error) {
+        console.error('バンド追加エラー:', error);
+        // 失敗時はロールバック
+        onBandsChange(bands);
+        alert('バンドの追加に失敗しました。');
+      }
+    })();
+
+    return Promise.resolve(newBand.id);
   };
 
   // バンドを削除（confirmは呼び出し元で行う）

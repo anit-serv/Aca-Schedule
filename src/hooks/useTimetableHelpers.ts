@@ -205,12 +205,50 @@ export const useTimetableHelpers = ({
   const recalculateTimes = useCallback((cools: Cool[], dailyStartTime: string): Cool[] => {
     if (!cools || cools.length === 0) return cools;
 
+    const getCoolEndTime = (cool?: Cool): string | undefined => {
+      if (!cool || !cool.entries || cool.entries.length === 0) return undefined;
+      return cool.entries[cool.entries.length - 1].endTime;
+    };
+
+    const getLatestCoolEndTimeBefore = (targetCoolIndex: number): string | undefined => {
+      const targetCools = performanceDailyTimetable?.cools || [];
+      for (let i = targetCoolIndex - 1; i >= 0; i--) {
+        const endTime = getCoolEndTime(targetCools[i]);
+        if (endTime) return endTime;
+      }
+      return undefined;
+    };
+
+    const performanceDailyTimetable = performanceTimetable?.dailyTimetables.find(
+      (dt) => dt.date === selectedDate
+    );
+    const rehearsalDailyTimetable = rehearsalTimetable?.dailyTimetables.find(
+      (dt) => dt.date === selectedDate
+    );
+
     let currentTime = dailyStartTime;
     
-    return cools.map((cool) => {
+    return cools.map((cool, coolIndex) => {
       // クールに開始時刻が設定されている場合はそれを使用
       if (cool.startTime) {
         currentTime = cool.startTime;
+      }
+
+      if (eventSettings.rehearsalType === 'cool-pre-rehearsal') {
+        // クール直前リハーサル時のデフォルト開始時刻ルール
+        if (timetableType === 'performance') {
+          // 対応するクールのリハ終了時刻を本番クール開始時刻として常に優先
+          const linkedRehearsalEndTime = getCoolEndTime(rehearsalDailyTimetable?.cools?.[coolIndex]);
+          if (linkedRehearsalEndTime) {
+            currentTime = linkedRehearsalEndTime;
+          }
+        } else if (timetableType === 'rehearsal' && coolIndex > 0) {
+          // あるクールの本番終了時刻を次クールのリハのデフォルト開始時刻にする
+          const previousPerformanceEndTime = getLatestCoolEndTimeBefore(coolIndex);
+          if (previousPerformanceEndTime) {
+            currentTime = previousPerformanceEndTime;
+          }
+        }
       }
       // 未設定の場合は前のエントリーの終了時刻から継続
 
@@ -227,7 +265,14 @@ export const useTimetableHelpers = ({
         entries: updatedEntries,
       };
     });
-  }, [calculateTimes]);
+  }, [
+    calculateTimes,
+    eventSettings.rehearsalType,
+    performanceTimetable,
+    rehearsalTimetable,
+    selectedDate,
+    timetableType,
+  ]);
 
   return {
     bandUsageCount,

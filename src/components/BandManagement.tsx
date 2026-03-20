@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Band, EventSettings } from '../types';
 import { useBandManagement } from '../hooks/useBandManagement';
 import { BandRow } from './BandRow';
@@ -15,6 +15,7 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [showImportInfo, setShowImportInfo] = useState(false);
+  const [pendingFocusBandId, setPendingFocusBandId] = useState<string | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const prevBandCountRef = useRef(bands.length);
 
@@ -38,6 +39,34 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
     handleUpdateBand,
     allMembers,
   } = useBandManagement(bands, eventSettings, onBandsChange);
+
+  const handleAddBandAndFocus = useCallback(async () => {
+    const newBandId = await handleAddBand();
+    if (newBandId) {
+      setPendingFocusBandId(newBandId);
+    }
+  }, [handleAddBand]);
+
+  // Alt+Nでバンド追加（入力中はショートカットを無効化）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.altKey || e.key.toLowerCase() !== 'n') return;
+
+      const target = e.target as HTMLElement | null;
+      const isEditing = target?.tagName === 'INPUT'
+        || target?.tagName === 'TEXTAREA'
+        || target?.tagName === 'SELECT'
+        || target?.isContentEditable;
+
+      if (isEditing) return;
+
+      e.preventDefault();
+      void handleAddBandAndFocus();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleAddBandAndFocus]);
 
   return (
     <div className="p-6 h-full flex flex-col overflow-hidden">
@@ -83,7 +112,7 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
 
           {/* バンド追加ボタン */}
           <button
-            onClick={handleAddBand}
+            onClick={() => { void handleAddBandAndFocus(); }}
             className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md font-medium transition-colors"
           >
             + バンドを追加
@@ -123,6 +152,8 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
                     presetDurations={eventSettings.presetDurations}
                     allMembers={allMembers}
                     performanceDates={eventSettings.performanceDates}
+                    shouldAutoFocusName={band.id === pendingFocusBandId}
+                    onNameFocused={() => setPendingFocusBandId(null)}
                     onUpdate={(updates) => handleUpdateBand(band.id, updates)}
                     onDelete={() => handleDeleteBand(band.id)}
                     onOpenAvailability={() => {
