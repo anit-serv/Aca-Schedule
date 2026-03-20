@@ -70,11 +70,11 @@ export const useDragHandlers = ({
     const isBand = activeId.startsWith('band-');
     const sourceId = activeId.replace(isBand ? 'band-' : 'custom-', '');
 
-    const source = isBand
-      ? bands.find((b) => b.id === sourceId)
-      : customEvents.find((ce) => ce.id === sourceId);
+    const bandSource = isBand ? bands.find((b) => b.id === sourceId) : undefined;
+    const customSource = !isBand ? customEvents.find((ce) => ce.id === sourceId) : undefined;
 
-    if (!source) return;
+    if (isBand && !bandSource) return;
+    if (!isBand && !customSource) return;
 
     const iconEl = typeof document !== 'undefined'
       ? document.getElementById('mobile-cancel-icon') || document.getElementById('mobile-cancel-dropzone')
@@ -89,8 +89,8 @@ export const useDragHandlers = ({
 
     setCancelAbsorbAnimation({
       id: Date.now(),
-      label: isBand ? source.name : source.name,
-      subLabel: `${isBand ? source.performanceDuration : source.duration}分`,
+      label: isBand ? bandSource!.name : customSource!.name,
+      subLabel: `${isBand ? bandSource!.performanceDuration : customSource!.duration}分`,
       kind: isBand ? 'band' : 'custom',
       startX,
       startY,

@@ -145,13 +145,6 @@ export const CoolSection = ({
     onCoolStartTimeChange(coolIndex, value);
   };
 
-  const handleClearStartTime = () => {
-    setStartTimeInput('');
-    if (onCoolStartTimeChange) {
-      onCoolStartTimeChange(coolIndex, undefined);
-    }
-  };
-
   // クールの最後のエントリーの終了時刻を取得
   const getLastEntryEndTime = (): string | undefined => {
     if (cool.entries.length === 0) return undefined;
