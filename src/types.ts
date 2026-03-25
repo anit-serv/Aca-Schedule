@@ -162,3 +162,18 @@ export interface ConstraintViolation {
   bandId?: string; // 該当するバンドのID
   relatedEntryIds?: string[]; // 関連する他のエントリID（重複や連続出演の場合）
 }
+
+// ユーザー発行APIトークン（サマリー）
+export interface UserApiTokenSummary {
+  id: string;
+  name: string;
+  status: 'active' | 'revoked';
+  tokenPrefix: string;
+  allowedEventIds: string[];
+  userId: string;
+  userEmail: string | null;
+  expiresAt: Date | null;
+  lastUsedAt: Date | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}

@@ -1,7 +1,60 @@
 # Aca-Schedule 開発進捗レポート
 
-**最終更新**: 2026年2月25日  
+**最終更新**: 2026年3月26日  
 **作成者**: AI Development Assistant
+
+---
+
+## 0. 直近アップデート（2026年3月 API刷新）
+
+### 実装済み（今回）
+- API認証モデルを刷新
+  - 旧: 外部固定キー + HMAC
+  - 新: Firebase IDトークン（Bearer）またはユーザー発行APIトークン（PAT）
+- Band登録APIをユーザー権限ベースへ変更
+  - `POST /api/v1/bands`
+  - サーバ側で event の owner / collaborator を検証
+  - `x-idempotency-key` による冪等性維持
+- ユーザーAPIトークン管理APIを追加
+  - `POST /api/v1/user-api-tokens`（発行）
+  - `GET /api/v1/user-api-tokens`（一覧）
+  - `PATCH /api/v1/user-api-tokens/{tokenId}`（更新）
+  - `DELETE /api/v1/user-api-tokens/{tokenId}`（失効）
+- UI実装（イベント設定モーダル）
+  - APIトークンの発行・一覧・更新・失効を操作可能
+  - 平文トークンは発行時のみ表示
+- テスト補助スクリプトを追加
+  - `test-api-user.cjs`（IDトークンでPAT発行 → PATでBand作成）
+
+### 実装候補（次フェーズ）
+- EventEditorに「API連携」専用タブを追加（設定モーダル依存の軽減）
+- API利用ログ（`apiRequests`）の閲覧UI追加（誰がいつ追加したか可視化）
+- トークン更新時に差分のみ送信する最適化
+- Firestore Rules に `userApiTokens` の方針コメントを補強
+
+### テストフェーズ（開始）
+現在は「機能追加」から「検証中心」に移行。
+
+#### まず実施する確認項目
+1. 認証
+   - Bearer で `POST /api/v1/bands` が 201
+   - 失効/不正トークンで 401
+2. 権限
+   - owner/collaborator は追加可能
+   - 権限なしユーザーは 403
+3. PAT管理
+   - 発行後、一覧に表示される
+   - 更新後、名前・eventId・期限が反映される
+   - 失効後、`POST /api/v1/bands` で 401
+4. 冪等性
+   - 同一 `x-idempotency-key` 同一Bodyで 200 再送
+   - 同一キー・異なるBodyで 409
+5. 回帰
+   - UI手動追加、CSV追加、公開閲覧に影響なし
+
+#### 現時点のCI相当チェック
+- `npm run lint`: エラー0（既存 warning 2件のみ）
+- `npm run build`: 成功
 
 ---
 

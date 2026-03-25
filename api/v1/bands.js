@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { authenticateRequest } from "../_lib/auth.js";
+import { authenticateRequest, ensureEventEditableByUser } from "../_lib/auth.js";
 import { ApiError } from "../_lib/errors.js";
 import { getAdminDb } from "../_lib/firestoreAdmin.js";
 import { methodNotAllowed, sendJson, serverError } from "../_lib/http.js";
@@ -8,14 +8,7 @@ import { enforceRateLimit } from "../_lib/rateLimit.js";
 import { generateRequestId, getRawBody, sha256Hex } from "../_lib/request.js";
 import { validateCreateBandPayload } from "../_lib/validation.js";
 
-function normalizeAllowedEvents(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((eventId) => typeof eventId === "string" && eventId.length > 0);
-}
-
-async function createBandAndAudit({ requestId, apiKey, payload, requestHash }) {
+async function createBandAndAudit({ requestId, authContext, payload, requestHash }) {
   const db = getAdminDb();
   const bandId = db.collection("bands").doc().id;
   const now = admin.firestore.FieldValue.serverTimestamp();
@@ -33,7 +26,10 @@ async function createBandAndAudit({ requestId, apiKey, payload, requestHash }) {
 
   const auditDoc = {
     requestId,
-    apiKey,
+    authType: authContext.authType,
+    userId: authContext.userId,
+    userEmail: authContext.userEmail,
+    tokenId: authContext.tokenId,
     eventId: payload.eventId,
     status: "success",
     statusCode: 201,
@@ -57,12 +53,15 @@ async function createBandAndAudit({ requestId, apiKey, payload, requestHash }) {
   };
 }
 
-async function saveErrorAudit({ requestId, apiKey, eventId, statusCode, errorCode, requestHash }) {
+async function saveErrorAudit({ requestId, authContext, eventId, statusCode, errorCode, requestHash }) {
   try {
     const db = getAdminDb();
     await db.collection("apiRequests").doc(requestId).set({
       requestId,
-      apiKey,
+      authType: authContext?.authType || null,
+      userId: authContext?.userId || null,
+      userEmail: authContext?.userEmail || null,
+      tokenId: authContext?.tokenId || null,
       eventId: eventId || null,
       status: "error",
       statusCode,
@@ -83,16 +82,16 @@ export default async function handler(req, res) {
     return;
   }
 
-  let apiKeyForAudit = null;
+  let authContext = null;
   let eventIdForAudit = null;
   const rawBody = getRawBody(req);
   const requestHash = sha256Hex(rawBody);
 
   try {
     const auth = await authenticateRequest(req);
-    apiKeyForAudit = auth.apiKey;
+    authContext = auth;
 
-    await enforceRateLimit(auth.apiKey, auth.integration.rateLimitPolicy);
+    await enforceRateLimit(auth.rateLimitKey, auth.rateLimitPolicy);
 
     let payloadSource;
     if (typeof req.body === "string") {
@@ -107,13 +106,15 @@ export default async function handler(req, res) {
     const payload = validateCreateBandPayload(payloadSource);
     eventIdForAudit = payload.eventId;
 
-    const allowedEventIds = normalizeAllowedEvents(auth.integration.allowedEventIds);
-    if (!allowedEventIds.includes(payload.eventId)) {
-      throw new ApiError(403, "EVENT_NOT_ALLOWED", "API key is not allowed for this event.");
-    }
+    await ensureEventEditableByUser({
+      eventId: payload.eventId,
+      userId: auth.userId,
+      userEmail: auth.userEmail,
+      allowedEventIds: auth.allowedEventIds,
+    });
 
     const idempotency = await ensureIdempotency({
-      apiKey: auth.apiKey,
+      apiKey: auth.idempotencyScopeKey,
       idempotencyKey: auth.idempotencyKey,
       requestHash,
     });
@@ -125,7 +126,7 @@ export default async function handler(req, res) {
 
     const responsePayload = await createBandAndAudit({
       requestId,
-      apiKey: auth.apiKey,
+      authContext: auth,
       payload,
       requestHash,
     });
@@ -136,7 +137,7 @@ export default async function handler(req, res) {
     if (error instanceof ApiError) {
       await saveErrorAudit({
         requestId,
-        apiKey: apiKeyForAudit,
+        authContext,
         eventId: eventIdForAudit,
         statusCode: error.statusCode,
         errorCode: error.code,
@@ -161,7 +162,7 @@ export default async function handler(req, res) {
 
     await saveErrorAudit({
       requestId,
-      apiKey: apiKeyForAudit,
+      authContext,
       eventId: eventIdForAudit,
       statusCode: 500,
       errorCode: "INTERNAL_ERROR",

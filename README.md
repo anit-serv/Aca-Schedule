@@ -227,21 +227,30 @@
 
 ---
 
-## 6. 公式Band API（Push登録）
+## 6. ユーザー向けBand API（UIと併用）
 
-外部システムからバンドデータを登録するための受信APIを追加しました。
+認証済みユーザー本人が、UIに加えてAPI経由でもバンドを登録できるようにしました。
 
 ### エンドポイント
 - `POST /api/v1/bands`
+- `POST /api/v1/user-api-tokens`（APIトークン発行）
+- `GET /api/v1/user-api-tokens`（APIトークン一覧）
+- `PATCH /api/v1/user-api-tokens/{tokenId}`（APIトークン更新）
+- `DELETE /api/v1/user-api-tokens/{tokenId}`（APIトークン失効）
 
-### 必須ヘッダ
-- `x-api-key`
-- `x-timestamp`（UNIX秒）
-- `x-signature`（HMAC-SHA256 hex）
+### 認証方式
+`POST /api/v1/bands` は次のどちらかで認証します。
+
+1. Firebase IDトークン（推奨）
+  - `Authorization: Bearer <Firebase ID Token>`
+2. ユーザー発行APIトークン（自動化向け）
+  - `x-user-api-token: <pat_...>`
+
+さらに冪等性のため次のヘッダが必須です。
+
 - `x-idempotency-key`（1-64文字）
 
-署名文字列:
-`timestamp + "\\n" + rawBody`
+`user-api-tokens` の管理APIは Firebase IDトークンのみ利用できます。
 
 ### リクエストボディ（要点）
 - `eventId`: 必須
@@ -257,8 +266,8 @@
 - `201`: 作成成功
 - `200`: 冪等再送（同一内容の再送）
 - `400`: 入力不正
-- `401`: 認証失敗
-- `403`: eventId の権限不足
+- `401`: 認証失敗（IDトークン無効 / APIトークン失効・期限切れ）
+- `403`: eventId の権限不足（オーナー/共同編集者でない、またはAPIトークンスコープ外）
 - `409`: 冪等キー競合
 - `429`: レート制限超過
 
@@ -273,12 +282,12 @@ Vercel Project Settings > Environment Variables に以下を設定してくだ�
 ### Firestore追加コレクション
 API運用のため、以下のコレクションを使用します。
 
-- `apiIntegrations`: APIキー管理
-  - ドキュメントID = `x-api-key`
-  - `status`: `active` / `revoked`
-  - `secret`: HMAC検証用シークレット
+- `userApiTokens`: ユーザー発行APIトークン管理（ハッシュ保存）
+  - `userId`, `userEmail`, `name`
+  - `tokenHash`（平文は保存しない）
   - `allowedEventIds`: 書き込み許可eventId配列
-  - `rateLimitPolicy`: `{ perMinute, perDay }`（任意）
+  - `status`: `active` / `revoked`
+  - `expiresAt`, `lastUsedAt`, `rateLimitPolicy`
 - `apiIdempotency`: 冪等制御
 - `apiRateLimits`: レート制限カウンタ
 - `apiRequests`: 監査ログ
@@ -286,4 +295,16 @@ API運用のため、以下のコレクションを使用します。
 ### 補足
 - `vercel.json` は `/api/*` をSPA rewriteより先に評価する設定に変更済みです。
 - このAPIはサーバ側（Firebase Admin SDK）で書き込むため、Firestoreルールは既存UI用途として維持されます。
+
+### ローカル検証スクリプト
+新しい認証フロー（Firebase IDトークンでPAT発行 -> PATでBand作成）をまとめて試すには、ルートの `test-api-user.cjs` を使います。
+
+```bash
+FIREBASE_ID_TOKEN=<Firebase ID Token> node test-api-user.cjs
+```
+
+任意で次の環境変数を指定できます。
+
+- `BASE_URL`（既定: 現在のVercel URL）
+- `EVENT_ID`（既定: `event-1`）
 
