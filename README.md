@@ -225,3 +225,65 @@
 - **テンプレート機能🔲:** イベントの構成をテンプレートとして保存・再利用できる（未実装）。
 - **高度な設定✅:** カスタム項目の定義・管理機能を実装。プリセット時間設定も実装済み。
 
+---
+
+## 6. 公式Band API（Push登録）
+
+外部システムからバンドデータを登録するための受信APIを追加しました。
+
+### エンドポイント
+- `POST /api/v1/bands`
+
+### 必須ヘッダ
+- `x-api-key`
+- `x-timestamp`（UNIX秒）
+- `x-signature`（HMAC-SHA256 hex）
+- `x-idempotency-key`（1-64文字）
+
+署名文字列:
+`timestamp + "\\n" + rawBody`
+
+### リクエストボディ（要点）
+- `eventId`: 必須
+- `name`: 必須
+- `performanceDuration`: 必須（1-180）
+- `performanceCount`: 任意（1-10、デフォルト1）
+- `members`: 任意（最大30件）
+- `availableTimeSlots`: 任意
+
+`availableTimeSlots` の時刻は `HH:mm` 形式で、分は `00` または `30` のみ許可されます。
+
+### 主なレスポンス
+- `201`: 作成成功
+- `200`: 冪等再送（同一内容の再送）
+- `400`: 入力不正
+- `401`: 認証失敗
+- `403`: eventId の権限不足
+- `409`: 冪等キー競合
+- `429`: レート制限超過
+
+### Vercel環境変数
+Vercel Project Settings > Environment Variables に以下を設定してください。
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+  - Firebase Admin SDK のサービスアカウントJSON全文
+- `FIREBASE_PROJECT_ID`
+  - FirebaseプロジェクトID（省略時はJSONの `project_id` を利用）
+
+### Firestore追加コレクション
+API運用のため、以下のコレクションを使用します。
+
+- `apiIntegrations`: APIキー管理
+  - ドキュメントID = `x-api-key`
+  - `status`: `active` / `revoked`
+  - `secret`: HMAC検証用シークレット
+  - `allowedEventIds`: 書き込み許可eventId配列
+  - `rateLimitPolicy`: `{ perMinute, perDay }`（任意）
+- `apiIdempotency`: 冪等制御
+- `apiRateLimits`: レート制限カウンタ
+- `apiRequests`: 監査ログ
+
+### 補足
+- `vercel.json` は `/api/*` をSPA rewriteより先に評価する設定に変更済みです。
+- このAPIはサーバ側（Firebase Admin SDK）で書き込むため、Firestoreルールは既存UI用途として維持されます。
+
