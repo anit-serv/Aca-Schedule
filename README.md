@@ -235,8 +235,8 @@
 - `POST /api/v1/bands`
 - `POST /api/v1/user-api-tokens`（APIトークン発行）
 - `GET /api/v1/user-api-tokens`（APIトークン一覧）
-- `PATCH /api/v1/user-api-tokens/{tokenId}`（APIトークン更新）
-- `DELETE /api/v1/user-api-tokens/{tokenId}`（APIトークン失効）
+- `PATCH /api/v1/user-api-tokens?tokenId=...`（APIトークン更新）
+- `DELETE /api/v1/user-api-tokens?tokenId=...`（APIトークン失効）
 
 ### 認証方式
 `POST /api/v1/bands` は次のどちらかで認証します。

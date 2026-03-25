@@ -125,10 +125,136 @@ async function listUserApiTokens(userId) {
     });
 }
 
+function parseUpdateBody(body) {
+  if (!body || typeof body !== "object") {
+    throw new ApiError(400, "INVALID_BODY", "Body must be a JSON object.");
+  }
+
+  const update = {};
+
+  if (Object.prototype.hasOwnProperty.call(body, "name")) {
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name || name.length > 80) {
+      throw new ApiError(400, "INVALID_FIELD", "name must be between 1 and 80 characters.", [
+        { field: "name", message: "must be between 1 and 80 characters" },
+      ]);
+    }
+    update.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "allowedEventIds")) {
+    if (!Array.isArray(body.allowedEventIds) || body.allowedEventIds.length === 0) {
+      throw new ApiError(400, "INVALID_FIELD", "allowedEventIds must be a non-empty array.", [
+        { field: "allowedEventIds", message: "must be a non-empty array" },
+      ]);
+    }
+
+    const allowedEventIds = [...new Set(body.allowedEventIds)]
+      .filter((eventId) => typeof eventId === "string")
+      .map((eventId) => eventId.trim())
+      .filter(Boolean);
+
+    if (allowedEventIds.length === 0 || allowedEventIds.length > 50) {
+      throw new ApiError(400, "INVALID_FIELD", "allowedEventIds must have between 1 and 50 items.", [
+        { field: "allowedEventIds", message: "must have between 1 and 50 items" },
+      ]);
+    }
+
+    const invalidEventId = allowedEventIds.find((eventId) => eventId.length > 64);
+    if (invalidEventId) {
+      throw new ApiError(400, "INVALID_FIELD", "Each eventId must be at most 64 characters.", [
+        { field: "allowedEventIds", message: "each eventId must be at most 64 characters" },
+      ]);
+    }
+
+    update.allowedEventIds = allowedEventIds;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "expiresInDays")) {
+    const expiresInDays = Number(body.expiresInDays);
+    if (!Number.isInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 365) {
+      throw new ApiError(400, "INVALID_FIELD", "expiresInDays must be an integer between 1 and 365.", [
+        { field: "expiresInDays", message: "must be an integer between 1 and 365" },
+      ]);
+    }
+    update.expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+  }
+
+  if (Object.keys(update).length === 0) {
+    throw new ApiError(400, "INVALID_FIELD", "At least one updatable field is required.");
+  }
+
+  return update;
+}
+
+function getTokenIdOrThrow(req) {
+  const tokenIdValue = req.query?.tokenId;
+  const tokenId = Array.isArray(tokenIdValue) ? tokenIdValue[0] : tokenIdValue;
+  if (!tokenId || typeof tokenId !== "string") {
+    throw new ApiError(400, "INVALID_TOKEN_ID", "tokenId query parameter is required.");
+  }
+  return tokenId;
+}
+
+async function revokeUserApiToken({ tokenId, userId }) {
+  const db = getAdminDb();
+  const ref = db.collection("userApiTokens").doc(tokenId);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    throw new ApiError(404, "TOKEN_NOT_FOUND", "Token not found.");
+  }
+
+  const token = snap.data() || {};
+  if (token.userId !== userId) {
+    throw new ApiError(403, "TOKEN_NOT_OWNED", "You cannot revoke another user's token.");
+  }
+
+  await ref.set(
+    {
+      status: "revoked",
+      revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function updateUserApiToken({ tokenId, userId, userEmail, body }) {
+  const db = getAdminDb();
+  const ref = db.collection("userApiTokens").doc(tokenId);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    throw new ApiError(404, "TOKEN_NOT_FOUND", "Token not found.");
+  }
+
+  const token = snap.data() || {};
+  if (token.userId !== userId) {
+    throw new ApiError(403, "TOKEN_NOT_OWNED", "You cannot update another user's token.");
+  }
+
+  const update = parseUpdateBody(body);
+
+  if (Array.isArray(update.allowedEventIds)) {
+    await ensureEventsEditableByUser({
+      eventIds: update.allowedEventIds,
+      userId,
+      userEmail,
+    });
+  }
+
+  update.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+
+  await ref.set(update, { merge: true });
+  const updated = await ref.get();
+  return toClientTokenDoc(ref.id, updated.data() || {});
+}
+
 export default async function handler(req, res) {
   const requestId = generateRequestId();
 
-  if (req.method !== "POST" && req.method !== "GET") {
+  if (req.method !== "POST" && req.method !== "GET" && req.method !== "PATCH" && req.method !== "DELETE") {
     methodNotAllowed(res, requestId);
     return;
   }
@@ -156,6 +282,49 @@ export default async function handler(req, res) {
         success: true,
         requestId,
         data: created,
+      });
+      return;
+    }
+
+    if (req.method === "PATCH") {
+      const tokenId = getTokenIdOrThrow(req);
+
+      let bodySource = req.body;
+      if (typeof req.body === "string") {
+        try {
+          bodySource = JSON.parse(req.body || "{}");
+        } catch {
+          throw new ApiError(400, "INVALID_BODY", "Body must be valid JSON.");
+        }
+      }
+
+      const updated = await updateUserApiToken({
+        tokenId,
+        userId: user.userId,
+        userEmail: user.userEmail,
+        body: bodySource,
+      });
+
+      sendJson(res, 200, {
+        success: true,
+        requestId,
+        data: {
+          token: updated,
+        },
+      });
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      const tokenId = getTokenIdOrThrow(req);
+      await revokeUserApiToken({ tokenId, userId: user.userId });
+
+      sendJson(res, 200, {
+        success: true,
+        requestId,
+        data: {
+          revoked: true,
+        },
       });
       return;
     }

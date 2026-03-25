@@ -96,9 +96,13 @@ export const userApiTokenService = {
   },
 
   async revoke(user: User, tokenId: string): Promise<void> {
-    await fetchWithFirebaseAuth<{ revoked: boolean }>(user, `/api/v1/user-api-tokens/${tokenId}`, {
+    await fetchWithFirebaseAuth<{ revoked: boolean }>(
+      user,
+      `/api/v1/user-api-tokens?tokenId=${encodeURIComponent(tokenId)}`,
+      {
       method: 'DELETE',
-    });
+      }
+    );
   },
 
   async update(
@@ -106,10 +110,14 @@ export const userApiTokenService = {
     tokenId: string,
     input: { name?: string; allowedEventIds?: string[]; expiresInDays?: number }
   ): Promise<UserApiTokenSummary> {
-    const payload = await fetchWithFirebaseAuth<{ token: unknown }>(user, `/api/v1/user-api-tokens/${tokenId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
+    const payload = await fetchWithFirebaseAuth<{ token: unknown }>(
+      user,
+      `/api/v1/user-api-tokens?tokenId=${encodeURIComponent(tokenId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    );
 
     if (!payload.data?.token) {
       throw new Error('トークン更新結果が不正です。');
