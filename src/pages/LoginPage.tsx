@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'register-pending';
 
 export const LoginPage = () => {
-  const { loginWithEmail, registerWithEmail, loginWithGoogle } = useAuth();
+  const { loginWithEmail, registerWithEmail, resendRegistrationEmail, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -15,6 +17,7 @@ export const LoginPage = () => {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const registered = searchParams.get('registered') === '1';
 
   const getFirebaseErrorMessage = (code: string): string => {
     switch (code) {
@@ -36,6 +39,12 @@ export const LoginPage = () => {
         return 'ログイン試行回数が多すぎます。しばらく時間をおいてからお試しください';
       case 'auth/popup-closed-by-user':
         return 'ログインがキャンセルされました';
+      case 'auth/email-not-verified':
+        return 'メールアドレス確認が完了していません。確認メールを再送しました。';
+      case 'EMAIL_ALREADY_VERIFIED':
+        return 'このメールアドレスは既に本登録済みです。ログインしてください。';
+      case 'INVALID_FIELD':
+        return '入力内容に誤りがあります。各項目をご確認ください。';
       default:
         return 'エラーが発生しました。もう一度お試しください';
     }
@@ -62,10 +71,11 @@ export const LoginPage = () => {
     try {
       if (mode === 'login') {
         await loginWithEmail(email, password);
+        navigate('/');
       } else {
         await registerWithEmail(email, password, displayName.trim());
+        setMode('register-pending');
       }
-      navigate('/');
     } catch (err) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const firebaseError = err as any;
@@ -101,7 +111,11 @@ export const LoginPage = () => {
 
         <div className="bg-white rounded-lg p-6 shadow-lg border border-gray-200">
           <h2 className="text-xl font-bold mb-6 text-center">
-            {mode === 'login' ? 'ログイン' : 'アカウント作成'}
+            {mode === 'login'
+              ? 'ログイン'
+              : mode === 'register'
+                ? 'アカウント仮登録'
+                : '本登録待ち'}
           </h2>
 
           {error && (
@@ -110,7 +124,56 @@ export const LoginPage = () => {
             </div>
           )}
 
-          <form onSubmit={handleEmailSubmit} className="space-y-4">
+          {!error && registered && mode === 'login' && (
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-700 text-sm">
+              メール確認が完了しました。ログインして本登録を完了してください。
+            </div>
+          )}
+
+          {mode === 'register-pending' ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm">
+                <p className="font-semibold mb-1">確認メールを送信しました。</p>
+                <p>
+                  {email} 宛に届いたリンクを開いて本登録を完了してください。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setPassword('');
+                  setConfirmPassword('');
+                  setError(null);
+                }}
+                className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-md font-medium transition-colors text-white"
+              >
+                ログイン画面に戻る
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={async () => {
+                  if (!email) return;
+                  setError(null);
+                  setIsSubmitting(true);
+                  try {
+                    await resendRegistrationEmail(email);
+                  } catch (err) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const apiError = err as any;
+                    setError(getFirebaseErrorMessage(apiError.code || ''));
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+                className="w-full py-2.5 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed rounded-md font-medium transition-colors"
+              >
+                確認メールを再送
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
             {mode === 'register' && (
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700">表示名</label>
@@ -174,10 +237,12 @@ export const LoginPage = () => {
                 ? '処理中...'
                 : mode === 'login'
                   ? 'メールアドレスでログイン'
-                  : 'アカウントを作成'}
+                  : '確認メールを送信'}
             </button>
           </form>
+          )}
 
+          {mode !== 'register-pending' && (
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-200"></div>
@@ -186,7 +251,9 @@ export const LoginPage = () => {
               <span className="px-2 bg-white text-gray-400">または</span>
             </div>
           </div>
+          )}
 
+          {mode !== 'register-pending' && (
           <button
             onClick={handleGoogleLogin}
             disabled={isSubmitting}
@@ -200,6 +267,7 @@ export const LoginPage = () => {
             </svg>
             Googleアカウントでログイン
           </button>
+          )}
 
           <div className="mt-6 text-center text-sm">
             {mode === 'login' ? (
@@ -218,7 +286,12 @@ export const LoginPage = () => {
                 既にアカウントをお持ちの方は{' '}
                 <button
                   type="button"
-                  onClick={() => { setMode('login'); setError(null); }}
+                  onClick={() => {
+                    setMode('login');
+                    setError(null);
+                    setPassword('');
+                    setConfirmPassword('');
+                  }}
                   className="text-emerald-600 hover:text-emerald-700 underline"
                 >
                   ログイン

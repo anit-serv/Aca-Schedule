@@ -1,4 +1,5 @@
 import { Navigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 interface AuthGuardProps {
@@ -6,7 +7,8 @@ interface AuthGuardProps {
 }
 
 export const AuthGuard = ({ children }: AuthGuardProps) => {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, loading, needsPasswordSetup } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -21,6 +23,10 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (needsPasswordSetup && location.pathname !== '/set-password') {
+    return <Navigate to="/set-password" replace />;
   }
 
   return <>{children}</>;

@@ -7,6 +7,32 @@
 
 ## 0. 直近アップデート（2026年3月 API刷新）
 
+### 認証フロー強化（2026-03-26）
+
+#### 実装済み（今回）
+- メール登録を仮登録/本登録の2段階フローに変更
+  - `POST /api/v1/auth/register-pending`
+  - `POST /api/v1/auth/register-confirm`
+  - `POST /api/v1/auth/register-resend`
+- 仮登録ステータス管理を追加
+  - Firestore `registrationPendings` を導入
+  - `pending/completed` を保存
+- フロント導線を更新
+  - `LoginPage` に「本登録待ち」状態と再送UIを追加
+  - 確認リンク遷移後のメッセージ表示（`/login?registered=1`）
+- Google連携ユーザーのパスワード必須化
+  - `AuthGuard` で `needsPasswordSetup` 時に `/set-password` へ強制遷移
+  - `SetPasswordPage` を追加し、password provider 連携を必須化
+- ルール更新
+  - `registrationPendings` のクライアント直接アクセスを禁止
+
+#### 実装候補（次フェーズ）
+- 確認リンクのメール配信基盤を接続（現在はリンク生成まで実装）
+- `register-resend` のレート制限（乱発防止）
+- `register-confirm` の監査ログ追加（requestId, userId, status）
+- 認証フローE2E自動テストの追加
+- 本登録未完了ユーザー向けの運用管理UI（保留一覧/再送）
+
 ### 実装済み（今回）
 - API認証モデルを刷新
   - 旧: 外部固定キー + HMAC

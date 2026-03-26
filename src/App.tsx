@@ -6,6 +6,7 @@ import { MyEventsPage } from './pages/MyEventsPage';
 import { EventCreationWizard } from './components/EventCreationWizard';
 import { EventEditorPage } from './pages/EventEditorPage';
 import { PublicTimetablePage } from './pages/PublicTimetablePage';
+import { SetPasswordPage } from './pages/SetPasswordPage';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/set-password" element={<SetPasswordPage />} />
           <Route path="/share/:eventId" element={<PublicTimetablePage />} />
           <Route
             path="/"

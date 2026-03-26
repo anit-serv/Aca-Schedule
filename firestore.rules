@@ -39,6 +39,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // 仮登録情報: クライアントSDKからの直接アクセスは禁止（Server APIのみ使用）
+    match /registrationPendings/{pendingId} {
+      allow read, write: if false;
+    }
+
     // イベント
     // - オーナーのみ読み書き可能
     // - 承認済み共同編集者は読み取り可能

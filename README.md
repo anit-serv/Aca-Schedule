@@ -296,6 +296,48 @@ API運用のため、以下のコレクションを使用します。
 - `vercel.json` は `/api/*` をSPA rewriteより先に評価する設定に変更済みです。
 - このAPIはサーバ側（Firebase Admin SDK）で書き込むため、Firestoreルールは既存UI用途として維持されます。
 
+## 7. 認証の仮登録/本登録フロー
+
+メール登録は、仮登録（確認メール送信）→本登録（メール確認後ログイン）の2段階フローです。
+
+### 実装状況（2026-03-26）
+- 実装済み
+  - メール登録は `POST /api/v1/auth/register-pending` を経由するフローに移行。
+  - ログイン時に `POST /api/v1/auth/register-confirm` を呼び出し、`emailVerified` を検証して本登録を確定。
+  - `registrationPendings` コレクションを導入し、`pending/completed` 状態を管理。
+  - Googleログインユーザーは password provider 未連携時に `/set-password` へ強制遷移。
+  - `firestore.rules` で `registrationPendings` のクライアント直接アクセスを禁止。
+- 現時点の制約
+  - `register-pending` / `register-resend` は確認リンクの生成まで実装済み（メール配信基盤との接続は次フェーズ）。
+
+### 追加API
+- `POST /api/v1/auth/register-pending`
+  - 入力: `email`, `password`, `displayName`
+  - 動作: Firebase Authユーザー（未確認）を作成/更新し、確認リンクを生成。`registrationPendings` に保留情報を保存。
+- `POST /api/v1/auth/register-resend`
+  - 入力: `email`
+  - 動作: 未確認ユーザー向けの確認リンクを再生成。
+- `POST /api/v1/auth/register-confirm`
+  - ヘッダ: `Authorization: Bearer <Firebase ID Token>`
+  - 動作: `emailVerified` を検証し、`registrationPendings` を完了状態へ更新。
+
+### 画面フロー
+- 新規登録で仮登録APIを呼び出し、確認メール送信後に「本登録待ち」画面を表示。
+- 確認後にメール/パスワードでログインすると、本登録確定APIが実行されます。
+- Googleログインユーザーは、password provider 未連携の場合に必ずパスワード設定ページへ遷移します。
+
+### 必要な環境変数（追加）
+- `APP_BASE_URL`（推奨）
+  - 確認メールの遷移先URL生成に使用（例: `https://aca-schedule.vercel.app`）
+  - 未設定時はリクエストヘッダから推定
+
+### 次フェーズ候補（認証）
+- `register-pending` / `register-resend` で生成した確認リンクを実際に配信する仕組みを接続する。
+- `register-resend` に再送レート制限を追加する。
+- 確認リンク期限切れ・再利用時のUIメッセージを明確化する。
+- 認証フローE2E（仮登録→確認→本登録、Google→パスワード設定）を自動化する。
+
+
 ### ローカル検証スクリプト
 新しい認証フロー（Firebase IDトークンでPAT発行 -> PATでBand作成）をまとめて試すには、ルートの `test-api-user.cjs` を使います。
 
