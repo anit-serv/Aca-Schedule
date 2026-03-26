@@ -136,6 +136,8 @@ export const EventEditorPage = () => {
         // permission-deniedはアクセス権はく奪
         if (errorCode === 'permission-denied' || errorCode === 'not-found') {
           setError('not-found');
+        } else if (errorCode === 'resource-exhausted') {
+          setError('quota-exceeded');
         } else {
           setError('unknown');
         }
@@ -170,6 +172,9 @@ export const EventEditorPage = () => {
         if (errorCode === 'permission-denied') {
           console.warn('[EventEditorPage] バンド監視: 権限はく奪を検出');
           setError('not-found');
+        } else if (errorCode === 'resource-exhausted') {
+          setError('quota-exceeded');
+          setBandsLoaded(true);
         }
       }
     );
@@ -292,9 +297,13 @@ export const EventEditorPage = () => {
       },
       (err) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((err as any)?.code === 'permission-denied') {
+        const errorCode = (err as any)?.code;
+        if (errorCode === 'permission-denied') {
           console.warn('[EventEditorPage] TT監視: 権限はく奪を検出');
           setError('not-found');
+        } else if (errorCode === 'resource-exhausted') {
+          setError('quota-exceeded');
+          setPerformanceTimetableLoaded(true);
         }
       }
     );
@@ -327,9 +336,13 @@ export const EventEditorPage = () => {
       },
       (err) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((err as any)?.code === 'permission-denied') {
+        const errorCode = (err as any)?.code;
+        if (errorCode === 'permission-denied') {
           console.warn('[EventEditorPage] リハTT監視: 権限はく奪を検出');
           setError('not-found');
+        } else if (errorCode === 'resource-exhausted') {
+          setError('quota-exceeded');
+          setRehearsalTimetableLoaded(true);
         }
       }
     );
@@ -1245,17 +1258,23 @@ export const EventEditorPage = () => {
 
   // エラー表示
   if (error || !eventSettings) {
-    const errorConfig = error === 'not-found' 
+    const errorConfig = error === 'not-found'
       ? {
           icon: '🔍',
           title: 'イベントが見つかりませんでした',
           message: 'このイベントは存在しないか、アクセス権限がありません。',
         }
-      : {
-          icon: '⚠️',
-          title: '読み込みエラー',
-          message: 'イベント情報の読み込みに失敗しました。もう一度お試しください。',
-        };
+      : error === 'quota-exceeded'
+        ? {
+            icon: '⏳',
+            title: 'アクセスが集中しています',
+            message: 'Firestoreの利用上限に達しました。しばらく待ってから再度お試しください。',
+          }
+        : {
+            icon: '⚠️',
+            title: '読み込みエラー',
+            message: 'イベント情報の読み込みに失敗しました。もう一度お試しください。',
+          };
 
     return (
       <div className={`bg-gray-50 text-gray-900 flex items-center justify-center ${shouldUseMobileLayout ? 'h-screen px-4' : 'min-h-screen'}`}>

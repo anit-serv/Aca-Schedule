@@ -112,7 +112,8 @@ export const bandService = {
     const bandsRef = collection(db, 'bands');
     const q = query(bandsRef, where('eventId', '==', eventId));
     
-    return onSnapshot(
+    let unsubscribe: () => void = () => {};
+    unsubscribe = onSnapshot(
       q,
       (snapshot: QuerySnapshot) => {
         const bands = snapshot.docs.map(doc => firestoreToBand(doc.id, doc.data()));
@@ -122,9 +123,15 @@ export const bandService = {
       },
       (error) => {
         console.error('[bandService.subscribeToBands] エラー:', error);
+        // Quota超過時は購読を停止し、バックエンドへの過剰リトライを避ける
+        if ((error as { code?: string })?.code === 'resource-exhausted') {
+          unsubscribe();
+        }
         if (onError) onError(error);
       }
     );
+
+    return () => unsubscribe();
   },
 
   // バンドを追加
@@ -301,7 +308,8 @@ export const eventService = {
     onError?: (error: Error) => void
   ): () => void {
     const eventRef = doc(db, 'events', eventId);
-    return onSnapshot(
+    let unsubscribe: () => void = () => {};
+    unsubscribe = onSnapshot(
       eventRef,
       (snapshot) => {
         if (!snapshot.exists()) {
@@ -313,9 +321,14 @@ export const eventService = {
       },
       (error) => {
         console.error('[eventService.subscribeToEvent] エラー:', error);
+        if ((error as { code?: string })?.code === 'resource-exhausted') {
+          unsubscribe();
+        }
         if (onError) onError(error);
       }
     );
+
+    return () => unsubscribe();
   },
 
   // イベント設定を更新
@@ -692,7 +705,8 @@ export const timetableService = {
       where('type', '==', type)
     );
     
-    return onSnapshot(
+    let unsubscribe: () => void = () => {};
+    unsubscribe = onSnapshot(
       q,
       (snapshot: QuerySnapshot) => {
         if (snapshot.empty) {
@@ -715,9 +729,14 @@ export const timetableService = {
       },
       (error) => {
         console.error('[timetableService.subscribeTimetable] エラー:', error);
+        if ((error as { code?: string })?.code === 'resource-exhausted') {
+          unsubscribe();
+        }
         if (onError) onError(error);
       }
     );
+
+    return () => unsubscribe();
   },
 };
 
