@@ -52,6 +52,12 @@ export const EventEditorPage = () => {
   // 初回モード自動判定用
   const initialModeSetRef = useRef(false);
   const isInitialTimetableSyncInFlightRef = useRef(false);
+  const initialCreateAttemptedRef = useRef<{ performance: boolean; rehearsal: boolean }>({
+    performance: false,
+    rehearsal: false,
+  });
+  const lastSavedPerformanceHashRef = useRef<string>('');
+  const lastSavedRehearsalHashRef = useRef<string>('');
   // 共有パネルの表示状態
   const [showSharePanel, setShowSharePanel] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
@@ -75,6 +81,10 @@ export const EventEditorPage = () => {
     setPerformanceTimetableLoaded(false);
     setRehearsalTimetableLoaded(false);
     isInitialTimetableSyncInFlightRef.current = false;
+    initialCreateAttemptedRef.current = {
+      performance: false,
+      rehearsal: false,
+    };
   }, [eventId]);
 
   // オーナー権限移譲リクエストがある場合、自動的に通知モーダルを表示
@@ -293,6 +303,9 @@ export const EventEditorPage = () => {
       'performance',
       (fetchedTimetable) => {
         setPerformanceTimetable(fetchedTimetable);
+        if (fetchedTimetable?.dailyTimetables) {
+          lastSavedPerformanceHashRef.current = JSON.stringify(fetchedTimetable.dailyTimetables);
+        }
         setPerformanceTimetableLoaded(true);
       },
       (err) => {
@@ -332,6 +345,9 @@ export const EventEditorPage = () => {
       'rehearsal',
       (fetchedTimetable) => {
         setRehearsalTimetable(fetchedTimetable);
+        if (fetchedTimetable?.dailyTimetables) {
+          lastSavedRehearsalHashRef.current = JSON.stringify(fetchedTimetable.dailyTimetables);
+        }
         setRehearsalTimetableLoaded(true);
       },
       (err) => {
@@ -360,7 +376,8 @@ export const EventEditorPage = () => {
       if (mode === 'timetable-editing') {
         try {
           // 本番用タイムテーブル
-          if (performanceTimetable === null) {
+          if (performanceTimetable === null && !initialCreateAttemptedRef.current.performance) {
+            initialCreateAttemptedRef.current.performance = true;
             const newPerformanceTimetable: Omit<Timetable, 'id'> = {
               eventId: eventId,
               type: 'performance',
@@ -372,7 +389,12 @@ export const EventEditorPage = () => {
           }
           
           // リハーサル用タイムテーブル（リハーサル設定がある場合のみ）
-          if (rehearsalTimetable === null && eventSettings.rehearsalType !== 'none') {
+          if (
+            rehearsalTimetable === null &&
+            eventSettings.rehearsalType !== 'none' &&
+            !initialCreateAttemptedRef.current.rehearsal
+          ) {
+            initialCreateAttemptedRef.current.rehearsal = true;
             const newRehearsalTimetable: Omit<Timetable, 'id'> = {
               eventId: eventId,
               type: 'rehearsal',
@@ -451,18 +473,23 @@ export const EventEditorPage = () => {
       }
       
       console.log('[リハーサル自動追加] 新しいバンド:', newBands.map(b => b.name));
+
+      const sortedDates = [...dates].sort();
+      const dailyTimetableByDate = new Map(
+        rehearsalTimetable.dailyTimetables.map((dt) => [dt.date, dt] as const)
+      );
+      let hasChanges = false;
       
       for (const date of dates) {
-        let dailyTimetable = rehearsalTimetable.dailyTimetables.find(dt => dt.date === date);
+        let dailyTimetable = dailyTimetableByDate.get(date);
         
         // その日のタイムテーブルが存在しない場合は作成
         if (!dailyTimetable) {
           // 基本となるクール番号を計算
           let baseCoolNumber = 1;
-          const sortedDates = [...dates].sort();
           for (const d of sortedDates) {
             if (d === date) break;
-            const dt = rehearsalTimetable.dailyTimetables.find(dt => dt.date === d);
+            const dt = dailyTimetableByDate.get(d);
             if (dt && dt.cools && dt.cools.length > 0) {
               baseCoolNumber += dt.cools.length;
             }
@@ -478,6 +505,7 @@ export const EventEditorPage = () => {
             }],
             entries: [],
           };
+          hasChanges = true;
         }
         
         // 当日リハーサル(クール直前/当日一括)の場合は本番タイムテーブルのバンドのみ
@@ -520,10 +548,9 @@ export const EventEditorPage = () => {
         if (!dailyTimetable.cools || dailyTimetable.cools.length === 0) {
           // 基本となるクール番号を計算
           let baseCoolNumber = 1;
-          const sortedDates = [...dates].sort();
           for (const d of sortedDates) {
             if (d === date) break;
-            const dt = rehearsalTimetable.dailyTimetables.find(dt => dt.date === d);
+            const dt = dailyTimetableByDate.get(d);
             if (dt && dt.cools && dt.cools.length > 0) {
               baseCoolNumber += dt.cools.length;
             }
@@ -537,6 +564,7 @@ export const EventEditorPage = () => {
               entries: [],
             }],
           };
+          hasChanges = true;
         }
         
         // 新しいバンドをエントリーとして作成
@@ -560,14 +588,24 @@ export const EventEditorPage = () => {
           ...dailyTimetable,
           cools: updatedCools,
         };
-        
-        // Firestoreに直接保存
-        try {
-          await timetableService.updateDailyTimetable(rehearsalTimetable.id, updatedDailyTimetable);
-          console.log(`[リハーサル自動追加] ${date}: 保存成功`);
-        } catch (error) {
-          console.error(`[リハーサル自動追加] ${date}: 保存エラー`, error);
-        }
+
+        dailyTimetableByDate.set(date, updatedDailyTimetable);
+        hasChanges = true;
+      }
+
+      if (!hasChanges) {
+        return;
+      }
+
+      const mergedDailyTimetables = [...dailyTimetableByDate.values()];
+
+      try {
+        await timetableService.updateTimetable(rehearsalTimetable.id, {
+          dailyTimetables: mergedDailyTimetables,
+        });
+        console.log(`[リハーサル自動追加] 一括保存成功: ${mergedDailyTimetables.length}日分`);
+      } catch (error) {
+        console.error('[リハーサル自動追加] 一括保存エラー', error);
       }
     };
     
@@ -960,9 +998,16 @@ export const EventEditorPage = () => {
     
     // Firestoreに保存（全日付を一括で保存して競合を防止）
     try {
+      const nextHash = JSON.stringify(updatedTimetable.dailyTimetables);
+      if (lastSavedPerformanceHashRef.current === nextHash) {
+        console.log('[本番TT変更] 同一内容のため保存スキップ');
+        return;
+      }
+
       await timetableService.updateTimetable(performanceTimetable.id, {
         dailyTimetables: updatedTimetable.dailyTimetables,
       });
+      lastSavedPerformanceHashRef.current = nextHash;
       console.log('[本番TT変更] Firestore一括保存成功');
     } catch (error) {
       console.error('タイムテーブル更新エラー:', error);
@@ -1061,9 +1106,16 @@ export const EventEditorPage = () => {
     
     // Firestoreに保存（全日付を一括で保存して競合を防止）
     try {
+      const nextHash = JSON.stringify(updatedTimetable.dailyTimetables);
+      if (lastSavedRehearsalHashRef.current === nextHash) {
+        console.log('[リハTT変更] 同一内容のため保存スキップ');
+        return;
+      }
+
       await timetableService.updateTimetable(rehearsalTimetable.id, {
         dailyTimetables: updatedTimetable.dailyTimetables,
       });
+      lastSavedRehearsalHashRef.current = nextHash;
       console.log('[リハTT変更] Firestore一括保存成功');
     } catch (error) {
       console.error('タイムテーブル更新エラー:', error);

@@ -7,6 +7,15 @@ const DEFAULT_LIMITS = {
   perDay: 2000,
 };
 
+function isMinuteLimitEnabled(policy) {
+  if (typeof policy?.trackMinute === "boolean") {
+    return policy.trackMinute;
+  }
+
+  const raw = String(process.env.RATE_LIMIT_TRACK_MINUTE || "false").toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
 function getUtcNow() {
   return new Date();
 }
@@ -42,22 +51,27 @@ export async function enforceRateLimit(apiKey, policy) {
     perMinute: Number(policy?.perMinute ?? DEFAULT_LIMITS.perMinute),
     perDay: Number(policy?.perDay ?? DEFAULT_LIMITS.perDay),
   };
+  const trackMinute = isMinuteLimitEnabled(policy);
 
   const now = getUtcNow();
   const db = getAdminDb();
 
-  const minDocId = `${apiKey}_m_${minuteKey(now)}`;
   const dayDocId = `${apiKey}_d_${dayKey(now)}`;
-  const minRef = db.collection("apiRateLimits").doc(minDocId);
+  const minRef = trackMinute
+    ? db.collection("apiRateLimits").doc(`${apiKey}_m_${minuteKey(now)}`)
+    : null;
   const dayRef = db.collection("apiRateLimits").doc(dayDocId);
 
   const result = await db.runTransaction(async (tx) => {
-    const [minSnap, daySnap] = await Promise.all([tx.get(minRef), tx.get(dayRef)]);
+    const [minSnap, daySnap] = await Promise.all([
+      minRef ? tx.get(minRef) : Promise.resolve(null),
+      tx.get(dayRef),
+    ]);
 
-    const currentMinuteCount = minSnap.exists ? Number(minSnap.data().count || 0) : 0;
+    const currentMinuteCount = minSnap?.exists ? Number(minSnap.data().count || 0) : 0;
     const currentDayCount = daySnap.exists ? Number(daySnap.data().count || 0) : 0;
 
-    if (currentMinuteCount + 1 > limits.perMinute) {
+    if (trackMinute && currentMinuteCount + 1 > limits.perMinute) {
       return {
         limited: true,
         retryAfterSeconds: secondsUntilNextMinute(now),
@@ -71,17 +85,19 @@ export async function enforceRateLimit(apiKey, policy) {
       };
     }
 
-    tx.set(
-      minRef,
-      {
-        apiKey,
-        scope: "minute",
-        count: admin.firestore.FieldValue.increment(1),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: admin.firestore.Timestamp.fromMillis(now.getTime() + 2 * 60 * 60 * 1000),
-      },
-      { merge: true }
-    );
+    if (minRef) {
+      tx.set(
+        minRef,
+        {
+          apiKey,
+          scope: "minute",
+          count: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          expiresAt: admin.firestore.Timestamp.fromMillis(now.getTime() + 2 * 60 * 60 * 1000),
+        },
+        { merge: true }
+      );
+    }
 
     tx.set(
       dayRef,

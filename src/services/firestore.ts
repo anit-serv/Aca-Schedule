@@ -37,6 +37,16 @@ export const userService = {
         updatedAt: Timestamp.now(),
       });
     } else {
+      const existing = userDoc.data();
+      const isSameProfile =
+        (existing.email || null) === (user.email || null) &&
+        (existing.displayName || null) === (user.displayName || null) &&
+        (existing.photoURL || null) === (user.photoURL || null);
+
+      if (isSameProfile) {
+        return;
+      }
+
       await updateDoc(userRef, {
         email: user.email,
         displayName: user.displayName,

@@ -8,7 +8,12 @@ import { enforceRateLimit } from "../_lib/rateLimit.js";
 import { generateRequestId, getRawBody, sha256Hex } from "../_lib/request.js";
 import { validateCreateBandPayload } from "../_lib/validation.js";
 
-async function createBandAndAudit({ requestId, authContext, payload, requestHash }) {
+function shouldWriteSuccessAudit() {
+  const mode = String(process.env.API_SUCCESS_AUDIT_MODE || "errors-only").toLowerCase();
+  return mode === "always";
+}
+
+async function createBand({ requestId, authContext, payload, requestHash }) {
   const db = getAdminDb();
   const bandId = db.collection("bands").doc().id;
   const now = admin.firestore.FieldValue.serverTimestamp();
@@ -24,23 +29,27 @@ async function createBandAndAudit({ requestId, authContext, payload, requestHash
     updatedAt: now,
   };
 
-  const auditDoc = {
-    requestId,
-    authType: authContext.authType,
-    userId: authContext.userId,
-    userEmail: authContext.userEmail,
-    tokenId: authContext.tokenId,
-    eventId: payload.eventId,
-    status: "success",
-    statusCode: 201,
-    requestHash,
-    createdAt: now,
-  };
+  if (shouldWriteSuccessAudit()) {
+    const auditDoc = {
+      requestId,
+      authType: authContext.authType,
+      userId: authContext.userId,
+      userEmail: authContext.userEmail,
+      tokenId: authContext.tokenId,
+      eventId: payload.eventId,
+      status: "success",
+      statusCode: 201,
+      requestHash,
+      createdAt: now,
+    };
 
-  const batch = db.batch();
-  batch.set(db.collection("bands").doc(bandId), bandDoc);
-  batch.set(db.collection("apiRequests").doc(requestId), auditDoc);
-  await batch.commit();
+    const batch = db.batch();
+    batch.set(db.collection("bands").doc(bandId), bandDoc);
+    batch.set(db.collection("apiRequests").doc(requestId), auditDoc);
+    await batch.commit();
+  } else {
+    await db.collection("bands").doc(bandId).set(bandDoc);
+  }
 
   return {
     success: true,
@@ -124,7 +133,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const responsePayload = await createBandAndAudit({
+    const responsePayload = await createBand({
       requestId,
       authContext: auth,
       payload,
