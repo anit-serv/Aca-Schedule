@@ -18,8 +18,8 @@
 - ユーザーAPIトークン管理APIを追加
   - `POST /api/v1/user-api-tokens`（発行）
   - `GET /api/v1/user-api-tokens`（一覧）
-  - `PATCH /api/v1/user-api-tokens/{tokenId}`（更新）
-  - `DELETE /api/v1/user-api-tokens/{tokenId}`（失効）
+  - `PATCH /api/v1/user-api-tokens?tokenId=...`（更新）
+  - `DELETE /api/v1/user-api-tokens?tokenId=...`（失効）
 - UI実装（イベント設定モーダル）
   - APIトークンの発行・一覧・更新・失効を操作可能
   - 平文トークンは発行時のみ表示
@@ -34,6 +34,28 @@
 
 ### テストフェーズ（開始）
 現在は「機能追加」から「検証中心」に移行。
+
+#### テスト実績（2026-03-26 実施）
+以下は `https://aca-schedule.vercel.app` への実測結果。
+
+- `POST /api/v1/bands`（認証なし） -> `401 MISSING_AUTH`
+- `POST /api/v1/bands`（不正PAT） -> `401 INVALID_USER_API_TOKEN`
+- `GET /api/v1/user-api-tokens`（認証なし） -> `401 MISSING_AUTH`
+- `GET /api/v1/user-api-tokens`（Authorization形式不正） -> `401 INVALID_AUTHORIZATION`
+- `GET /api/v1/bands`（メソッド不正） -> `405 METHOD_NOT_ALLOWED`
+- `POST /api/v1/bands`（idempotency欠落） -> `400 MISSING_IDEMPOTENCY_KEY`
+- `POST /api/v1/user-api-tokens`（Bearer + 実在eventId） -> `201`
+- `POST /api/v1/bands`（初回） -> `201`
+- `POST /api/v1/bands`（同一idempotency同一body） -> `200`
+- `POST /api/v1/bands`（同一idempotency別body） -> `409 IDEMPOTENCY_CONFLICT`
+- `POST /api/v1/bands`（PAT許可外eventId） -> `403 EVENT_NOT_ALLOWED_BY_TOKEN`
+- `PATCH /api/v1/user-api-tokens?tokenId=...` -> `200`
+- `DELETE /api/v1/user-api-tokens?tokenId=...` -> `200`
+- 失効後の `POST /api/v1/bands` -> `401 USER_API_TOKEN_REVOKED`
+
+#### 検証中に判明し修正した事項
+- ` /api/v1/user-api-tokens/{tokenId}` の動的パスが環境によりSPAへ解決されるケースを確認。
+- 対策として、更新/失効はクエリ形式 `?tokenId=...` を正式ルートとして統一。
 
 #### まず実施する確認項目
 1. 認証

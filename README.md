@@ -308,3 +308,21 @@ FIREBASE_ID_TOKEN=<Firebase ID Token> node test-api-user.cjs
 - `BASE_URL`（既定: 現在のVercel URL）
 - `EVENT_ID`（既定: `event-1`）
 
+### 本番運用: APIトークン失効時の運用手順
+トークン漏えい・委託先停止・担当者変更などで失効が必要になった場合は、次の順で対応します。
+
+1. 対象トークンを失効
+  - `DELETE /api/v1/user-api-tokens?tokenId=...`
+  - 失効後、同トークンのAPI呼び出しは `401 USER_API_TOKEN_REVOKED` になる
+2. 影響確認
+  - `apiRequests` で該当 `tokenId` の直近リクエストを確認
+  - 想定外の `eventId` へのアクセスがないか確認
+3. 代替トークンを再発行
+  - 必要最小限の `allowedEventIds` で新規発行
+  - 有効期限（`expiresInDays`）を短めに設定
+4. 連携先切替
+  - 連携スクリプト側の `x-user-api-token` を新トークンへ更新
+  - `POST /api/v1/bands` の疎通を確認
+5. 事後記録
+  - 失効理由、失効時刻、担当者、再発行トークンIDを運用記録へ残す
+

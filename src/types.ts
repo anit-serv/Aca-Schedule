@@ -177,3 +177,11 @@ export interface UserApiTokenSummary {
   createdAt: Date | null;
   updatedAt: Date | null;
 }
+
+// API E2Eテスト時のメール/パスワード入力
+export interface ApiPasswordTestCredentials {
+  email: string;
+  password: string;
+  webApiKey: string;
+  eventId: string;
+}
