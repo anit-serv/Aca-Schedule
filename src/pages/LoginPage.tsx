@@ -106,7 +106,7 @@ export const LoginPage = () => {
       <div className="w-full max-w-md mx-auto p-6">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2 text-emerald-600">Aca-Schedule</h1>
-          <p className="text-gray-500">アカペラサークルのスケジュール管理</p>
+          <p className="text-gray-500">アカペライベントのタイムスケジュール管理</p>
         </div>
 
         <div className="bg-white rounded-lg p-6 shadow-lg border border-gray-200">
