@@ -1,27 +1,16 @@
-// test-api-user.cjs
-// Usage (A):
-//   FIREBASE_ID_TOKEN=<id_token> EVENT_ID=<event-id> node test-api-user.cjs
-// Usage (B):
-//   FIREBASE_WEB_API_KEY=<web_api_key> TEST_USER_EMAIL=<email> TEST_USER_PASSWORD=<password> EVENT_ID=<event-id> node test-api-user.cjs
+// tests/api/quick.cjs
+// PAT発行 → バンド作成 → PAT失効 の一連フローを素早く確認するスクリプト
+//
+// Usage (A) - IDトークン直接指定:
+//   FIREBASE_ID_TOKEN=<id_token> EVENT_ID=<event-id> node tests/api/quick.cjs
+//
+// Usage (B) - メール+パスワードで自動ログイン:
+//   FIREBASE_WEB_API_KEY=<web_api_key> TEST_USER_EMAIL=<email> TEST_USER_PASSWORD=<password> EVENT_ID=<event-id> node tests/api/quick.cjs
+//
 // Optional:
-//   BASE_URL=https://your-project.vercel.app
+//   BASE_URL=https://your-project.vercel.app  (default: http://localhost:3000)
 
-/**
- * @typedef {Object} PasswordLoginInput
- * @property {string} webApiKey
- * @property {string} email
- * @property {string} password
- */
-
-/**
- * @typedef {Object} ScriptConfig
- * @property {string} baseUrl
- * @property {string} eventId
- * @property {string | null} idToken
- * @property {PasswordLoginInput | null} passwordLogin
- */
-
-const BASE_URL = process.env.BASE_URL || 'https://aca-schedule.vercel.app';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const EVENT_ID = process.env.EVENT_ID || 'event-1';
 const FIREBASE_ID_TOKEN = process.env.FIREBASE_ID_TOKEN || null;
 const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || null;
@@ -34,9 +23,6 @@ async function callJson(url, init) {
   return { response, data };
 }
 
-/**
- * @param {PasswordLoginInput} input
- */
 async function signInWithPassword(input) {
   const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(input.webApiKey)}`;
   const { response, data } = await callJson(signInUrl, {
@@ -56,17 +42,10 @@ async function signInWithPassword(input) {
   return data.idToken;
 }
 
-/**
- * @returns {ScriptConfig}
- */
 function getConfig() {
   const passwordLogin =
     FIREBASE_WEB_API_KEY && TEST_USER_EMAIL && TEST_USER_PASSWORD
-      ? {
-          webApiKey: FIREBASE_WEB_API_KEY,
-          email: TEST_USER_EMAIL,
-          password: TEST_USER_PASSWORD,
-        }
+      ? { webApiKey: FIREBASE_WEB_API_KEY, email: TEST_USER_EMAIL, password: TEST_USER_PASSWORD }
       : null;
 
   return {
