@@ -1381,7 +1381,7 @@ export const EventEditorPage = () => {
   // ========== モバイルレイアウト ==========
   if (shouldUseMobileLayout) {
     return (
-      <div className="bg-gray-50 text-gray-900 h-screen font-sans flex flex-col overflow-hidden">
+      <div className="bg-gray-50 text-gray-900 fixed inset-0 font-sans flex flex-col overflow-hidden">
         {/* モバイルヘッダー */}
         <MobileHeader
           eventSettings={eventSettings}

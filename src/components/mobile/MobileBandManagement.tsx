@@ -317,18 +317,27 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
                       {band.performanceDuration}分 · {band.members.length}人 · {band.performanceCount || 1}回出演
                     </p>
                   </div>
-                  <svg
-                    className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${
-                      expandedBandId === band.id ? 'rotate-180' : ''
-                    }`}
+                  <motion.svg
+                    animate={{ rotate: expandedBandId === band.id ? 180 : 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    className="w-4 h-4 text-gray-400 flex-shrink-0"
                     fill="none" viewBox="0 0 24 24" stroke="currentColor"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  </motion.svg>
                 </button>
 
                 {/* 展開時の詳細 */}
+                <AnimatePresence initial={false}>
                 {expandedBandId === band.id && (
+                  <motion.div
+                    key="detail"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
                   <div className="px-3 pb-3 border-t border-gray-100 pt-3 space-y-3">
                     {/* バンド名 */}
                     <div>
@@ -502,7 +511,9 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
                       </button>
                     </div>
                   </div>
+                  </motion.div>
                 )}
+                </AnimatePresence>
               </div>
             ))}
           </div>

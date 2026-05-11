@@ -1,6 +1,40 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState, useRef } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import type { Band, Timetable, CustomEvent } from '../../types';
+
+// タッチ開始後180msで touchAction を 'none' に切り替えるフック。
+// スクロール手振り（指が動く）が検出されたらタイマーをキャンセルし pan-y を維持。
+function useLongPressDrag(delay = 180, threshold = 8) {
+  const [active, setActive] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const origin = useRef({ x: 0, y: 0 });
+
+  const start = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0];
+    origin.current = { x: t.clientX, y: t.clientY };
+    timer.current = setTimeout(() => setActive(true), delay);
+  }, [delay]);
+
+  const move = useCallback((e: React.TouchEvent) => {
+    if (!timer.current) return;
+    const t = e.touches[0];
+    const d = Math.hypot(t.clientX - origin.current.x, t.clientY - origin.current.y);
+    if (d > threshold) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }, [threshold]);
+
+  const end = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    setActive(false);
+  }, []);
+
+  return { active, start, move, end };
+}
 
 interface MobileBandBankProps {
   bands: Band[];
@@ -29,6 +63,7 @@ const DraggableBandItem = ({
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: `band-${band.id}`,
   });
+  const { active: longPressed, start, move, end } = useLongPressDrag();
 
   const handleClick = useCallback(() => {
     if (isDragging) return;
@@ -41,7 +76,10 @@ const DraggableBandItem = ({
       {...listeners}
       {...attributes}
       onClick={handleClick}
-      style={{ touchAction: 'none' }}
+      onTouchStart={(e) => { start(e); listeners?.onTouchStart?.(e); }}
+      onTouchMove={move}
+      onTouchEnd={end}
+      style={{ touchAction: longPressed ? 'none' : 'pan-y' }}
       className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all text-left touch-manipulation ${
         isDragging
           ? 'opacity-30'
@@ -89,6 +127,7 @@ const DraggableCustomEventItem = ({
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: `custom-${customEvent.id}`,
   });
+  const { active: longPressed, start, move, end } = useLongPressDrag();
 
   const handleClick = useCallback(() => {
     if (isDragging) return;
@@ -102,7 +141,10 @@ const DraggableCustomEventItem = ({
         {...listeners}
         {...attributes}
         onClick={handleClick}
-        style={{ touchAction: 'none' }}
+        onTouchStart={(e) => { start(e); listeners?.onTouchStart?.(e); }}
+        onTouchMove={move}
+        onTouchEnd={end}
+        style={{ touchAction: longPressed ? 'none' : 'pan-y' }}
         className={`flex-1 flex items-center gap-2.5 rounded-lg px-3 py-2.5 transition-all text-left touch-manipulation ${
           isDragging
             ? 'opacity-30'

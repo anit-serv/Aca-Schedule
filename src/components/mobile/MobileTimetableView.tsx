@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
   TouchSensor,
-  PointerSensor,
   useSensor,
   useSensors,
   useDroppable,
@@ -275,10 +274,7 @@ export const MobileTimetableView = ({
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 200, tolerance: 8 },
   });
-  const pointerSensor = useSensor(PointerSensor, {
-    activationConstraint: { distance: 8 },
-  });
-  const sensors = useSensors(touchSensor, pointerSensor);
+  const sensors = useSensors(touchSensor);
 
   const customCollisionDetection = useMemo(() => createTimetableCollisionDetection(), []);
 
@@ -359,43 +355,71 @@ export const MobileTimetableView = ({
   const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
   const isDraggingFromBank = Boolean(activeBand || activeCustomEvent) && !activeEntry;
   const isDraggingBandFromBank = Boolean(activeBand) && !activeEntry;
+  const isAnyDragging = Boolean(activeBand || activeCustomEvent || activeEntry);
   const isCancelTargetVisible = isDraggingFromBank || Boolean(cancelAbsorbAnimation);
   const isCancelZoneActive = isCancelDropOver || overEntryId === 'mobile-cancel-dropzone' || isPointerOverCancelZone;
   const timetableScrollRef = useRef<HTMLDivElement | null>(null);
   const currentPointerYRef = useRef(0);
+  const isDraggingFromBankRef = useRef(false);
 
   useEffect(() => {
     currentPointerYRef.current = currentPointerY;
   }, [currentPointerY]);
 
-  // バンドをキャンセルゾーン直上へドラッグしたときのみ、タイムテーブルを下スクロール
   useEffect(() => {
-    if (!isDraggingBandFromBank) return;
+    isDraggingFromBankRef.current = isDraggingFromBank;
+  }, [isDraggingFromBank]);
 
+  // ドラッグ中はページレベルのスクロール（iOS Safariのoverscroll）を抑止
+  useEffect(() => {
+    if (!isAnyDragging) return;
+    const prevent = (e: TouchEvent) => e.preventDefault();
+    document.addEventListener('touchmove', prevent, { passive: false });
+    return () => document.removeEventListener('touchmove', prevent);
+  }, [isAnyDragging]);
+
+  // ドラッグ中（バンクから・エントリ並び替えとも）のタイムテーブル自動スクロール
+  useEffect(() => {
+    if (!isAnyDragging) return;
+
+    // コンテナ端からこの距離(px)内に入ったらスクロール発動
+    const SCROLL_ZONE = 80;
+    // 1フレームあたりの最大スクロール量(px)
+    const MAX_SPEED = 18;
     let rafId = 0;
-    const SCROLL_ACTIVATION_HEIGHT = 110;
 
     const loop = () => {
-      const pointerY = currentPointerYRef.current;
       const scroller = timetableScrollRef.current;
-      const cancelIcon = document.getElementById('mobile-cancel-icon');
-      const dragCard = document.getElementById('mobile-drag-overlay-card');
+      if (!scroller) { rafId = requestAnimationFrame(loop); return; }
 
-      if (scroller && cancelIcon) {
-        const iconRect = cancelIcon.getBoundingClientRect();
-        const activationTop = iconRect.top - SCROLL_ACTIVATION_HEIGHT;
-        const activationBottom = iconRect.top;
-        const dragProbeY = dragCard
-          ? dragCard.getBoundingClientRect().bottom
-          : pointerY;
-        const isInActivationBand = dragProbeY >= activationTop && dragProbeY < activationBottom;
+      const cr = scroller.getBoundingClientRect();
+      // dnd-kit はコンテナスクロール時にオーバーレイの transform を補正するため
+      // card.getBoundingClientRect() は信頼できない。実際の指位置を使う。
+      const py = currentPointerYRef.current;
 
-        // ×アイコン直上だけスクロールし、アイコン上/下ではスクロールしない
-        if (isInActivationBand) {
-          const nearRatio = 1 - Math.min(Math.max((activationBottom - dragProbeY) / SCROLL_ACTIVATION_HEIGHT, 0), 1);
-          const delta = 3 + nearRatio * 15;
-          scroller.scrollBy({ top: delta, left: 0, behavior: 'auto' });
-        }
+      // 可視下端を取得:
+      // バンクからドラッグ中はキャンセルゾーン上端を使う（スクロールゾーンとキャンセルゾーンが被るのを防ぐ）
+      // エントリ並び替え中はボトムシート上端を使う
+      const cancelDropzone = isDraggingFromBankRef.current
+        ? document.getElementById('mobile-cancel-dropzone')
+        : null;
+      const bottomSheet = document.getElementById('mobile-bottom-sheet');
+      const bottomSheetTop = bottomSheet ? bottomSheet.getBoundingClientRect().top : cr.bottom;
+      const cancelDropzoneTop = cancelDropzone ? cancelDropzone.getBoundingClientRect().top : bottomSheetTop;
+      // キャンセルゾーン上端・ボトムシート上端の低い方（画面上で上にある方）を使う
+      const effectiveBottom = Math.min(cancelDropzoneTop, bottomSheetTop);
+
+      // 上スクロールゾーン
+      if (py < cr.top + SCROLL_ZONE && scroller.scrollTop > 0) {
+        const ratio = Math.min(1, (cr.top + SCROLL_ZONE - py) / SCROLL_ZONE);
+        scroller.scrollBy({ top: -Math.ceil(ratio * MAX_SPEED), behavior: 'auto' });
+      }
+
+      // 下スクロールゾーン（指がバンドバンクの上端より上にある場合のみ発動）
+      const maxScrollTop = scroller.scrollHeight - scroller.clientHeight;
+      if (py > effectiveBottom - SCROLL_ZONE && py < effectiveBottom && scroller.scrollTop < maxScrollTop) {
+        const ratio = Math.min(1, (py - (effectiveBottom - SCROLL_ZONE)) / SCROLL_ZONE);
+        scroller.scrollBy({ top: Math.ceil(ratio * MAX_SPEED), behavior: 'auto' });
       }
 
       rafId = requestAnimationFrame(loop);
@@ -403,7 +427,7 @@ export const MobileTimetableView = ({
 
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [isDraggingBandFromBank]);
+  }, [isAnyDragging]);
 
   // \u5236\u7d04\u30c1\u30a7\u30c3\u30af
   const violations = useAllViolations(performanceTimetable, rehearsalTimetable, bands);

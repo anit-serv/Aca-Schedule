@@ -126,6 +126,7 @@ export const MobileBottomSheet = ({
 
       {/* シート本体 */}
       <motion.div
+        id="mobile-bottom-sheet"
         className="fixed bottom-[calc(52px+env(safe-area-inset-bottom,0px))] left-0 right-0 bg-white rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-40 flex flex-col will-change-[height]"
         style={{ maxHeight: '92vh' }}
         animate={controls}
