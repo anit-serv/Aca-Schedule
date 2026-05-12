@@ -354,7 +354,6 @@ export const MobileTimetableView = ({
 
   const { activeBand, activeCustomEvent, activeEntry } = getActiveItems();
   const isDraggingFromBank = Boolean(activeBand || activeCustomEvent) && !activeEntry;
-  const isDraggingBandFromBank = Boolean(activeBand) && !activeEntry;
   const isAnyDragging = Boolean(activeBand || activeCustomEvent || activeEntry);
   const isCancelTargetVisible = isDraggingFromBank || Boolean(cancelAbsorbAnimation);
   const isCancelZoneActive = isCancelDropOver || overEntryId === 'mobile-cancel-dropzone' || isPointerOverCancelZone;
