@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BandManagement } from '../components/BandManagement';
 import { TimetableEditing } from '../components/TimetableEditing';
 import { EventSettingsModal } from '../components/EventSettingsModal';
+import { UndoRedoButtons } from '../components/UndoRedoButtons';
+import { SkipNotificationDialog } from '../components/SkipNotificationDialog';
 import { bandService, timetableService, eventService, collaboratorService } from '../services/firestore';
 import { timetableToCSV, downloadCSV } from '../utils/timetableExport';
 import { generateUUID } from '../utils/generateUUID';
@@ -13,7 +15,8 @@ import { MobileTabBar } from '../components/mobile/MobileTabBar';
 import { type SheetHeight } from '../components/mobile/MobileBottomSheet';
 import { MobileBandManagement } from '../components/mobile/MobileBandManagement';
 import { MobileTimetableView } from '../components/mobile/MobileTimetableView';
-import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry } from '../types';
+import { useUndoRedo } from '../hooks/useUndoRedo';
+import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, BandUndoMeta, CustomFieldsUndoMeta, TimetableOpType, UndoRecord } from '../types';
 
 // モードを定義するための型
 type Mode = 'band-management' | 'timetable-editing';
@@ -51,6 +54,16 @@ export const EventEditorPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   // 初回モード自動判定用
   const initialModeSetRef = useRef(false);
+
+  // Undo/Redo
+  const { pushOperation, undo, redo, canUndo, canRedo, isUndoingRef, skippedOps, clearSkipped } = useUndoRedo();
+  // ハンドラーのstale closure回避用ref
+  const performanceTimetableChangeRef = useRef<((dt: DailyTimetable) => Promise<void>) | null>(null);
+  const rehearsalTimetableChangeRef = useRef<((dt: DailyTimetable) => Promise<void>) | null>(null);
+  const performanceTimetableRef = useRef<Timetable | null>(null);
+  const rehearsalTimetableRef = useRef<Timetable | null>(null);
+  const eventSettingsRef = useRef<EventSettings | null>(null);
+  const bandsRef = useRef<Band[]>([]);
   const isInitialTimetableSyncInFlightRef = useRef(false);
   const initialCreateAttemptedRef = useRef<{ performance: boolean; rehearsal: boolean }>({
     performance: false,
@@ -98,6 +111,33 @@ export const EventEditorPage = () => {
       setShowOwnerTransferNotification(true);
     }
   }, [eventSettings?.pendingOwnerEmail, currentUser?.email, currentUser?.uid, eventSettings?.ownerId]);
+
+  // Undo/Redo キーボードショートカット
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod) return;
+      // テキスト入力中は無視
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
+      if (e.key === 'z' || e.key === 'Z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          void redo();
+        } else {
+          e.preventDefault();
+          void undo();
+        }
+      }
+      if ((e.key === 'y' || e.key === 'Y') && !e.shiftKey) {
+        e.preventDefault();
+        void redo();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   // 設定メニューの外側をクリックしたときに閉じる
   useEffect(() => {
@@ -797,6 +837,12 @@ export const EventEditorPage = () => {
     }
   };
 
+  // refを常に最新状態に同期
+  performanceTimetableRef.current = performanceTimetable;
+  rehearsalTimetableRef.current = rehearsalTimetable;
+  eventSettingsRef.current = eventSettings;
+  bandsRef.current = bands;
+
   // バンドデータの変更を処理
   const handleBandsChange = async (updatedBands: Band[]) => {
     // ローカル状態を即座に更新（楽観的更新）
@@ -908,6 +954,206 @@ export const EventEditorPage = () => {
       return { ...cool, entries: updatedEntries };
     });
   };
+
+  // ===== Undo/Redo ヘルパー =====
+
+  // DailyTimetable の全エントリーをフラットに取得（{id, coolId} 付き）
+  const getAllEntries = (dt: DailyTimetable) => {
+    const result: { id: string; coolId: string | null; index: number }[] = [];
+    if (dt.cools && dt.cools.length > 0) {
+      for (const cool of dt.cools) {
+        cool.entries.forEach((e, i) => result.push({ id: e.id, coolId: cool.id, index: i }));
+      }
+    } else {
+      (dt.entries || []).forEach((e, i) => result.push({ id: e.id, coolId: null, index: i }));
+    }
+    return result;
+  };
+
+  // before/after の差分からタイムテーブル操作種別と targetId を推定
+  const detectTimetableOperation = (
+    before: DailyTimetable | undefined,
+    after: DailyTimetable
+  ): { targetId: string; opType: TimetableOpType } | null => {
+    if (!before) return null;
+
+    const beforeCoolIds = new Set(before.cools.map(c => c.id));
+    const afterCoolIds = new Set(after.cools.map(c => c.id));
+
+    const addedCool = after.cools.find(c => !beforeCoolIds.has(c.id));
+    if (addedCool) return { targetId: addedCool.id, opType: 'cool:add' };
+
+    const deletedCool = before.cools.find(c => !afterCoolIds.has(c.id));
+    if (deletedCool) return { targetId: deletedCool.id, opType: 'cool:delete' };
+
+    const beforeEntries = new Map(getAllEntries(before).map(e => [e.id, e]));
+    const afterEntries = new Map(getAllEntries(after).map(e => [e.id, e]));
+
+    for (const [id] of afterEntries) {
+      if (!beforeEntries.has(id)) return { targetId: id, opType: 'entry:add' };
+    }
+    for (const [id] of beforeEntries) {
+      if (!afterEntries.has(id)) return { targetId: id, opType: 'entry:delete' };
+    }
+    for (const [id, ae] of afterEntries) {
+      const be = beforeEntries.get(id);
+      if (be && (be.coolId !== ae.coolId || be.index !== ae.index)) {
+        return { targetId: id, opType: 'entry:reorder' };
+      }
+    }
+    for (const afterCool of after.cools) {
+      const beforeCool = before.cools.find(c => c.id === afterCool.id);
+      if (beforeCool && beforeCool.startTime !== afterCool.startTime) {
+        return { targetId: afterCool.id, opType: 'cool:startTime' };
+      }
+    }
+    return null;
+  };
+
+  // 現在の DailyTimetable から targetId の要素が expectedAfter と一致するか確認
+  const isTimetableConflicted = (
+    currentDt: DailyTimetable | undefined,
+    targetId: string,
+    opType: TimetableOpType,
+    afterDt: DailyTimetable
+  ): boolean => {
+    if (!currentDt) return true;
+
+    if (opType === 'entry:add' || opType === 'entry:delete' || opType === 'entry:reorder') {
+      const current = getAllEntries(currentDt).find(e => e.id === targetId);
+      const expected = getAllEntries(afterDt).find(e => e.id === targetId);
+      if (!current && !expected) return false;
+      if (!current || !expected) return true;
+      return current.coolId !== expected.coolId || current.index !== expected.index;
+    }
+
+    if (opType === 'cool:add' || opType === 'cool:delete' || opType === 'cool:startTime') {
+      const current = currentDt.cools.find(c => c.id === targetId);
+      const expected = afterDt.cools.find(c => c.id === targetId);
+      if (!current && !expected) return false;
+      if (!current || !expected) return true;
+      return current.startTime !== expected.startTime;
+    }
+
+    return false;
+  };
+
+  // タイムテーブル操作の UndoRecord をプッシュ
+  const pushTimetableUndoOp = useCallback((
+    timetableType: 'performance' | 'rehearsal',
+    timetableId: string,
+    date: string,
+    beforeDt: DailyTimetable,
+    afterDt: DailyTimetable,
+    opMeta: { targetId: string; opType: TimetableOpType }
+  ) => {
+    const record: Omit<UndoRecord, 'id' | 'sessionId' | 'timestamp' | 'invalidated'> = {
+      targetId: opMeta.targetId,
+      opType: opMeta.opType,
+      undo: async () => {
+        const handler = timetableType === 'performance'
+          ? performanceTimetableChangeRef.current
+          : rehearsalTimetableChangeRef.current;
+        if (handler) await handler(beforeDt);
+      },
+      redo: async () => {
+        const handler = timetableType === 'performance'
+          ? performanceTimetableChangeRef.current
+          : rehearsalTimetableChangeRef.current;
+        if (handler) await handler(afterDt);
+      },
+      isConflicted: () => {
+        const timetable = timetableType === 'performance'
+          ? performanceTimetableRef.current
+          : rehearsalTimetableRef.current;
+        const currentDt = timetable?.dailyTimetables.find(dt => dt.date === date);
+        return isTimetableConflicted(currentDt, opMeta.targetId, opMeta.opType, afterDt);
+      },
+    };
+    pushOperation(record);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pushOperation]);
+
+  // バンド操作の UndoRecord をプッシュ
+  const handleBandUndoRecord = useCallback((meta: BandUndoMeta) => {
+    const { opType, before, after } = meta;
+    const targetId = (before?.id ?? after?.id) as string;
+
+    const record: Omit<UndoRecord, 'id' | 'sessionId' | 'timestamp' | 'invalidated'> = {
+      targetId,
+      opType,
+      undo: async () => {
+        if (opType === 'band:add') {
+          await bandService.deleteBand(targetId);
+        } else if (opType === 'band:delete' && before) {
+          await bandService.addBand(before, eventSettingsRef.current!.id);
+          setBands(prev => [...prev, before]);
+        } else if (opType === 'band:update' && before) {
+          const { id, createdAt, updatedAt, ...updates } = before;
+          await bandService.updateBand(targetId, updates);
+          setBands(prev => prev.map(b => b.id === targetId ? before : b));
+        }
+      },
+      redo: async () => {
+        if (opType === 'band:add' && after) {
+          await bandService.addBand(after, eventSettingsRef.current!.id);
+          setBands(prev => [...prev, after]);
+        } else if (opType === 'band:delete') {
+          await bandService.deleteBand(targetId);
+        } else if (opType === 'band:update' && after) {
+          const { id, createdAt, updatedAt, ...updates } = after;
+          await bandService.updateBand(targetId, updates);
+          setBands(prev => prev.map(b => b.id === targetId ? after : b));
+        }
+      },
+      isConflicted: () => {
+        const current = bandsRef.current.find(b => b.id === targetId);
+        if (!after) {
+          return !!current;
+        }
+        if (!current) {
+          return true;
+        }
+        return JSON.stringify(current) !== JSON.stringify(after);
+      },
+    };
+    pushOperation(record);
+  }, [pushOperation]);
+
+  // カスタムフィールド操作の UndoRecord をプッシュ
+  const handleCustomFieldsUndoRecord = useCallback((meta: CustomFieldsUndoMeta) => {
+    const { opType, targetId, before, after } = meta;
+
+    const record: Omit<UndoRecord, 'id' | 'sessionId' | 'timestamp' | 'invalidated'> = {
+      targetId,
+      opType,
+      undo: async () => {
+        const id = eventSettingsRef.current!.id;
+        await eventService.updateEvent(id, { customFields: before });
+        setEventSettings(prev => prev ? { ...prev, customFields: before } : null);
+      },
+      redo: async () => {
+        const id = eventSettingsRef.current!.id;
+        await eventService.updateEvent(id, { customFields: after });
+        setEventSettings(prev => prev ? { ...prev, customFields: after } : null);
+      },
+      isConflicted: () => {
+        // customColumn:delete undo は列にデータがある場合スキップ
+        if (opType === 'customColumn:delete') {
+          const currentCustomFields = eventSettingsRef.current?.customFields;
+          if (!currentCustomFields) return true;
+          const columnId = targetId.replace('column:', '');
+          const [, timetableType] = columnId ? ['', 'performance'] : ['', 'performance'];
+          // after の状態（列削除後）と現在の状態を比較
+          return JSON.stringify(currentCustomFields) !== JSON.stringify(after);
+        }
+        // その他: after と現在のcustomFieldsを比較
+        const current = eventSettingsRef.current?.customFields;
+        return JSON.stringify(current) !== JSON.stringify(after);
+      },
+    };
+    pushOperation(record);
+  }, [pushOperation]);
 
   // 日別タイムテーブルの変更を処理（本番用）
   const handlePerformanceTimetableChange = async (updatedDailyTimetable: DailyTimetable) => {
@@ -1187,6 +1433,54 @@ export const EventEditorPage = () => {
       }
     }
   };
+
+  // undo記録付きラッパー（本番タイムテーブル）
+  const handlePerformanceTimetableChangeWithUndo = useCallback(async (updatedDailyTimetable: DailyTimetable) => {
+    if (!isUndoingRef.current && performanceTimetableRef.current) {
+      const beforeDt = performanceTimetableRef.current.dailyTimetables.find(
+        dt => dt.date === updatedDailyTimetable.date
+      );
+      const opMeta = detectTimetableOperation(beforeDt, updatedDailyTimetable);
+      if (opMeta && beforeDt) {
+        pushTimetableUndoOp(
+          'performance',
+          performanceTimetableRef.current.id,
+          updatedDailyTimetable.date,
+          beforeDt,
+          updatedDailyTimetable,
+          opMeta
+        );
+      }
+    }
+    await handlePerformanceTimetableChange(updatedDailyTimetable);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isUndoingRef, pushTimetableUndoOp]);
+
+  // undo記録付きラッパー（リハーサルタイムテーブル）
+  const handleRehearsalTimetableChangeWithUndo = useCallback(async (updatedDailyTimetable: DailyTimetable) => {
+    if (!isUndoingRef.current && rehearsalTimetableRef.current) {
+      const beforeDt = rehearsalTimetableRef.current.dailyTimetables.find(
+        dt => dt.date === updatedDailyTimetable.date
+      );
+      const opMeta = detectTimetableOperation(beforeDt, updatedDailyTimetable);
+      if (opMeta && beforeDt) {
+        pushTimetableUndoOp(
+          'rehearsal',
+          rehearsalTimetableRef.current.id,
+          updatedDailyTimetable.date,
+          beforeDt,
+          updatedDailyTimetable,
+          opMeta
+        );
+      }
+    }
+    await handleRehearsalTimetableChange(updatedDailyTimetable);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isUndoingRef, pushTimetableUndoOp]);
+
+  // refを常に最新のラッパーに更新
+  performanceTimetableChangeRef.current = handlePerformanceTimetableChangeWithUndo;
+  rehearsalTimetableChangeRef.current = handleRehearsalTimetableChangeWithUndo;
 
   // タイムテーブルと日付を同期する関数
   const syncTimetableWithDates = async (
@@ -1743,6 +2037,16 @@ export const EventEditorPage = () => {
               タイムテーブル編集
             </button>
             
+            {/* Undo/Redo ボタン */}
+            <div className="border-l border-gray-200 pl-2 ml-1">
+              <UndoRedoButtons
+                canUndo={canUndo}
+                canRedo={canRedo}
+                onUndo={() => void undo()}
+                onRedo={() => void redo()}
+              />
+            </div>
+
             {/* 共有ボタン */}
             <div className="relative share-panel-container">
               <button
@@ -2353,6 +2657,7 @@ export const EventEditorPage = () => {
               bands={bands}
               eventSettings={eventSettings}
               onBandsChange={handleBandsChange}
+              onUndoRecord={handleBandUndoRecord}
             />
           ) : (
             <TimetableEditing
@@ -2360,11 +2665,12 @@ export const EventEditorPage = () => {
               eventSettings={eventSettings}
               performanceTimetable={performanceTimetable}
               rehearsalTimetable={rehearsalTimetable}
-              onPerformanceTimetableChange={handlePerformanceTimetableChange}
-              onRehearsalTimetableChange={handleRehearsalTimetableChange}
+              onPerformanceTimetableChange={handlePerformanceTimetableChangeWithUndo}
+              onRehearsalTimetableChange={handleRehearsalTimetableChangeWithUndo}
               onEventSettingsChange={(updates) => {
                 setEventSettings(prev => prev ? { ...prev, ...updates } : null);
               }}
+              onUndoRecord={handleCustomFieldsUndoRecord}
             />
           )}
         </div>
@@ -2447,6 +2753,11 @@ export const EventEditorPage = () => {
             <p className="text-xs text-gray-400 mt-3 text-center">×ボタンで後から対応することもできます</p>
           </div>
         </div>
+      )}
+
+      {/* スキップ通知ダイアログ */}
+      {skippedOps.length > 0 && (
+        <SkipNotificationDialog skippedOps={skippedOps} onClose={clearSkipped} />
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { Band, EventSettings } from '../types';
+import type { Band, EventSettings, BandUndoMeta } from '../types';
 import { useBandManagement } from '../hooks/useBandManagement';
 import { BandRow } from './BandRow';
 import { BandAvailabilityModal } from './BandAvailabilityModal';
@@ -9,9 +9,10 @@ interface BandManagementProps {
   bands: Band[];
   eventSettings: EventSettings;
   onBandsChange: (bands: Band[]) => void;
+  onUndoRecord?: (meta: BandUndoMeta) => void;
 }
 
-export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandManagementProps) => {
+export const BandManagement = ({ bands, eventSettings, onBandsChange, onUndoRecord }: BandManagementProps) => {
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [showImportInfo, setShowImportInfo] = useState(false);
@@ -38,7 +39,7 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange }: BandMana
     handleDeleteBand,
     handleUpdateBand,
     allMembers,
-  } = useBandManagement(bands, eventSettings, onBandsChange);
+  } = useBandManagement(bands, eventSettings, onBandsChange, onUndoRecord);
 
   const handleAddBandAndFocus = useCallback(async () => {
     const newBandId = await handleAddBand();

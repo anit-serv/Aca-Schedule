@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { CustomFieldsSettings, CustomColumn, CustomColumnBindingType } from '../types';
+import type { CustomFieldsSettings, CustomColumn, CustomColumnBindingType, CustomFieldsUndoMeta } from '../types';
 import { generateUUID } from '../utils/generateUUID';
 import {
   getTypeData,
@@ -14,6 +14,7 @@ interface CustomColumnManagerProps {
   customFields: CustomFieldsSettings | undefined;
   timetableType: 'performance' | 'rehearsal';
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
+  onUndoRecord?: (meta: CustomFieldsUndoMeta) => void;
   /** trueの場合、操作をperformanceとrehearsal両方に適用 */
   applyToBoth?: boolean;
   /** モバイル表示用（全幅、ボーダー/シャドウなし） */
@@ -24,6 +25,7 @@ export const CustomColumnManager = ({
   customFields,
   timetableType,
   onCustomFieldsChange,
+  onUndoRecord,
   applyToBoth = false,
   mobile = false,
 }: CustomColumnManagerProps) => {
@@ -50,7 +52,7 @@ export const CustomColumnManager = ({
       name: newColumnName.trim(),
       bindingType: newColumnType,
     };
-    
+
     let updated = addColumn(settings, timetableType, columnData);
     // applyToBothがtrueの場合、もう一方のタイプにも追加
     if (applyToBoth) {
@@ -58,6 +60,7 @@ export const CustomColumnManager = ({
       updated = addColumn(updated, otherType, columnData);
     }
 
+    onUndoRecord?.({ targetId: `column:${columnId}`, opType: 'customColumn:add', before: settings, after: updated });
     onCustomFieldsChange(updated);
     setNewColumnName('');
     setNewColumnType('sequence');
@@ -73,6 +76,7 @@ export const CustomColumnManager = ({
       const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
       updated = removeColumn(updated, otherType, columnId);
     }
+    onUndoRecord?.({ targetId: `column:${columnId}`, opType: 'customColumn:delete', before: customFields, after: updated });
     onCustomFieldsChange(updated);
   };
 

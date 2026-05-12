@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import type { Band, EventSettings, Timetable, DailyTimetable, CustomFieldsSettings, CustomColumn } from '../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, CustomFieldsSettings, CustomColumn, CustomFieldsUndoMeta } from '../types';
 import {
   getTypeData,
   getEntriesWithCoolInfo,
@@ -19,6 +19,7 @@ interface CustomFieldsTableProps {
   timetableType: 'performance' | 'rehearsal';
   selectedDate: string;
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
+  onUndoRecord?: (meta: CustomFieldsUndoMeta) => void;
   readOnly?: boolean;
   searchQuery?: string;
   visibleCoolIds?: string[];
@@ -46,6 +47,7 @@ export const CustomFieldsTable = ({
   timetableType,
   selectedDate,
   onCustomFieldsChange,
+  onUndoRecord,
   readOnly,
   searchQuery = '',
   visibleCoolIds,
@@ -72,6 +74,9 @@ export const CustomFieldsTable = ({
   const [mergeConfirmDialog, setMergeConfirmDialog] = useState<{ show: boolean; message?: string; callback: () => void } | null>(null);
   // デバウンス用タイマー
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // セル編集開始時のundo用スナップショット
+  const cellEditBeforeRef = useRef<CustomFieldsSettings | null>(null);
+  const cellEditTargetIdRef = useRef<string | null>(null);
   // テーブルコンテナref
   const tableRef = useRef<HTMLDivElement>(null);
   // ドラッグ開始位置（結合セル情報含む）
@@ -237,13 +242,19 @@ export const CustomFieldsTable = ({
   const handleCellChange = useCallback(
     (seq: number, entryId: string, col: CustomColumn, value: string) => {
       const key = cellKey(seq, col.id);
+      const targetId = `cell:${seq}:${col.id}`;
+      // 編集開始時のbefore状態を記録（同セルの連続入力では更新しない）
+      if (cellEditTargetIdRef.current !== targetId) {
+        cellEditBeforeRef.current = customFields ?? null;
+        cellEditTargetIdRef.current = targetId;
+      }
       setCellValues(prev => ({ ...prev, [key]: value }));
       // IME変換中は保存をスキップ（compositionendで保存される）
       if (!isComposingRef.current.get(key)) {
         debouncedSave(seq, entryId, col, value);
       }
     },
-    [debouncedSave]
+    [debouncedSave, customFields]
   );
 
   // IME変換開始ハンドラー
@@ -277,9 +288,15 @@ export const CustomFieldsTable = ({
       }
       const identifier = col.bindingType === 'sequence' ? seq : entryId;
       const updated = setCellValue(customFields, timetableType, selectedDate, col, identifier, cellValues[key]);
+      const targetId = `cell:${seq}:${col.id}`;
+      if (onUndoRecord && cellEditBeforeRef.current && cellEditTargetIdRef.current === targetId) {
+        onUndoRecord({ targetId, opType: 'customCell:set', before: cellEditBeforeRef.current, after: updated });
+        cellEditBeforeRef.current = null;
+        cellEditTargetIdRef.current = null;
+      }
       onCustomFieldsChange(updated);
     },
-    [customFields, cellValues, timetableType, selectedDate, onCustomFieldsChange]
+    [customFields, cellValues, timetableType, selectedDate, onCustomFieldsChange, onUndoRecord]
   );
 
   // ===== 範囲選択 =====
@@ -608,6 +625,9 @@ export const CustomFieldsTable = ({
         setMergeError(result.error);
         setTimeout(() => setMergeError(null), 3000);
       } else {
+        if (onUndoRecord && customFields) {
+          onUndoRecord({ targetId: `cell:${startSeq}:${selection.colId}`, opType: 'customCell:merge', before: customFields, after: result.settings });
+        }
         onCustomFieldsChange(result.settings);
         setSelection(null);
       }
@@ -654,11 +674,12 @@ export const CustomFieldsTable = ({
     (colId: string, seq: number) => {
       if (!customFields) return;
       const updated = unmergeCells(customFields, timetableType, selectedDate, colId, seq);
+      onUndoRecord?.({ targetId: `cell:${seq}:${colId}`, opType: 'customCell:unmerge', before: customFields, after: updated });
       onCustomFieldsChange(updated);
       setSelection(null);
       setContextMenu(null);
     },
-    [customFields, timetableType, selectedDate, onCustomFieldsChange]
+    [customFields, timetableType, selectedDate, onCustomFieldsChange, onUndoRecord]
   );
 
   // 右クリックメニューを表示

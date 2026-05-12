@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
-import type { Band, EventSettings } from '../types';
+import type { Band, EventSettings, BandUndoMeta } from '../types';
 import { bandService } from '../services/firestore';
 import { generateUUID } from '../utils/generateUUID';
 
 export const useBandManagement = (
   bands: Band[],
   eventSettings: EventSettings,
-  onBandsChange: (bands: Band[]) => void
+  onBandsChange: (bands: Band[]) => void,
+  onUndoRecord?: (meta: BandUndoMeta) => void
 ) => {
   // 新しいバンドを追加
   const handleAddBand = (): Promise<string | null> => {
@@ -20,7 +21,9 @@ export const useBandManagement = (
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
+
+    onUndoRecord?.({ opType: 'band:add', before: null, after: newBand });
+
     // 楽観的更新（UIを即座に更新）
     onBandsChange([...bands, newBand]);
 
@@ -41,6 +44,8 @@ export const useBandManagement = (
 
   // バンドを削除（confirmは呼び出し元で行う）
   const handleDeleteBand = async (id: string) => {
+    const band = bands.find(b => b.id === id) ?? null;
+    onUndoRecord?.({ opType: 'band:delete', before: band, after: null });
     try {
       await bandService.deleteBand(id);
       // onBandsChangeは自動的にFirestoreのリスナーから呼ばれる
@@ -52,6 +57,10 @@ export const useBandManagement = (
 
   // バンド情報を更新
   const handleUpdateBand = async (id: string, updates: Partial<Band>) => {
+    const oldBand = bands.find(b => b.id === id) ?? null;
+    const newBand = oldBand ? { ...oldBand, ...updates, updatedAt: new Date() } : null;
+    onUndoRecord?.({ opType: 'band:update', before: oldBand, after: newBand });
+
     // 楽観的更新（UIを即座に更新）
     onBandsChange(
       bands.map(band =>

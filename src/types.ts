@@ -185,3 +185,54 @@ export interface ApiPasswordTestCredentials {
   webApiKey: string;
   eventId: string;
 }
+
+// ========== Undo/Redo 関連 ==========
+
+export type TimetableOpType =
+  | 'entry:add'
+  | 'entry:delete'
+  | 'entry:reorder'
+  | 'cool:add'
+  | 'cool:delete'
+  | 'cool:startTime';
+
+export type BandOpType = 'band:add' | 'band:delete' | 'band:update';
+
+export type CustomFieldsOpType =
+  | 'customCell:set'
+  | 'customCell:merge'
+  | 'customCell:unmerge'
+  | 'customColumn:add'
+  | 'customColumn:delete';
+
+export type OperationType = TimetableOpType | BandOpType | CustomFieldsOpType;
+
+export interface UndoRecord {
+  id: string;
+  sessionId: string;
+  timestamp: number;
+  targetId: string;
+  opType: OperationType;
+  invalidated: boolean;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+  isConflicted: () => boolean;
+}
+
+export interface SkippedOpInfo {
+  opType: OperationType;
+  reason: 'external' | 'cascade' | 'hasData';
+}
+
+export interface BandUndoMeta {
+  opType: BandOpType;
+  before: Band | null;
+  after: Band | null;
+}
+
+export interface CustomFieldsUndoMeta {
+  opType: CustomFieldsOpType;
+  targetId: string;
+  before: CustomFieldsSettings;
+  after: CustomFieldsSettings;
+}

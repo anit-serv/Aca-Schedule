@@ -6,7 +6,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import type { DragStartEvent } from '@dnd-kit/core';
-import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent, CustomFieldsSettings, ConstraintViolation } from '../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, CustomEvent, CustomFieldsSettings, ConstraintViolation, CustomFieldsUndoMeta } from '../types';
 import { TimetableDragOverlay } from './TimetableDragOverlay';
 import { ViolationPanel } from './ViolationPanel';
 import { TimetableContextBar } from './TimetableContextBar';
@@ -44,6 +44,7 @@ interface TimetableEditingProps {
   onPerformanceTimetableChange: (timetable: DailyTimetable) => void;
   onRehearsalTimetableChange: (timetable: DailyTimetable) => void;
   onEventSettingsChange?: (updates: Partial<EventSettings>) => void;
+  onUndoRecord?: (meta: CustomFieldsUndoMeta) => void;
 }
 
 export const TimetableEditing = ({
@@ -54,6 +55,7 @@ export const TimetableEditing = ({
   onPerformanceTimetableChange,
   onRehearsalTimetableChange,
   onEventSettingsChange,
+  onUndoRecord,
 }: TimetableEditingProps) => {
   const [timetableType, setTimetableType] = useState<'performance' | 'rehearsal'>('performance');
   const [selectedDate, setSelectedDate] = useState(eventSettings.performanceDates[0] || '');
@@ -81,33 +83,42 @@ export const TimetableEditing = ({
   } | null>(null);
   const hasSkippedInitialAutoRecalcRef = useRef(false);
 
-  // カスタムイベントが変更されたらFirestoreのeventSettingsを更新
-  useEffect(() => {
-    const updateCustomEvents = async () => {
-      try {
-        await eventService.updateEvent(eventSettings.id, {
-          customEvents: customEvents,
-        });
-        console.log('カスタムイベントを保存しました:', customEvents);
-      } catch (error) {
-        console.error('カスタムイベントの保存に失敗しました:', error);
-      }
-    };
+  // カスタムイベントの保存追跡用ref（フリッカー防止）
+  const customEventsSavingCountRef = useRef(0);
+  const lastSavedCustomEventsRef = useRef<string>(JSON.stringify(eventSettings.customEvents || []));
 
-    // 初回レンダリング時は更新しない（eventSettings.customEventsと同じ内容のため）
-    if (JSON.stringify(customEvents) !== JSON.stringify(eventSettings.customEvents || [])) {
-      updateCustomEvents();
-    }
-  }, [customEvents, eventSettings.id, eventSettings.customEvents]);
-
-  // eventSettings.customEventsが外部（Firestore）から変更されたらローカル状態を同期
+  // Firestore → ローカルへの一方向同期（保存中はスキップ）
   useEffect(() => {
+    if (customEventsSavingCountRef.current > 0) return;
     const firestoreEvents = eventSettings.customEvents || [];
-    if (JSON.stringify(customEvents) !== JSON.stringify(firestoreEvents)) {
+    const firestoreSerialized = JSON.stringify(firestoreEvents);
+    // 自分が保存した内容のエコーは無視
+    if (firestoreSerialized === lastSavedCustomEventsRef.current) return;
+    if (JSON.stringify(customEvents) !== firestoreSerialized) {
       setCustomEvents(firestoreEvents);
+      lastSavedCustomEventsRef.current = firestoreSerialized;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSettings.customEvents]);
+
+  const saveCustomEvents = useCallback(
+    async (newList: CustomEvent[], previousList: CustomEvent[]) => {
+      const serialized = JSON.stringify(newList);
+      lastSavedCustomEventsRef.current = serialized;
+      customEventsSavingCountRef.current += 1;
+      try {
+        await eventService.updateEvent(eventSettings.id, { customEvents: newList });
+      } catch (error) {
+        console.error('カスタムイベントの保存に失敗しました:', error);
+        // ロールバック
+        setCustomEvents(previousList);
+        lastSavedCustomEventsRef.current = JSON.stringify(previousList);
+      } finally {
+        customEventsSavingCountRef.current -= 1;
+      }
+    },
+    [eventSettings.id]
+  );
 
 
   // タイムテーブルタイプが切り替わったときに日付を適切に設定
@@ -529,11 +540,17 @@ export const TimetableEditing = ({
       id: generateUUID(),
       ...customEvent,
     };
-    setCustomEvents([...customEvents, newEvent]);
+    const previousList = customEvents;
+    const newList = [...customEvents, newEvent];
+    setCustomEvents(newList);
+    void saveCustomEvents(newList, previousList);
   };
 
   const handleDeleteCustomEvent = (id: string) => {
-    setCustomEvents(customEvents.filter((e) => e.id !== id));
+    const previousList = customEvents;
+    const newList = customEvents.filter((e) => e.id !== id);
+    setCustomEvents(newList);
+    void saveCustomEvents(newList, previousList);
   };
 
   // 制約違反クリック時にエントリーまでスクロール＆ハイライト
@@ -754,6 +771,7 @@ export const TimetableEditing = ({
                       timetableType="rehearsal"
                       selectedDate={selectedDate}
                       onCustomFieldsChange={handleCustomFieldsChange}
+                      onUndoRecord={onUndoRecord}
                       searchQuery={searchQuery}
                       disablePerformanceBottomSpacer
                     />
@@ -773,6 +791,7 @@ export const TimetableEditing = ({
                       timetableType="performance"
                       selectedDate={selectedDate}
                       onCustomFieldsChange={handleCustomFieldsChange}
+                      onUndoRecord={onUndoRecord}
                       searchQuery={searchQuery}
                       disablePerformanceBottomSpacer
                     />
@@ -802,6 +821,7 @@ export const TimetableEditing = ({
                               timetableType="rehearsal"
                               selectedDate={selectedDate}
                               onCustomFieldsChange={handleCustomFieldsChange}
+                              onUndoRecord={onUndoRecord}
                               searchQuery={searchQuery}
                               visibleCoolIds={[rehearsalCoolId]}
                               disablePerformanceBottomSpacer
@@ -824,6 +844,7 @@ export const TimetableEditing = ({
                               timetableType="performance"
                               selectedDate={selectedDate}
                               onCustomFieldsChange={handleCustomFieldsChange}
+                              onUndoRecord={onUndoRecord}
                               searchQuery={searchQuery}
                               visibleCoolIds={[performanceCoolId]}
                               disablePerformanceBottomSpacer
@@ -843,6 +864,7 @@ export const TimetableEditing = ({
                   timetableType={timetableType}
                   selectedDate={selectedDate}
                   onCustomFieldsChange={handleCustomFieldsChange}
+                  onUndoRecord={onUndoRecord}
                   searchQuery={searchQuery}
                 />
               )
@@ -873,6 +895,7 @@ export const TimetableEditing = ({
               customFields={eventSettings.customFields}
               timetableType={timetableType}
               onCustomFieldsChange={handleCustomFieldsChange}
+              onUndoRecord={onUndoRecord}
               applyToBoth={showCombinedView || showInterleavedCoolPreView}
             />
           ) : (
