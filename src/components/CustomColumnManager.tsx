@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { CustomFieldsSettings, CustomColumn, CustomColumnBindingType, CustomFieldsUndoMeta } from '../types';
 import { generateUUID } from '../utils/generateUUID';
+import { Icon } from './Icon';
 import {
   getTypeData,
   addColumn,
@@ -161,7 +162,7 @@ export const CustomColumnManager = ({
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-xs" title={col.bindingType === 'sequence' ? '位置固定' : 'エントリー追従'}>
-                  {col.bindingType === 'sequence' ? '📍' : '🎵'}
+                  <Icon name={col.bindingType === 'sequence' ? 'push_pin' : 'music_note'} className="text-sm align-middle" />
                 </span>
                 <span
                   className="flex-1 text-sm text-gray-700 cursor-pointer hover:text-emerald-600 truncate"
@@ -179,9 +180,7 @@ export const CustomColumnManager = ({
                     className="text-gray-500 hover:text-gray-900 disabled:opacity-30 p-0.5"
                     title="上へ移動"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
+                    <Icon name="expand_less" className="text-sm" />
                   </button>
                   <button
                     onClick={() => handleMoveDown(index)}
@@ -189,18 +188,14 @@ export const CustomColumnManager = ({
                     className="text-gray-500 hover:text-gray-900 disabled:opacity-30 p-0.5"
                     title="下へ移動"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <Icon name="expand_more" className="text-sm" />
                   </button>
                   <button
                     onClick={() => handleRemoveColumn(col.id)}
                     className="text-red-400 hover:text-red-300 p-0.5"
                     title="列を削除"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <Icon name="close" className="text-sm" />
                   </button>
                 </div>
               </div>
@@ -242,7 +237,7 @@ export const CustomColumnManager = ({
                   className="mt-0.5"
                 />
                 <div>
-                  <div className="text-xs text-gray-700 font-medium">📍 位置固定</div>
+                  <div className="text-xs text-gray-700 font-medium"><Icon name="push_pin" className="text-sm align-middle mr-0.5" />位置固定</div>
                   <div className="text-xs text-gray-400">番号に紐付け。結合可能</div>
                 </div>
               </label>
@@ -256,7 +251,7 @@ export const CustomColumnManager = ({
                   className="mt-0.5"
                 />
                 <div>
-                  <div className="text-xs text-gray-700 font-medium">🎵 エントリー追従</div>
+                  <div className="text-xs text-gray-700 font-medium"><Icon name="music_note" className="text-sm align-middle mr-0.5" />エントリー追従</div>
                   <div className="text-xs text-gray-400">移動時にデータも追従</div>
                 </div>
               </label>

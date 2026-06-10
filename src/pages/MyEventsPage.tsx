@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { eventService, collaboratorService } from '../services/firestore';
+import { Icon } from '../components/Icon';
 import type { EventSettings } from '../types';
 
 export const MyEventsPage = () => {
@@ -115,7 +116,10 @@ export const MyEventsPage = () => {
     <div className="bg-gray-50 text-gray-900 min-h-screen font-sans">
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-emerald-600">マイイベント</h1>
+          <div className="flex items-center gap-2">
+            <img src="/app-icon.svg" alt="" className="w-8 h-8" />
+            <h1 className="text-2xl font-bold text-emerald-600">マイイベント</h1>
+          </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               {currentUser?.photoURL ? (
@@ -162,7 +166,7 @@ export const MyEventsPage = () => {
           </div>
         ) : events.length === 0 ? (
           <div className="text-center py-20">
-            <div className="text-6xl mb-4">🎵</div>
+            <div className="text-6xl mb-4"><Icon name="music_note" className="text-6xl" /></div>
             <h2 className="text-xl font-bold mb-2">イベントがありません</h2>
             <p className="text-gray-500 mb-6">
               最初のイベントを作成して、タイムテーブルの編集を始めましょう
@@ -190,10 +194,10 @@ export const MyEventsPage = () => {
                     {event.name}
                   </h3>
                   <div className="space-y-1 text-sm text-gray-500">
-                    <p>📅 {event.year}年</p>
-                    {event.venue && <p>📍 {event.venue}</p>}
+                    <p><Icon name="calendar_today" className="text-sm align-middle mr-1" />{event.year}年</p>
+                    {event.venue && <p><Icon name="location_on" className="text-sm align-middle mr-1" />{event.venue}</p>}
                     <p>
-                      🎤 本番日:{' '}
+                      <Icon name="mic" className="text-sm align-middle mr-1" />本番日:{' '}
                       {event.performanceDates.map(formatDate).join(', ')}
                     </p>
                     <p className="text-xs mt-2 text-gray-400">
@@ -219,9 +223,7 @@ export const MyEventsPage = () => {
                     className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                     disabled={isProcessing}
                   >
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                    </svg>
+                    <Icon name="more_vert" className="text-xl" />
                   </button>
                   
                   {menuOpenId === event.id && (
@@ -237,7 +239,7 @@ export const MyEventsPage = () => {
                         className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                         disabled={isProcessing}
                       >
-                        <span>📋</span>
+                        <Icon name="content_copy" className="text-sm" />
                         コピー
                       </button>
                       <button
@@ -248,7 +250,7 @@ export const MyEventsPage = () => {
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                         disabled={isProcessing}
                       >
-                        <span>🗑️</span>
+                        <Icon name="delete" className="text-sm" />
                         削除
                       </button>
                     </div>
@@ -281,10 +283,10 @@ export const MyEventsPage = () => {
                     </span>
                   </div>
                   <div className="space-y-1 text-sm text-gray-500">
-                    <p>📅 {event.year}年</p>
-                    {event.venue && <p>📍 {event.venue}</p>}
+                    <p><Icon name="calendar_today" className="text-sm align-middle mr-1" />{event.year}年</p>
+                    {event.venue && <p><Icon name="location_on" className="text-sm align-middle mr-1" />{event.venue}</p>}
                     <p>
-                      🎤 本番日:{' '}
+                      <Icon name="mic" className="text-sm align-middle mr-1" />本番日:{' '}
                       {event.performanceDates.map(formatDate).join(', ')}
                     </p>
                   </div>
@@ -363,10 +365,10 @@ export const MyEventsPage = () => {
                       </span>
                     </div>
                     <div className="space-y-1 text-sm text-gray-500">
-                      <p>📅 {event.year}年</p>
-                      {event.venue && <p>📍 {event.venue}</p>}
+                      <p><Icon name="calendar_today" className="text-sm align-middle mr-1" />{event.year}年</p>
+                      {event.venue && <p><Icon name="location_on" className="text-sm align-middle mr-1" />{event.venue}</p>}
                       <p>
-                        🎤 本番日:{' '}
+                        <Icon name="mic" className="text-sm align-middle mr-1" />本番日:{' '}
                         {event.performanceDates.map(formatDate).join(', ')}
                       </p>
                     </div>
@@ -394,16 +396,14 @@ export const MyEventsPage = () => {
                       disabled={isProcessing}
                       title="共同編集を辞退"
                     >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                      </svg>
+                      <Icon name="logout" className="text-base" />
                     </button>
                   </div>
 
                   {/* オーナー権限移譲の通知 */}
                   {event.pendingOwnerEmail && currentUser?.email && event.pendingOwnerEmail.toLowerCase() === currentUser.email.toLowerCase() && (
                     <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
-                      <p className="text-xs text-blue-700 font-bold mb-1">📩 オーナー権限の移譲リクエスト</p>
+                      <p className="text-xs text-blue-700 font-bold mb-1"><Icon name="mail" className="text-base align-middle mr-1" />オーナー権限の移譲リクエスト</p>
                       <p className="text-xs text-blue-600 mb-2">イベントを開いて共有パネルから承認・拒否できます</p>
                     </div>
                   )}

@@ -10,6 +10,7 @@ import {
   unmergeCells,
 } from '../utils/customFieldsUtils';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
+import { Icon } from './Icon';
 
 interface CustomFieldsTableProps {
   currentTimetable: DailyTimetable;
@@ -1005,7 +1006,7 @@ export const CustomFieldsTable = ({
                 onClick={() => handleUnmerge(selection.colId, Math.min(selection.startSeq, selection.endSeq))}
                 className="px-4 py-2 text-sm font-medium rounded-md bg-yellow-500 hover:bg-yellow-400 text-white transition-colors flex items-center gap-2"
               >
-                <span className="text-base">🔓</span>
+                <Icon name="lock_open" className="text-base" />
                 結合を解除
               </button>
             ) : (
@@ -1013,7 +1014,7 @@ export const CustomFieldsTable = ({
                 onClick={handleMerge}
                 className="px-4 py-2 text-sm font-medium rounded-md bg-emerald-500 hover:bg-emerald-400 text-white transition-colors flex items-center gap-2"
               >
-                <span className="text-base">🔗</span>
+                <Icon name="link" className="text-base" />
                 セルを結合
               </button>
             )}
@@ -1022,7 +1023,7 @@ export const CustomFieldsTable = ({
               className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
               title="選択を解除"
             >
-              ✕
+              <Icon name="close" className="text-base align-middle" />
             </button>
           </div>
         </div>
@@ -1066,7 +1067,7 @@ export const CustomFieldsTable = ({
             onClick={() => handleUnmerge(contextMenu.colId, contextMenu.seq)}
             className="w-full px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors flex items-center gap-2"
           >
-            <span>🔓</span>
+            <Icon name="lock_open" className="text-base" />
             結合を解除
           </button>
         </div>
@@ -1102,7 +1103,7 @@ export const CustomFieldsTable = ({
                 >
                   <div className="flex items-center gap-1">
                     <span className="text-xs" title={col.bindingType === 'sequence' ? '位置固定' : 'エントリー追従'}>
-                      {col.bindingType === 'sequence' ? '📍' : '🎵'}
+                      <Icon name={col.bindingType === 'sequence' ? 'push_pin' : 'music_note'} className="text-sm align-middle" />
                     </span>
                     <span className="truncate">{col.name}</span>
                   </div>

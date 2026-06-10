@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from './Icon';
 
 interface DesktopClockTimePickerProps {
   id?: string;
@@ -257,7 +258,7 @@ export const DesktopClockTimePicker = ({
             className="text-gray-500 hover:text-gray-900 px-1 transition-colors"
             title="時刻をクリア"
           >
-            ✕
+            <Icon name="close" className="text-base align-middle" />
           </button>
         )}
       </div>

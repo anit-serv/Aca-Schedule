@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import type { Band, EventSettings } from '../types';
 import { bandService } from '../services/firestore';
 import { generateUUID } from '../utils/generateUUID';
+import { Icon } from './Icon';
 
 interface BandImportCSVProps {
   eventSettings: EventSettings;
@@ -210,9 +211,7 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
           {error && (
             <div className="bg-red-900/95 border border-red-500 text-red-200 px-4 py-3 rounded-lg shadow-lg text-sm whitespace-pre-line">
               <div className="flex items-start gap-2">
-                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Icon name="error" className="text-xl flex-shrink-0" />
                 <div>{error}</div>
               </div>
             </div>
@@ -221,9 +220,7 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
           {success && (
             <div className="bg-green-900/95 border border-green-500 text-green-200 px-4 py-3 rounded-lg shadow-lg text-sm">
               <div className="flex items-start gap-2">
-                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Icon name="check_circle" className="text-xl flex-shrink-0" />
                 <div>{success}</div>
               </div>
             </div>

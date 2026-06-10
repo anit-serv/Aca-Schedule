@@ -4,6 +4,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableTimetableRow } from './SortableTimetableRow';
 import { DesktopClockTimePicker } from './DesktopClockTimePicker';
 import type { Cool, Band, ConstraintViolation } from '../types';
+import { Icon } from './Icon';
 
 interface CoolSectionProps {
   cool: Cool;
@@ -218,12 +219,12 @@ export const CoolSection = ({
               )}
               {showWarning && (
                 <span className="text-red-400 text-xs flex items-center gap-1">
-                  ⚠️ 次のクール開始時刻を超過
+                  <Icon name="warning" className="text-sm" />次のクール開始時刻を超過
                 </span>
               )}
               {showOverlapWarning && (
                 <span className="text-red-400 text-xs flex items-center gap-1">
-                  ⚠️ 前のタイムラインと時刻が重複
+                  <Icon name="warning" className="text-sm" />前のタイムラインと時刻が重複
                 </span>
               )}
             </div>
@@ -236,7 +237,7 @@ export const CoolSection = ({
               className="px-2 py-1 text-gray-700 hover:bg-gray-300 rounded transition-colors"
               title="メニュー"
             >
-              ⋮
+              <Icon name="more_vert" className="text-base align-middle" />
             </button>
             
             {isMenuOpen && (
@@ -248,7 +249,7 @@ export const CoolSection = ({
                     coolIndex === 0 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
                   }`}
                 >
-                  ↑ 上に移動
+                  <Icon name="arrow_upward" className="text-sm align-middle mr-1" />上に移動
                 </button>
                 <button
                   onClick={handleMoveDown}
@@ -257,14 +258,14 @@ export const CoolSection = ({
                     coolIndex === totalCools - 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
                   }`}
                 >
-                  ↓ 下に移動
+                  <Icon name="arrow_downward" className="text-sm align-middle mr-1" />下に移動
                 </button>
                 <div className="border-t border-gray-200"></div>
                 <button
                   onClick={handleDeleteClick}
                   className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 transition-colors"
                 >
-                  🗑 削除
+                  <Icon name="delete" className="text-sm" /> 削除
                 </button>
               </div>
             )}

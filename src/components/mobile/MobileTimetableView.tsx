@@ -23,6 +23,7 @@ import { CustomColumnManager } from '../CustomColumnManager';
 import { MobileBottomSheet, type SheetHeight } from './MobileBottomSheet';
 import { MobileBandBank } from './MobileBandBank';
 import { eventService } from '../../services/firestore';
+import { Icon } from '../Icon';
 
 interface MobileTimetableViewProps {
   bands: Band[];
@@ -138,9 +139,7 @@ const MobileTimeInput = ({
           className="text-emerald-400 hover:text-red-400 p-1"
           title={'開始時刻を削除'}
         >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <Icon name="close" className="text-sm" />
         </button>
       )}
     </div>
@@ -953,9 +952,7 @@ export const MobileTimetableView = ({
                     : 'bg-gray-100 text-gray-500 border border-gray-200'
                 }`}
               >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+                <Icon name="table" className="text-sm" />
                 {'\u30C6\u30FC\u30D6\u30EB'}
               </button>
               {/* \u9055\u53cd\u30d0\u30c3\u30b8 */}
@@ -968,9 +965,7 @@ export const MobileTimetableView = ({
                     'bg-sky-50 border border-sky-200 text-sky-600'
                   }`}
                 >
-                  <span className="text-xs">
-                    {mostSevereSeverity === 'high' ? '🚫' : mostSevereSeverity === 'medium' ? '⚠️' : 'ℹ️'}
-                  </span>
+                  <Icon name={mostSevereSeverity === 'high' ? 'block' : mostSevereSeverity === 'medium' ? 'warning' : 'info'} className="text-xs" />
                   {uniqueViolationCount}
                 </button>
               )}
@@ -1114,9 +1109,7 @@ export const MobileTimetableView = ({
                           onClick={() => handleDeleteCustomEvent(ce.id)}
                           className="p-1.5 text-gray-400 hover:text-red-500 rounded"
                         >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
+                          <Icon name="close" className="text-base" />
                         </button>
                       </div>
                     ))}
@@ -1337,7 +1330,7 @@ export const MobileTimetableView = ({
                       : 'bg-purple-500 text-white'
                   }`}
                 >
-                  {cancelAbsorbAnimation.kind === 'band' ? (cancelAbsorbAnimation.label.charAt(0) || 'B') : '★'}
+                  {cancelAbsorbAnimation.kind === 'band' ? (cancelAbsorbAnimation.label.charAt(0) || 'B') : <Icon name="star" filled className="text-sm" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p
@@ -1446,9 +1439,9 @@ const ViolationList = ({ violations, onViolationClick }: { violations: Constrain
 
   // 重大度ごとの色・記号
   const severityConfig = {
-    high: { icon: '🚫', bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-600' },
-    medium: { icon: '⚠️', bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-600' },
-    low: { icon: 'ℹ️', bg: 'bg-sky-100', border: 'border-sky-300', text: 'text-sky-600' },
+    high: { icon: 'block', bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-600' },
+    medium: { icon: 'warning', bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-600' },
+    low: { icon: 'info', bg: 'bg-sky-100', border: 'border-sky-300', text: 'text-sky-600' },
   };
 
   const toggleSection = (section: string) => {
@@ -1492,7 +1485,7 @@ const ViolationList = ({ violations, onViolationClick }: { violations: Constrain
           className={`w-full flex items-center justify-between px-3 py-2 rounded-lg ${config.bg} ${config.border} border active:opacity-80`}
         >
           <div className="flex items-center gap-2">
-            <span className="text-sm">{config.icon}</span>
+            <Icon name={config.icon} className={`text-sm ${config.text}`} />
             <span className={`font-bold text-sm ${config.text}`}>{title}</span>
             <span className="text-[10px] text-gray-500">
               ({sectionViolations.length}件)
@@ -1500,15 +1493,15 @@ const ViolationList = ({ violations, onViolationClick }: { violations: Constrain
           </div>
           <div className="flex items-center gap-2">
             <div className="flex gap-1 text-[9px]">
-              {highCount > 0 && <span className="text-rose-600">🚫{highCount}</span>}
-              {mediumCount > 0 && <span className="text-amber-600">⚠️{mediumCount}</span>}
-              {lowCount > 0 && <span className="text-sky-600">ℹ️{lowCount}</span>}
+              {highCount > 0 && <span className="text-rose-600 flex items-center gap-0.5"><Icon name="block" className="text-[9px]" />{highCount}</span>}
+              {mediumCount > 0 && <span className="text-amber-600 flex items-center gap-0.5"><Icon name="warning" className="text-[9px]" />{mediumCount}</span>}
+              {lowCount > 0 && <span className="text-sky-600 flex items-center gap-0.5"><Icon name="info" className="text-[9px]" />{lowCount}</span>}
             </div>
             <motion.span
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
-              className="text-xs"
-            >▼</motion.span>
+              className="text-xs flex"
+            ><Icon name="expand_more" className="text-xs" /></motion.span>
           </div>
         </button>
         <AnimatePresence initial={false}>
@@ -1533,7 +1526,7 @@ const ViolationList = ({ violations, onViolationClick }: { violations: Constrain
                       }`}
                       onClick={() => onViolationClick?.(v)}
                     >
-                      {itemConfig.icon} {v.message}
+                      <Icon name={itemConfig.icon} className="text-xs align-middle mr-0.5" />{v.message}
                     </div>
                   );
                 })}
@@ -1816,14 +1809,7 @@ const CoolCard = ({
                     className="flex-shrink-0 touch-manipulation cursor-grab active:cursor-grabbing text-gray-300 active:text-emerald-500 p-0.5 -ml-1"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="9" cy="6" r="1.5" />
-                      <circle cx="15" cy="6" r="1.5" />
-                      <circle cx="9" cy="12" r="1.5" />
-                      <circle cx="15" cy="12" r="1.5" />
-                      <circle cx="9" cy="18" r="1.5" />
-                      <circle cx="15" cy="18" r="1.5" />
-                    </svg>
+                    <Icon name="drag_indicator" className="text-base" />
                   </div>
 
                   {/* \u6642\u523b */}
@@ -1887,9 +1873,7 @@ const CoolCard = ({
 
                   {/* \u5c55\u958b\u30a2\u30a4\u30b3\u30f3 */}
                   <div className="flex-shrink-0 text-gray-300">
-                    <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <Icon name="expand_more" className={`text-base transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
 

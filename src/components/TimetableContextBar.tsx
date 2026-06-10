@@ -2,6 +2,7 @@ import type { Band, EventSettings, DailyTimetable } from '../types';
 import { ToggleSwitch } from './ToggleSwitch';
 import { TimetableSearch } from './TimetableSearch';
 import { DesktopClockTimePicker } from './DesktopClockTimePicker';
+import { Icon } from './Icon';
 
 interface TimetableContextBarProps {
   timetableType: 'performance' | 'rehearsal';
@@ -163,12 +164,7 @@ export const TimetableContextBar = ({
             enabled={isCustomMode}
             onChange={onCustomModeChange}
             label="カスタム"
-            icon={
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M3 10h18M3 14h18M3 6h18M3 18h18M10 3v18M14 3v18" />
-              </svg>
-            }
+            icon={<Icon name="grid_on" className="text-base" />}
           />
         </div>
       </div>

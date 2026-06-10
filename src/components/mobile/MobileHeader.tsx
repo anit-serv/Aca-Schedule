@@ -1,3 +1,4 @@
+import { Icon } from '../Icon';
 import type { EventSettings } from '../../types';
 
 type Mode = 'band-management' | 'timetable-editing';
@@ -28,9 +29,7 @@ export const MobileHeader = ({
             className="text-gray-400 hover:text-gray-700 transition-colors text-sm flex-shrink-0 p-2 -ml-1"
             title="マイイベントに戻る"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <Icon name="arrow_back" className="text-xl" />
           </button>
           <div className="min-w-0">
             <h1 className="text-[15px] font-bold text-gray-900 truncate">{eventSettings.name}</h1>
@@ -49,18 +48,14 @@ export const MobileHeader = ({
             }`}
             title="共有設定"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
+            <Icon name="share" className="text-xl" />
           </button>
           <button
             onClick={onSettingsToggle}
             className="p-2.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors duration-200"
             title="設定"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-            </svg>
+            <Icon name="settings" className="text-xl" />
           </button>
         </div>
       </div>

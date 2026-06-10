@@ -105,6 +105,7 @@ export const LoginPage = () => {
     <div className="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 min-h-screen font-sans flex items-center justify-center">
       <div className="w-full max-w-md mx-auto p-6">
         <div className="text-center mb-8">
+          <img src="/app-icon.svg" alt="" className="w-16 h-16 mx-auto mb-3" />
           <h1 className="text-3xl font-bold mb-2 text-emerald-600">Aca-Schedule</h1>
           <p className="text-gray-500">アカペライベントのタイムスケジュール管理</p>
         </div>

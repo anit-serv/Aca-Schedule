@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { Band, TimeRange, EventSettings } from '../types';
+import { Icon } from './Icon';
 
 interface BandAvailabilityModalProps {
   band: Band;
@@ -332,7 +333,7 @@ export const BandAvailabilityModal = ({
                     <span className="text-xs opacity-70">{label}</span>
                     <span>{formattedDate}</span>
                   </div>
-                  {hasSelection && <span className="ml-1">✓</span>}
+                  {hasSelection && <Icon name="check" className="ml-1 text-base align-middle" />}
                 </button>
               );
             })}

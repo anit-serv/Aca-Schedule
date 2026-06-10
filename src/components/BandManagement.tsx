@@ -4,6 +4,7 @@ import { useBandManagement } from '../hooks/useBandManagement';
 import { BandRow } from './BandRow';
 import { BandAvailabilityModal } from './BandAvailabilityModal';
 import { BandImportCSV } from './BandImportCSV';
+import { Icon } from './Icon';
 
 interface BandManagementProps {
   bands: Band[];
@@ -90,9 +91,7 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange, onUndoReco
               className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="CSVインポートの注意点"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Icon name="info" className="text-xl" />
             </button>
             
             {/* ツールチップ */}

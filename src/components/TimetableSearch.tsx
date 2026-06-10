@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Band } from '../types';
+import { Icon } from './Icon';
 
 interface TimetableSearchProps {
   bands: Band[];
@@ -63,9 +64,7 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
         showSuggestions ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-300'
       }`}>
         {/* 検索アイコン */}
-        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+        <Icon name="search" className="text-base text-gray-400 flex-shrink-0" />
         <input
           ref={inputRef}
           type="text"
@@ -84,9 +83,7 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
             onClick={() => onSearchChange('')}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <Icon name="close" className="text-base" />
           </button>
         )}
       </div>

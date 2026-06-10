@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { eventService, bandService, timetableService } from '../services/firestore';
 import { CustomFieldsTable } from '../components/CustomFieldsTable';
 import { TimetableSearch } from '../components/TimetableSearch';
+import { Icon } from '../components/Icon';
 import type { Band, EventSettings, Timetable, DailyTimetable } from '../types';
 
 type LoadingState = 'loading' | 'loaded' | 'not-found' | 'not-public' | 'error';
@@ -169,22 +170,22 @@ export const PublicTimetablePage = () => {
   if (loadingState !== 'loaded' || !eventSettings) {
     const config = {
       'not-found': {
-        icon: '🔍',
+        icon: 'search',
         title: 'ページが見つかりませんでした',
         message: 'このイベントは存在しないか、削除された可能性があります。',
       },
       'not-public': {
-        icon: '🔒',
+        icon: 'lock',
         title: '非公開のイベントです',
         message: 'このイベントは現在共有されていません。イベント管理者にお問い合わせください。',
       },
       error: {
-        icon: '⚠️',
+        icon: 'warning',
         title: '読み込みエラー',
         message: '情報の読み込みに失敗しました。しばらくしてからもう一度お試しください。',
       },
     }[loadingState as 'not-found' | 'not-public' | 'error'] || {
-      icon: '⚠️',
+      icon: 'warning',
       title: 'エラー',
       message: '予期しないエラーが発生しました。',
     };
@@ -193,7 +194,7 @@ export const PublicTimetablePage = () => {
       <div className="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
         <div className="max-w-md w-full mx-auto p-6">
           <div className="text-center">
-            <div className="text-6xl mb-4">{config.icon}</div>
+            <div className="text-6xl mb-4"><Icon name={config.icon} className="text-6xl" /></div>
             <h1 className="text-2xl font-bold mb-2">{config.title}</h1>
             <p className="text-gray-500 mb-6">{config.message}</p>
           </div>

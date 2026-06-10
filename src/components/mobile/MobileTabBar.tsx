@@ -1,3 +1,5 @@
+import { Icon } from '../Icon';
+
 type Mode = 'band-management' | 'timetable-editing';
 
 interface MobileTabBarProps {
@@ -18,9 +20,7 @@ export const MobileTabBar = ({ mode, onModeChange }: MobileTabBarProps) => {
           }`}
         >
           {/* バンドアイコン */}
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={mode === 'band-management' ? 2.5 : 1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
+          <Icon name="group" filled={mode === 'band-management'} className="text-xl" />
           <span className={`text-[10px] font-medium ${
             mode === 'band-management' ? 'text-emerald-600' : 'text-gray-400'
           }`}>
@@ -40,9 +40,7 @@ export const MobileTabBar = ({ mode, onModeChange }: MobileTabBarProps) => {
           }`}
         >
           {/* タイムテーブルアイコン */}
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={mode === 'timetable-editing' ? 2.5 : 1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
+          <Icon name="calendar_view_week" filled={mode === 'timetable-editing'} className="text-xl" />
           <span className={`text-[10px] font-medium ${
             mode === 'timetable-editing' ? 'text-emerald-600' : 'text-gray-400'
           }`}>

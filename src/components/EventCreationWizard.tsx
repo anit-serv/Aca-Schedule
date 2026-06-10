@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { EventSettings } from '../types';
 import { eventService } from '../services/firestore';
 import { useAuth } from '../hooks/useAuth';
+import { Icon } from './Icon';
 
 export const EventCreationWizard = () => {
   const navigate = useNavigate();
@@ -143,7 +144,7 @@ export const EventCreationWizard = () => {
             onClick={() => navigate('/')}
             className="text-gray-500 hover:text-gray-900 transition-colors"
           >
-            ← 戻る
+            <Icon name="arrow_back" className="text-sm align-middle mr-1" />戻る
           </button>
           <h1 className="text-2xl font-bold">新規イベント作成</h1>
         </div>

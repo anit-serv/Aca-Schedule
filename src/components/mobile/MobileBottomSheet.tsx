@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { motion, useMotionValue, useAnimation, type PanInfo } from 'framer-motion';
+import { Icon } from '../Icon';
 
 // ボトムシートの高さ段階
 export type SheetHeight = 'closed' | 'third' | 'half' | 'full';
@@ -157,9 +158,7 @@ export const MobileBottomSheet = ({
                 className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                 title="閉じる"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <Icon name="expand_more" className="text-base" />
               </button>
               {height !== 'full' && (
                 <button
@@ -167,9 +166,7 @@ export const MobileBottomSheet = ({
                   className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                   title="最大化"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                  </svg>
+                  <Icon name="expand_less" className="text-base" />
                 </button>
               )}
             </div>

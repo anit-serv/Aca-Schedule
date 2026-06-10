@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Icon } from '../components/Icon';
 import { BandManagement } from '../components/BandManagement';
 import { TimetableEditing } from '../components/TimetableEditing';
 import { EventSettingsModal } from '../components/EventSettingsModal';
@@ -1606,18 +1607,18 @@ export const EventEditorPage = () => {
   if (error || !eventSettings) {
     const errorConfig = error === 'not-found'
       ? {
-          icon: '🔍',
+          icon: 'search',
           title: 'イベントが見つかりませんでした',
           message: 'このイベントは存在しないか、アクセス権限がありません。',
         }
       : error === 'quota-exceeded'
         ? {
-            icon: '⏳',
+            icon: 'hourglass_empty',
             title: 'アクセスが集中しています',
             message: 'Firestoreの利用上限に達しました。しばらく待ってから再度お試しください。',
           }
         : {
-            icon: '⚠️',
+            icon: 'warning',
             title: '読み込みエラー',
             message: 'イベント情報の読み込みに失敗しました。もう一度お試しください。',
           };
@@ -1626,7 +1627,7 @@ export const EventEditorPage = () => {
       <div className={`bg-gray-50 text-gray-900 flex items-center justify-center ${shouldUseMobileLayout ? 'h-screen px-4' : 'min-h-screen'}`}>
         <div className="max-w-md w-full mx-auto p-6">
           <div className="text-center">
-            <div className="text-6xl mb-4">{errorConfig.icon}</div>
+            <div className="text-6xl mb-4"><Icon name={errorConfig.icon} className="text-6xl" /></div>
             <h1 className="text-2xl font-bold mb-2">{errorConfig.title}</h1>
             <p className="text-gray-500 mb-6">{errorConfig.message}</p>
             <button
@@ -1733,9 +1734,7 @@ export const EventEditorPage = () => {
                   onClick={() => setShowSharePanel(false)}
                   className="p-1 rounded-full hover:bg-gray-100 text-gray-400"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <Icon name="close" className="text-xl" />
                 </button>
               </div>
               <div className="px-4 pb-6 space-y-4">
@@ -1790,7 +1789,7 @@ export const EventEditorPage = () => {
                         }}
                         className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 text-white"
                       >
-                        {shareUrlCopied ? '✓ コピー済' : 'コピー'}
+                        {shareUrlCopied ? <><Icon name="check" className="text-sm align-middle mr-0.5" />コピー済</> : 'コピー'}
                       </button>
                     </div>
                   </div>
@@ -1805,9 +1804,7 @@ export const EventEditorPage = () => {
                     <span className="text-sm text-gray-700">
                       共同編集者 ({(eventSettings.collaboratorEmails?.length ?? 0) + (eventSettings.pendingCollaboratorEmails?.length ?? 0)}人)
                     </span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <Icon name="chevron_right" className="text-base text-gray-400" />
                   </button>
                 )}
               </div>
@@ -1837,7 +1834,7 @@ export const EventEditorPage = () => {
                       }}
                       className="w-full text-left px-5 py-3 text-sm text-gray-700 active:bg-gray-50"
                     >
-                      📥 本番タイムテーブルをCSV出力
+                      <Icon name="download" className="text-base align-middle mr-1" />本番タイムテーブルをCSV出力
                     </button>
                     {eventSettings?.rehearsalType !== 'none' && (
                       <button
@@ -1851,7 +1848,7 @@ export const EventEditorPage = () => {
                         }}
                         className="w-full text-left px-5 py-3 text-sm text-gray-700 active:bg-gray-50"
                       >
-                        📥 リハーサルタイムテーブルをCSV出力
+                        <Icon name="download" className="text-base align-middle mr-1" />リハーサルタイムテーブルをCSV出力
                       </button>
                     )}
                     <div className="border-t border-gray-100 mx-4" />
@@ -1864,7 +1861,7 @@ export const EventEditorPage = () => {
                   }}
                   className="w-full text-left px-5 py-3 text-sm text-gray-700 active:bg-gray-50"
                 >
-                  ⚙️ イベント設定
+                  <Icon name="settings" className="text-base align-middle mr-1" />イベント設定
                 </button>
                 <button
                   onClick={() => {
@@ -1874,7 +1871,7 @@ export const EventEditorPage = () => {
                   disabled={isDeleting}
                   className="w-full text-left px-5 py-3 text-sm text-red-600 active:bg-gray-50 disabled:opacity-50"
                 >
-                  🗑️ {isDeleting ? '削除中...' : 'イベントを削除'}
+                  <Icon name="delete" className="text-base align-middle mr-1" />{isDeleting ? '削除中...' : 'イベントを削除'}
                 </button>
               </div>
             </div>
@@ -1900,9 +1897,7 @@ export const EventEditorPage = () => {
                   onClick={() => setShowCollaboratorDetail(false)}
                   className="p-1 rounded-full hover:bg-gray-100 text-gray-400"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <Icon name="close" className="text-xl" />
                 </button>
               </div>
               {/* 共同編集者一覧 */}
@@ -1936,14 +1931,12 @@ export const EventEditorPage = () => {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-bold text-gray-900">📩 オーナー権限の移譲リクエスト</h3>
+                <h3 className="text-base font-bold text-gray-900"><Icon name="mail" className="text-base align-middle mr-1" />オーナー権限の移譲リクエスト</h3>
                 <button
                   onClick={() => setShowOwnerTransferNotification(false)}
                   className="p-1 rounded-full hover:bg-gray-100 text-gray-400"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <Icon name="close" className="text-xl" />
                 </button>
               </div>
               <p className="text-sm text-gray-600 mb-4">
@@ -2008,7 +2001,7 @@ export const EventEditorPage = () => {
               className="text-gray-400 hover:text-gray-700 transition-colors text-sm"
               title="マイイベントに戻る"
             >
-              ← 戻る
+              <Icon name="arrow_back" className="text-sm align-middle mr-1" />戻る
             </button>
             <div>
               <h1 className="text-xl font-bold text-gray-900">{eventSettings.name}</h1>
@@ -2058,9 +2051,7 @@ export const EventEditorPage = () => {
                 }`}
                 title="共有設定"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
+                <Icon name="share" className="text-xl" />
               </button>
               
               {/* 共有パネル */}
@@ -2103,7 +2094,7 @@ export const EventEditorPage = () => {
                   {eventSettings.isPublic && (
                     <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-3">
                       <p className="text-xs text-amber-700">
-                        ⚠️ バンド名を含むタイムテーブル情報が公開されます
+                        <Icon name="warning" className="text-sm align-middle mr-1" />バンド名を含むタイムテーブル情報が公開されます
                       </p>
                     </div>
                   )}
@@ -2128,7 +2119,7 @@ export const EventEditorPage = () => {
                           }}
                           className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors whitespace-nowrap"
                         >
-                          {shareUrlCopied ? '✓ コピー済' : 'コピー'}
+                          {shareUrlCopied ? <><Icon name="check" className="text-sm align-middle mr-0.5" />コピー済</> : 'コピー'}
                         </button>
                       </div>
                     </div>
@@ -2218,9 +2209,7 @@ export const EventEditorPage = () => {
                         onClick={() => { setShowSharePanel(false); setShowCollaboratorDetail(true); }}
                         className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 transition-colors"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-                        </svg>
+                        <Icon name="group" className="text-sm" />
                         <span className="underline">
                           {((eventSettings.collaboratorEmails?.length ?? 0) + (eventSettings.pendingCollaboratorEmails?.length ?? 0)) > 0
                             ? `${(eventSettings.collaboratorEmails?.length ?? 0) + (eventSettings.pendingCollaboratorEmails?.length ?? 0)}人の共同編集者を管理`
@@ -2268,7 +2257,7 @@ export const EventEditorPage = () => {
                               }}
                               className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors whitespace-nowrap"
                             >
-                              {shareUrlCopied ? '✓ コピー済' : 'コピー'}
+                              {shareUrlCopied ? <><Icon name="check" className="text-sm align-middle mr-0.5" />コピー済</> : 'コピー'}
                             </button>
                           </div>
                         </div>
@@ -2332,9 +2321,7 @@ export const EventEditorPage = () => {
                         onClick={() => setShowCollaboratorDetail(false)}
                         className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                       >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <Icon name="close" className="text-xl" />
                       </button>
                     </div>
 
@@ -2344,7 +2331,7 @@ export const EventEditorPage = () => {
                       && eventSettings.pendingOwnerEmail.toLowerCase() === currentUser.email.toLowerCase()
                       && eventSettings.ownerId !== currentUser.uid && (
                       <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-3 mb-4">
-                        <p className="text-sm font-bold text-blue-800 mb-2">📩 オーナー権限の移譲リクエスト</p>
+                        <p className="text-sm font-bold text-blue-800 mb-2"><Icon name="mail" className="text-base align-middle mr-1" />オーナー権限の移譲リクエスト</p>
                         <p className="text-xs text-blue-700 mb-3">このイベントのオーナー権限があなたに移譲されようとしています。</p>
                         <div className="flex gap-2">
                           <button
@@ -2427,9 +2414,7 @@ export const EventEditorPage = () => {
                                   disabled={isCollaboratorProcessing}
                                   title="削除"
                                 >
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
+                                  <Icon name="close" className="text-base" />
                                 </button>
                               )}
                             </div>
@@ -2478,9 +2463,7 @@ export const EventEditorPage = () => {
                                   disabled={isCollaboratorProcessing}
                                   title="招待取り消し"
                                 >
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
+                                  <Icon name="close" className="text-base" />
                                 </button>
                               )}
                             </div>
@@ -2579,10 +2562,7 @@ export const EventEditorPage = () => {
                 className="p-2 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors duration-200"
                 title="設定"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                <Icon name="settings" className="text-xl" />
               </button>
               
               {/* ドロップダウンメニュー */}
@@ -2602,7 +2582,7 @@ export const EventEditorPage = () => {
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
                       >
-                        📥 本番タイムテーブルをCSV出力
+                        <Icon name="download" className="text-base align-middle mr-1" />本番タイムテーブルをCSV出力
                       </button>
                       {eventSettings?.rehearsalType !== 'none' && (
                         <button
@@ -2616,7 +2596,7 @@ export const EventEditorPage = () => {
                           }}
                           className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
                         >
-                          📥 リハーサルタイムテーブルをCSV出力
+                          <Icon name="download" className="text-base align-middle mr-1" />リハーサルタイムテーブルをCSV出力
                         </button>
                       )}
                       <div className="border-t border-gray-100" />
@@ -2692,15 +2672,13 @@ export const EventEditorPage = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">📩 オーナー権限の移譲リクエスト</h3>
+              <h3 className="text-base font-bold text-gray-900"><Icon name="mail" className="text-base align-middle mr-1" />オーナー権限の移譲リクエスト</h3>
               <button
                 onClick={() => setShowOwnerTransferNotification(false)}
                 className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                 title="後で対応する"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <Icon name="close" className="text-xl" />
               </button>
             </div>
             <p className="text-sm text-gray-600 mb-4">

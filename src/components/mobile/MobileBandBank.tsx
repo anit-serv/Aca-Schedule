@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useState, useRef } from 'react';
 import { useDraggable } from '@dnd-kit/core';
+import { Icon } from '../Icon';
 import type { Band, Timetable, CustomEvent } from '../../types';
 
 // タッチ開始後180msで touchAction を 'none' に切り替えるフック。
@@ -103,9 +104,7 @@ const DraggableBandItem = ({
         <span className="text-[10px] text-emerald-100 font-medium flex-shrink-0">選択中</span>
       ) : (
         <div className="flex items-center gap-1 flex-shrink-0">
-          <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
+          <Icon name="drag_indicator" className="text-base text-gray-300" />
         </div>
       )}
     </button>
@@ -156,7 +155,7 @@ const DraggableCustomEventItem = ({
         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
           isSelected ? 'bg-white text-purple-600' : 'bg-purple-500 text-white'
         }`}>
-          ★
+          <Icon name="star" filled className="text-sm" />
         </div>
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-medium truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>{customEvent.name}</p>
@@ -167,18 +166,14 @@ const DraggableCustomEventItem = ({
         {isSelected ? (
           <span className="text-[10px] text-purple-100 font-medium flex-shrink-0">選択中</span>
         ) : (
-          <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
+          <Icon name="drag_indicator" className="text-base text-gray-300 flex-shrink-0" />
         )}
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); onDelete(customEvent.id); }}
         className="p-1.5 text-gray-300 active:text-red-500 rounded flex-shrink-0"
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
+        <Icon name="close" className="text-base" />
       </button>
     </div>
   );
@@ -296,9 +291,7 @@ export const MobileBandBank = ({
       {placedCount > 0 && (
         <details className="group">
           <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 transition-colors list-none flex items-center gap-1">
-            <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <Icon name="chevron_right" className="text-sm transition-transform group-open:rotate-90" />
             配置済みバンド ({placedCount})
           </summary>
           <div className="mt-2 space-y-1">

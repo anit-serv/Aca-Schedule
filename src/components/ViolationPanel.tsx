@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ConstraintViolation } from '../types';
+import { Icon } from './Icon';
 
 interface ViolationPanelProps {
   violations: ConstraintViolation[];
@@ -57,9 +58,9 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
 
   // 重大度ごとの色・記号
   const severityConfig = {
-    high: { icon: '🚫', bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-600', hoverBg: 'hover:bg-rose-200' },
-    medium: { icon: '⚠️', bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-600', hoverBg: 'hover:bg-amber-200' },
-    low: { icon: 'ℹ️', bg: 'bg-sky-100', border: 'border-sky-300', text: 'text-sky-600', hoverBg: 'hover:bg-sky-200' },
+    high: { icon: 'block', bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-600', hoverBg: 'hover:bg-rose-200' },
+    medium: { icon: 'warning', bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-600', hoverBg: 'hover:bg-amber-200' },
+    low: { icon: 'info', bg: 'bg-sky-100', border: 'border-sky-300', text: 'text-sky-600', hoverBg: 'hover:bg-sky-200' },
   };
 
   const buttonConfig = overallSeverity ? severityConfig[overallSeverity] : severityConfig.medium;
@@ -105,7 +106,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
           className={`w-full flex items-center justify-between px-3 py-2 rounded-lg ${config.bg} ${config.border} border ${config.hoverBg} transition-colors`}
         >
           <div className="flex items-center gap-2">
-            <span>{config.icon}</span>
+            <Icon name={config.icon} className={`text-base ${config.text}`} />
             <span className={`font-bold ${config.text}`}>{title}</span>
             <span className="text-xs text-gray-500">
               ({sectionViolations.length}件)
@@ -113,15 +114,15 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
           </div>
           <div className="flex items-center gap-2">
             <div className="flex gap-1 text-[10px]">
-              {highCount > 0 && <span className="text-rose-600">🚫{highCount}</span>}
-              {mediumCount > 0 && <span className="text-amber-600">⚠️{mediumCount}</span>}
-              {lowCount > 0 && <span className="text-sky-600">ℹ️{lowCount}</span>}
+              {highCount > 0 && <span className="text-rose-600 flex items-center gap-0.5"><Icon name="block" className="text-xs" />{highCount}</span>}
+              {mediumCount > 0 && <span className="text-amber-600 flex items-center gap-0.5"><Icon name="warning" className="text-xs" />{mediumCount}</span>}
+              {lowCount > 0 && <span className="text-sky-600 flex items-center gap-0.5"><Icon name="info" className="text-xs" />{lowCount}</span>}
             </div>
             <motion.span
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
-              className="text-sm"
-            >▼</motion.span>
+              className="text-sm flex"
+            ><Icon name="expand_more" className="text-sm" /></motion.span>
           </div>
         </button>
         <AnimatePresence initial={false}>
@@ -139,7 +140,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
                   return (
                     <div
                       key={idx}
-                      className={`text-xs px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                      className={`text-xs px-2 py-1.5 rounded cursor-pointer transition-colors flex items-start gap-0.5 ${
                         v.severity === 'high' ? 'bg-rose-50 hover:bg-rose-100 text-rose-700' :
                         v.severity === 'medium' ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' :
                         'bg-sky-50 hover:bg-sky-100 text-sky-700'
@@ -147,7 +148,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
                       onClick={() => onViolationClick?.(v)}
                       title="クリックして該当箇所へ移動"
                     >
-                      {itemConfig.icon} {v.message}
+                      <Icon name={itemConfig.icon} className="text-sm flex-shrink-0" />{v.message}
                     </div>
                   );
                 })}
@@ -173,7 +174,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
         }}
       >
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 whitespace-nowrap text-gray-900">
-          <span>{buttonConfig.icon}</span>
+          <Icon name={buttonConfig.icon} className={`text-xl ${buttonConfig.text}`} />
           制約違反 ({uniqueCount}件)
         </h3>
         <div>
@@ -194,7 +195,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
         title={isOpen ? '制約違反を閉じる' : '制約違反を表示'}
       >
         <div className="px-1.5 py-2 flex flex-col items-center gap-1">
-          <span className="text-base">{buttonConfig.icon}</span>
+          <Icon name={buttonConfig.icon} className={`text-base ${buttonConfig.text}`} />
           <span className={`text-[10px] font-bold ${buttonConfig.text}`}>{uniqueCount}</span>
         </div>
       </button>

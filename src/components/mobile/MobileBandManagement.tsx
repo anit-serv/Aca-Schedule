@@ -4,6 +4,7 @@ import Papa from 'papaparse';
 import type { Band, EventSettings } from '../../types';
 import { useBandManagement } from '../../hooks/useBandManagement';
 import { BandAvailabilityModal } from '../BandAvailabilityModal';
+import { Icon } from '../Icon';
 import { bandService } from '../../services/firestore';
 import { generateUUID } from '../../utils/generateUUID';
 
@@ -194,9 +195,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
             }`}
           >
             <span className="flex items-center gap-1">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
+              <Icon name="upload_file" className="text-base" />
               インポート
             </span>
           </button>
@@ -242,9 +241,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
                       : 'bg-emerald-500 text-white active:bg-emerald-600'
                   }`}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                  <Icon name="description" className="text-base" />
                   {isImporting ? 'インポート中...' : 'CSVファイルを選択'}
                 </label>
                 <input
@@ -261,9 +258,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
                   disabled={isImporting}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 active:bg-gray-100 disabled:opacity-50"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
+                  <Icon name="download" className="text-base" />
                   テンプレート
                 </button>
               </div>
@@ -292,7 +287,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
           </div>
         ) : bands.length === 0 ? (
           <div className="text-center py-12">
-            <div className="text-4xl mb-3">🎸</div>
+            <div className="text-4xl mb-3"><Icon name="group" className="text-4xl" /></div>
             <p className="text-gray-400 text-sm">バンドが登録されていません</p>
             <p className="text-gray-400 text-xs mt-1">「+ 追加」から登録してください</p>
           </div>
@@ -403,7 +398,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
                           className="w-8 h-8 rounded-md bg-gray-100 text-gray-600 flex items-center justify-center text-lg"
                           disabled={(band.performanceCount || 1) <= 1}
                         >
-                          −
+                          <Icon name="remove" className="text-base align-middle" />
                         </button>
                         <span className="text-sm font-medium w-8 text-center">{band.performanceCount || 1}</span>
                         <button
@@ -486,9 +481,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
                           ) : (
                             <span className="text-xs">未設定</span>
                           )}
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
+                          <Icon name="chevron_right" className="text-base" />
                         </div>
                       </button>
                     </div>
@@ -504,9 +497,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
                         }}
                         className="flex items-center gap-1 px-3 py-1.5 text-red-500 hover:bg-red-50 rounded text-xs transition-colors"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                        <Icon name="delete" className="text-sm" />
                         削除
                       </button>
                     </div>

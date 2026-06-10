@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Band, TimetableEntry, ConstraintViolation } from '../types';
+import { Icon } from './Icon';
 
 interface SortableTimetableRowProps {
   id: string;
@@ -131,11 +132,11 @@ export const SortableTimetableRow = ({
     
     switch (highestSeverityViolation.severity) {
       case 'high':
-        return { bgColor: 'bg-rose-100/80', icon: '🚫', iconColor: 'text-rose-500' };
+        return { bgColor: 'bg-rose-100/80', icon: 'block', iconColor: 'text-rose-500' };
       case 'medium':
-        return { bgColor: 'bg-amber-100/80', icon: '⚠️', iconColor: 'text-amber-500' };
+        return { bgColor: 'bg-amber-100/80', icon: 'warning', iconColor: 'text-amber-500' };
       case 'low':
-        return { bgColor: 'bg-sky-100/80', icon: 'ℹ️', iconColor: 'text-sky-500' };
+        return { bgColor: 'bg-sky-100/80', icon: 'info', iconColor: 'text-sky-500' };
       default:
         return { bgColor: '', icon: '', iconColor: '' };
     }
@@ -182,7 +183,7 @@ export const SortableTimetableRow = ({
               ? `転換時間: ${entry.transitionTime}分` 
               : '転換時間を設定'}
           >
-            {entry.transitionTime && entry.transitionTime > 0 ? '🔧' : '⚙️'}
+            <Icon name={entry.transitionTime && entry.transitionTime > 0 ? 'build' : 'settings'} className="text-sm align-middle" />
           </button>
           <span>{entry.startTime || '-'}</span>
         </div>
@@ -196,7 +197,7 @@ export const SortableTimetableRow = ({
             {...attributes}
             className="cursor-grab active:cursor-grabbing text-emerald-400 hover:text-emerald-600"
           >
-            ⋮⋮
+            <Icon name="drag_indicator" className="text-base align-middle" />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
@@ -226,8 +227,8 @@ export const SortableTimetableRow = ({
                   className="group relative"
                   onMouseEnter={handleMouseEnter}
                 >
-                  <span className={`text-lg ${violationStyle.iconColor}`}>
-                    {violationStyle.icon}
+                  <span className={violationStyle.iconColor}>
+                    <Icon name={violationStyle.icon} className="text-lg align-middle" />
                   </span>
                   {/* ツールチップ（fixedポジショニングでスクロールコンテナの外に表示） */}
                   <div 
