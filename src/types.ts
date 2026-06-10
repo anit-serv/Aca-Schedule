@@ -216,7 +216,9 @@ export interface UndoRecord {
   invalidated: boolean;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
-  isConflicted: () => boolean;
+  // direction: 'undo' なら現在の状態が「適用後(after)」と一致するか、
+  // 'redo' なら現在の状態が「適用前(before)」と一致するかを確認する
+  isConflicted: (direction: 'undo' | 'redo') => boolean;
 }
 
 export interface SkippedOpInfo {

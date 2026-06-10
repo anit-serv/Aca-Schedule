@@ -10,6 +10,8 @@ export const useUndoRedo = () => {
   const undoStackRef = useRef<UndoRecord[]>([]);
   const redoStackRef = useRef<UndoRecord[]>([]);
   const isUndoingRef = useRef(false);
+  // undo/redoの連打による多重実行（並行書き込み・誤った競合判定）を防ぐ
+  const isProcessingRef = useRef(false);
 
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -49,74 +51,93 @@ export const useUndoRedo = () => {
 
   const undo = useCallback(async () => {
     if (!undoStackRef.current.length) return;
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
 
-    const skipped: SkippedOpInfo[] = [];
+    try {
+      const skipped: SkippedOpInfo[] = [];
 
-    while (undoStackRef.current.length) {
-      const op = undoStackRef.current[0];
-      undoStackRef.current = undoStackRef.current.slice(1);
+      while (undoStackRef.current.length) {
+        const op = undoStackRef.current[0];
+        undoStackRef.current = undoStackRef.current.slice(1);
 
-      if (op.invalidated) {
-        skipped.push({ opType: op.opType as OperationType, reason: 'cascade' });
-        continue;
+        if (op.invalidated) {
+          skipped.push({ opType: op.opType as OperationType, reason: 'cascade' });
+          continue;
+        }
+
+        if (op.isConflicted('undo')) {
+          cascadeInvalidate(op.targetId);
+          skipped.push({ opType: op.opType as OperationType, reason: 'external' });
+          updateCanState();
+          continue;
+        }
+
+        isUndoingRef.current = true;
+        try {
+          await op.undo();
+          redoStackRef.current = [op, ...redoStackRef.current];
+        } finally {
+          isUndoingRef.current = false;
+        }
+
+        break;
       }
 
-      if (op.isConflicted()) {
-        cascadeInvalidate(op.targetId);
-        skipped.push({ opType: op.opType as OperationType, reason: 'external' });
-        updateCanState();
-        continue;
+      if (skipped.length > 0) {
+        setSkippedOps(skipped);
       }
 
-      isUndoingRef.current = true;
-      try {
-        await op.undo();
-        redoStackRef.current = [op, ...redoStackRef.current];
-      } finally {
-        isUndoingRef.current = false;
-      }
-
-      break;
+      updateCanState();
+    } finally {
+      isProcessingRef.current = false;
     }
-
-    if (skipped.length > 0) {
-      setSkippedOps(skipped);
-    }
-
-    updateCanState();
   }, [cascadeInvalidate, updateCanState]);
 
   const redo = useCallback(async () => {
     if (!redoStackRef.current.length) return;
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
 
-    const skipped: SkippedOpInfo[] = [];
+    try {
+      const skipped: SkippedOpInfo[] = [];
 
-    while (redoStackRef.current.length) {
-      const op = redoStackRef.current[0];
-      redoStackRef.current = redoStackRef.current.slice(1);
+      while (redoStackRef.current.length) {
+        const op = redoStackRef.current[0];
+        redoStackRef.current = redoStackRef.current.slice(1);
 
-      if (op.invalidated) {
-        skipped.push({ opType: op.opType as OperationType, reason: 'cascade' });
-        continue;
+        if (op.invalidated) {
+          skipped.push({ opType: op.opType as OperationType, reason: 'cascade' });
+          continue;
+        }
+
+        if (op.isConflicted('redo')) {
+          cascadeInvalidate(op.targetId);
+          skipped.push({ opType: op.opType as OperationType, reason: 'external' });
+          updateCanState();
+          continue;
+        }
+
+        isUndoingRef.current = true;
+        try {
+          await op.redo();
+          undoStackRef.current = [op, ...undoStackRef.current];
+        } finally {
+          isUndoingRef.current = false;
+        }
+
+        break;
       }
 
-      isUndoingRef.current = true;
-      try {
-        await op.redo();
-        undoStackRef.current = [op, ...undoStackRef.current];
-      } finally {
-        isUndoingRef.current = false;
+      if (skipped.length > 0) {
+        setSkippedOps(skipped);
       }
 
-      break;
+      updateCanState();
+    } finally {
+      isProcessingRef.current = false;
     }
-
-    if (skipped.length > 0) {
-      setSkippedOps(skipped);
-    }
-
-    updateCanState();
-  }, [updateCanState]);
+  }, [cascadeInvalidate, updateCanState]);
 
   const clearSkipped = useCallback(() => {
     setSkippedOps([]);

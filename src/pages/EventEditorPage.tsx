@@ -62,6 +62,9 @@ export const EventEditorPage = () => {
   // ハンドラーのstale closure回避用ref
   const performanceTimetableChangeRef = useRef<((dt: DailyTimetable) => Promise<void>) | null>(null);
   const rehearsalTimetableChangeRef = useRef<((dt: DailyTimetable) => Promise<void>) | null>(null);
+  // WithUndoラッパー（useCallbackで初回クロージャに固定）から常に最新の素のハンドラーを呼ぶためのref
+  const rawPerformanceTimetableChangeRef = useRef<((dt: DailyTimetable) => Promise<void>) | null>(null);
+  const rawRehearsalTimetableChangeRef = useRef<((dt: DailyTimetable) => Promise<void>) | null>(null);
   const performanceTimetableRef = useRef<Timetable | null>(null);
   const rehearsalTimetableRef = useRef<Timetable | null>(null);
   const eventSettingsRef = useRef<EventSettings | null>(null);
@@ -1063,12 +1066,13 @@ export const EventEditorPage = () => {
           : rehearsalTimetableChangeRef.current;
         if (handler) await handler(afterDt);
       },
-      isConflicted: () => {
+      isConflicted: (direction) => {
         const timetable = timetableType === 'performance'
           ? performanceTimetableRef.current
           : rehearsalTimetableRef.current;
         const currentDt = timetable?.dailyTimetables.find(dt => dt.date === date);
-        return isTimetableConflicted(currentDt, opMeta.targetId, opMeta.opType, afterDt);
+        const expectedDt = direction === 'undo' ? afterDt : beforeDt;
+        return isTimetableConflicted(currentDt, opMeta.targetId, opMeta.opType, expectedDt);
       },
     };
     pushOperation(record);
@@ -1107,15 +1111,23 @@ export const EventEditorPage = () => {
           setBands(prev => prev.map(b => b.id === targetId ? after : b));
         }
       },
-      isConflicted: () => {
+      isConflicted: (direction) => {
         const current = bandsRef.current.find(b => b.id === targetId);
-        if (!after) {
+        const expected = direction === 'undo' ? after : before;
+        if (!expected) {
           return !!current;
         }
         if (!current) {
           return true;
         }
-        return !deepEqual(current, after);
+        // updatedAt は updateBand 実行のたびに再設定されるため比較対象から除外
+        // （含めると常に不一致となり、外部変更がなくても競合扱いになってしまう）
+        const omitUpdatedAt = (band: Band): Omit<Band, 'updatedAt'> => {
+          const rest = { ...band };
+          delete (rest as Partial<Band>).updatedAt;
+          return rest;
+        };
+        return !deepEqual(omitUpdatedAt(current), omitUpdatedAt(expected));
       },
     };
     pushOperation(record);
@@ -1138,11 +1150,12 @@ export const EventEditorPage = () => {
         await eventService.updateEvent(id, { customFields: after });
         setEventSettings(prev => prev ? { ...prev, customFields: after } : null);
       },
-      isConflicted: () => {
-        // 現在の customFields が「適用後(after)」の状態と一致しなければ、
+      isConflicted: (direction) => {
+        // 現在の customFields が「適用後(after)」または「適用前(before)」の状態と一致しなければ、
         // 別デバイス/ユーザーによる外部変更があったとみなしてスキップ
         const current = eventSettingsRef.current?.customFields;
-        return !deepEqual(current, after);
+        const expected = direction === 'undo' ? after : before;
+        return !deepEqual(current, expected);
       },
     };
     pushOperation(record);
@@ -1427,6 +1440,10 @@ export const EventEditorPage = () => {
     }
   };
 
+  // 常に最新の素のハンドラーをrefに同期（WithUndoラッパーのstale closure対策）
+  rawPerformanceTimetableChangeRef.current = handlePerformanceTimetableChange;
+  rawRehearsalTimetableChangeRef.current = handleRehearsalTimetableChange;
+
   // undo記録付きラッパー（本番タイムテーブル）
   const handlePerformanceTimetableChangeWithUndo = useCallback(async (updatedDailyTimetable: DailyTimetable) => {
     if (!isUndoingRef.current && performanceTimetableRef.current) {
@@ -1445,7 +1462,7 @@ export const EventEditorPage = () => {
         );
       }
     }
-    await handlePerformanceTimetableChange(updatedDailyTimetable);
+    await rawPerformanceTimetableChangeRef.current?.(updatedDailyTimetable);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUndoingRef, pushTimetableUndoOp]);
 
@@ -1467,7 +1484,7 @@ export const EventEditorPage = () => {
         );
       }
     }
-    await handleRehearsalTimetableChange(updatedDailyTimetable);
+    await rawRehearsalTimetableChangeRef.current?.(updatedDailyTimetable);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUndoingRef, pushTimetableUndoOp]);
 
