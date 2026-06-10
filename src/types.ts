@@ -221,7 +221,7 @@ export interface UndoRecord {
 
 export interface SkippedOpInfo {
   opType: OperationType;
-  reason: 'external' | 'cascade' | 'hasData';
+  reason: 'external' | 'cascade';
 }
 
 export interface BandUndoMeta {

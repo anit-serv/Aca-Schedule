@@ -1090,8 +1090,8 @@ export const EventEditorPage = () => {
           await bandService.addBand(before, eventSettingsRef.current!.id);
           setBands(prev => [...prev, before]);
         } else if (opType === 'band:update' && before) {
-          const { id, createdAt, updatedAt, ...updates } = before;
-          await bandService.updateBand(targetId, updates);
+          // updateBand 内部で id/createdAt/updatedAt は除外・再設定されるため、そのまま渡す
+          await bandService.updateBand(targetId, before);
           setBands(prev => prev.map(b => b.id === targetId ? before : b));
         }
       },
@@ -1102,8 +1102,8 @@ export const EventEditorPage = () => {
         } else if (opType === 'band:delete') {
           await bandService.deleteBand(targetId);
         } else if (opType === 'band:update' && after) {
-          const { id, createdAt, updatedAt, ...updates } = after;
-          await bandService.updateBand(targetId, updates);
+          // updateBand 内部で id/createdAt/updatedAt は除外・再設定されるため、そのまま渡す
+          await bandService.updateBand(targetId, after);
           setBands(prev => prev.map(b => b.id === targetId ? after : b));
         }
       },
@@ -1139,16 +1139,8 @@ export const EventEditorPage = () => {
         setEventSettings(prev => prev ? { ...prev, customFields: after } : null);
       },
       isConflicted: () => {
-        // customColumn:delete undo は列にデータがある場合スキップ
-        if (opType === 'customColumn:delete') {
-          const currentCustomFields = eventSettingsRef.current?.customFields;
-          if (!currentCustomFields) return true;
-          const columnId = targetId.replace('column:', '');
-          const [, timetableType] = columnId ? ['', 'performance'] : ['', 'performance'];
-          // after の状態（列削除後）と現在の状態を比較
-          return JSON.stringify(currentCustomFields) !== JSON.stringify(after);
-        }
-        // その他: after と現在のcustomFieldsを比較
+        // 現在の customFields が「適用後(after)」の状態と一致しなければ、
+        // 別デバイス/ユーザーによる外部変更があったとみなしてスキップ
         const current = eventSettingsRef.current?.customFields;
         return JSON.stringify(current) !== JSON.stringify(after);
       },
@@ -1685,6 +1677,10 @@ export const EventEditorPage = () => {
           onShareToggle={() => setShowSharePanel(!showSharePanel)}
           onSettingsToggle={() => setShowMobileSettings(true)}
           isPublic={eventSettings.isPublic}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={() => void undo()}
+          onRedo={() => void redo()}
         />
 
         {/* メインコンテンツ */}
@@ -1694,6 +1690,7 @@ export const EventEditorPage = () => {
               bands={bands}
               eventSettings={eventSettings}
               onBandsChange={handleBandsChange}
+              onUndoRecord={handleBandUndoRecord}
               isLoading={isEditorLoading}
             />
           ) : (
@@ -1702,8 +1699,9 @@ export const EventEditorPage = () => {
               eventSettings={eventSettings}
               performanceTimetable={performanceTimetable}
               rehearsalTimetable={rehearsalTimetable}
-              onPerformanceTimetableChange={handlePerformanceTimetableChange}
-              onRehearsalTimetableChange={handleRehearsalTimetableChange}
+              onPerformanceTimetableChange={handlePerformanceTimetableChangeWithUndo}
+              onRehearsalTimetableChange={handleRehearsalTimetableChangeWithUndo}
+              onCustomFieldsUndoRecord={handleCustomFieldsUndoRecord}
               selectedBandId={selectedBandId}
               onBandPlaced={() => setSelectedBandId(null)}
               onOpenBandBank={() => setBottomSheetHeight(bottomSheetHeight === 'closed' ? 'half' : 'closed')}

@@ -1,4 +1,5 @@
 import { Icon } from '../Icon';
+import { UndoRedoButtons } from '../UndoRedoButtons';
 import type { EventSettings } from '../../types';
 
 type Mode = 'band-management' | 'timetable-editing';
@@ -10,6 +11,10 @@ interface MobileHeaderProps {
   onShareToggle: () => void;
   onSettingsToggle: () => void;
   isPublic?: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export const MobileHeader = ({
@@ -18,6 +23,10 @@ export const MobileHeader = ({
   onShareToggle,
   onSettingsToggle,
   isPublic,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: MobileHeaderProps) => {
   return (
     <header className="bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm border-b border-gray-200 flex-shrink-0">
@@ -37,8 +46,14 @@ export const MobileHeader = ({
           </div>
         </div>
 
-        {/* 右側: 共有 + 設定ボタン */}
+        {/* 右側: Undo/Redo + 共有 + 設定ボタン */}
         <div className="flex items-center gap-1 flex-shrink-0">
+          <UndoRedoButtons
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onUndo={onUndo}
+            onRedo={onRedo}
+          />
           <button
             onClick={onShareToggle}
             className={`p-2.5 rounded-lg transition-colors duration-200 ${

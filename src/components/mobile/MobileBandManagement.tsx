@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Papa from 'papaparse';
-import type { Band, EventSettings } from '../../types';
+import type { Band, EventSettings, BandUndoMeta } from '../../types';
 import { useBandManagement } from '../../hooks/useBandManagement';
 import { BandAvailabilityModal } from '../BandAvailabilityModal';
 import { Icon } from '../Icon';
@@ -12,10 +12,11 @@ interface MobileBandManagementProps {
   bands: Band[];
   eventSettings: EventSettings;
   onBandsChange: (bands: Band[]) => void;
+  onUndoRecord?: (meta: BandUndoMeta) => void;
   isLoading?: boolean;
 }
 
-export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLoading = false }: MobileBandManagementProps) => {
+export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUndoRecord, isLoading = false }: MobileBandManagementProps) => {
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [expandedBandId, setExpandedBandId] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, isLo
     handleDeleteBand,
     handleUpdateBand,
     allMembers,
-  } = useBandManagement(bands, eventSettings, onBandsChange);
+  } = useBandManagement(bands, eventSettings, onBandsChange, onUndoRecord);
 
   const toggleExpand = (bandId: string) => {
     setExpandedBandId(expandedBandId === bandId ? null : bandId);

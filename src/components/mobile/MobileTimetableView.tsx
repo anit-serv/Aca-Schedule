@@ -9,7 +9,7 @@ import {
 } from '@dnd-kit/core';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, CustomEvent, ConstraintViolation, CustomFieldsSettings } from '../../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, CustomEvent, ConstraintViolation, CustomFieldsSettings, CustomFieldsUndoMeta } from '../../types';
 import { calculateBandNumbers } from '../../utils/calculateBandNumbers';
 import { generateUUID } from '../../utils/generateUUID';
 import { useTimetableHelpers } from '../../hooks/useTimetableHelpers';
@@ -37,6 +37,7 @@ interface MobileTimetableViewProps {
   onOpenBandBank: () => void;
   onTimetableTypeChange?: (type: 'performance' | 'rehearsal') => void;
   onEventSettingsChange?: (updates: Partial<EventSettings>) => void;
+  onCustomFieldsUndoRecord?: (meta: CustomFieldsUndoMeta) => void;
   // D&D用props
   bottomSheetHeight: SheetHeight;
   onBottomSheetHeightChange: (height: SheetHeight) => void;
@@ -158,6 +159,7 @@ export const MobileTimetableView = ({
   onOpenBandBank,
   onTimetableTypeChange,
   onEventSettingsChange,
+  onCustomFieldsUndoRecord,
   bottomSheetHeight,
   onBottomSheetHeightChange,
   onSelectBand,
@@ -1024,6 +1026,7 @@ export const MobileTimetableView = ({
               timetableType={timetableType}
               selectedDate={selectedDate}
               onCustomFieldsChange={handleCustomFieldsChange}
+              onUndoRecord={onCustomFieldsUndoRecord}
               readOnly={false}
             />
           </div>
@@ -1375,6 +1378,7 @@ export const MobileTimetableView = ({
             customFields={eventSettings.customFields}
             timetableType={timetableType}
             onCustomFieldsChange={handleCustomFieldsChange}
+            onUndoRecord={onCustomFieldsUndoRecord}
             applyToBoth={eventSettings.rehearsalType === 'cool-pre-rehearsal' || eventSettings.rehearsalType === 'day-start-rehearsal'}
             mobile
           />

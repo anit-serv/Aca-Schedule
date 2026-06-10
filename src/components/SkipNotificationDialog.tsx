@@ -20,7 +20,6 @@ const OP_LABELS: Record<OperationType, string> = {
 const REASON_LABELS: Record<SkippedOpInfo['reason'], string> = {
   external: '別のデバイスまたはユーザーによって変更されています',
   cascade: '関連する操作がスキップされたため無効化されました',
-  hasData: '列にデータが存在するためUndoできません',
 };
 
 interface SkipNotificationDialogProps {
