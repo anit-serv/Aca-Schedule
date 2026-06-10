@@ -9,6 +9,7 @@ import { SkipNotificationDialog } from '../components/SkipNotificationDialog';
 import { bandService, timetableService, eventService, collaboratorService } from '../services/firestore';
 import { timetableToCSV, downloadCSV } from '../utils/timetableExport';
 import { generateUUID } from '../utils/generateUUID';
+import { deepEqual } from '../utils/deepEqual';
 import { useAuth } from '../hooks/useAuth';
 import { useMobileDetect } from '../hooks/useMobileDetect';
 import { MobileHeader } from '../components/mobile/MobileHeader';
@@ -406,7 +407,6 @@ export const EventEditorPage = () => {
 
     // クリーンアップ
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, hasEventSettings, eventSettings?.rehearsalType]);
 
   // タイムテーブルが存在しない場合は作成
@@ -1115,7 +1115,7 @@ export const EventEditorPage = () => {
         if (!current) {
           return true;
         }
-        return JSON.stringify(current) !== JSON.stringify(after);
+        return !deepEqual(current, after);
       },
     };
     pushOperation(record);
@@ -1142,7 +1142,7 @@ export const EventEditorPage = () => {
         // 現在の customFields が「適用後(after)」の状態と一致しなければ、
         // 別デバイス/ユーザーによる外部変更があったとみなしてスキップ
         const current = eventSettingsRef.current?.customFields;
-        return JSON.stringify(current) !== JSON.stringify(after);
+        return !deepEqual(current, after);
       },
     };
     pushOperation(record);

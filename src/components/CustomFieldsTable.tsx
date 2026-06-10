@@ -669,7 +669,7 @@ export const CustomFieldsTable = ({
 
     // 確認不要：直接結合
     doMerge(customFields);
-  }, [selection, customFields, columns, timetableType, selectedDate, timetable, onCustomFieldsChange, getSelectionMerges]);
+  }, [selection, customFields, columns, timetableType, selectedDate, timetable, onCustomFieldsChange, onUndoRecord, getSelectionMerges]);
 
   const handleUnmerge = useCallback(
     (colId: string, seq: number) => {

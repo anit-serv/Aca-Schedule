@@ -85,7 +85,6 @@ export const BandRow = ({
           || memberHira.includes(inputHira);
       })
       .slice(0, 10);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberInput, allMembers, band.members]);
 
   // スクロール時にサジェスト位置を更新
