@@ -89,7 +89,12 @@ service cloud.firestore {
                          && request.auth.token.email == resource.data.pendingOwnerEmail
                          && request.resource.data.ownerId == resource.data.ownerId
                          && request.resource.data.pendingOwnerEmail == ''
-                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingOwnerEmail', 'updatedAt']));
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingOwnerEmail', 'updatedAt']))
+                     // 承認済み共同編集者はカスタムフィールド・カスタムイベントのみ更新可能
+                     || (request.auth != null
+                         && request.auth.token.email != null
+                         && request.auth.token.email in resource.data.collaboratorEmails
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customFields', 'customEvents', 'updatedAt']));
       allow delete: if request.auth != null
                      && resource.data.ownerId == request.auth.uid;
     }
