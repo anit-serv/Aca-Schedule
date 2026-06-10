@@ -93,11 +93,18 @@ export const CustomColumnManager = ({
       setEditingColumnId(null);
       return;
     }
-    let updated = renameColumn(customFields, timetableType, editingColumnId, editingName.trim());
+    const trimmedName = editingName.trim();
+    const currentColumn = columns.find(c => c.id === editingColumnId);
+    if (currentColumn && currentColumn.name === trimmedName) {
+      setEditingColumnId(null);
+      return;
+    }
+    let updated = renameColumn(customFields, timetableType, editingColumnId, trimmedName);
     if (applyToBoth) {
       const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
-      updated = renameColumn(updated, otherType, editingColumnId, editingName.trim());
+      updated = renameColumn(updated, otherType, editingColumnId, trimmedName);
     }
+    onUndoRecord?.({ targetId: `column:${editingColumnId}`, opType: 'customColumn:rename', before: customFields, after: updated });
     onCustomFieldsChange(updated);
     setEditingColumnId(null);
   };
@@ -105,21 +112,25 @@ export const CustomColumnManager = ({
   // 列の移動（上下）
   const handleMoveUp = (index: number) => {
     if (!customFields || index === 0) return;
+    const columnId = columns[index].id;
     let updated = reorderColumns(customFields, timetableType, index, index - 1);
     if (applyToBoth) {
       const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
       updated = reorderColumns(updated, otherType, index, index - 1);
     }
+    onUndoRecord?.({ targetId: `column:${columnId}`, opType: 'customColumn:reorder', before: customFields, after: updated });
     onCustomFieldsChange(updated);
   };
 
   const handleMoveDown = (index: number) => {
     if (!customFields || index >= columns.length - 1) return;
+    const columnId = columns[index].id;
     let updated = reorderColumns(customFields, timetableType, index, index + 1);
     if (applyToBoth) {
       const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
       updated = reorderColumns(updated, otherType, index, index + 1);
     }
+    onUndoRecord?.({ targetId: `column:${columnId}`, opType: 'customColumn:reorder', before: customFields, after: updated });
     onCustomFieldsChange(updated);
   };
 

@@ -1045,7 +1045,6 @@ export const EventEditorPage = () => {
   // タイムテーブル操作の UndoRecord をプッシュ
   const pushTimetableUndoOp = useCallback((
     timetableType: 'performance' | 'rehearsal',
-    timetableId: string,
     date: string,
     beforeDt: DailyTimetable,
     afterDt: DailyTimetable,
@@ -1454,7 +1453,6 @@ export const EventEditorPage = () => {
       if (opMeta && beforeDt) {
         pushTimetableUndoOp(
           'performance',
-          performanceTimetableRef.current.id,
           updatedDailyTimetable.date,
           beforeDt,
           updatedDailyTimetable,
@@ -1476,7 +1474,6 @@ export const EventEditorPage = () => {
       if (opMeta && beforeDt) {
         pushTimetableUndoOp(
           'rehearsal',
-          rehearsalTimetableRef.current.id,
           updatedDailyTimetable.date,
           beforeDt,
           updatedDailyTimetable,

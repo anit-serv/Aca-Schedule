@@ -15,6 +15,8 @@ const OP_LABELS: Record<OperationType, string> = {
   'customCell:unmerge': 'セル結合解除',
   'customColumn:add': 'カスタム列追加',
   'customColumn:delete': 'カスタム列削除',
+  'customColumn:rename': 'カスタム列名変更',
+  'customColumn:reorder': 'カスタム列の並び替え',
 };
 
 const REASON_LABELS: Record<SkippedOpInfo['reason'], string> = {

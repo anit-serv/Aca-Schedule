@@ -203,7 +203,9 @@ export type CustomFieldsOpType =
   | 'customCell:merge'
   | 'customCell:unmerge'
   | 'customColumn:add'
-  | 'customColumn:delete';
+  | 'customColumn:delete'
+  | 'customColumn:rename'
+  | 'customColumn:reorder';
 
 export type OperationType = TimetableOpType | BandOpType | CustomFieldsOpType;
 

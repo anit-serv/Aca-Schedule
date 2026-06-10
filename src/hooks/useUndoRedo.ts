@@ -77,6 +77,11 @@ export const useUndoRedo = () => {
         try {
           await op.undo();
           redoStackRef.current = [op, ...redoStackRef.current];
+        } catch (error) {
+          console.error('[useUndoRedo] undo失敗:', error);
+          // 失敗した操作は取り消されていないため、再試行できるようスタックに戻す
+          undoStackRef.current = [op, ...undoStackRef.current];
+          alert('元に戻す操作に失敗しました。通信状態を確認して再度お試しください。');
         } finally {
           isUndoingRef.current = false;
         }
@@ -122,6 +127,11 @@ export const useUndoRedo = () => {
         try {
           await op.redo();
           undoStackRef.current = [op, ...undoStackRef.current];
+        } catch (error) {
+          console.error('[useUndoRedo] redo失敗:', error);
+          // 失敗した操作は再適用されていないため、再試行できるようスタックに戻す
+          redoStackRef.current = [op, ...redoStackRef.current];
+          alert('やり直す操作に失敗しました。通信状態を確認して再度お試しください。');
         } finally {
           isUndoingRef.current = false;
         }
