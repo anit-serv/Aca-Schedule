@@ -14,6 +14,7 @@ import {
   Timestamp,
   QuerySnapshot,
   runTransaction,
+  writeBatch,
   arrayUnion,
   arrayRemove,
   type DocumentData,
@@ -394,29 +395,34 @@ export const eventService = {
     try {
       console.log('[eventService.deleteEvent] 開始:', eventId);
 
-      // イベントに関連する全てのタイムテーブルを削除
+      // イベントに関連する全てのタイムテーブル・バンドのドキュメント参照を取得
       const timetablesRef = collection(db, 'timetables');
       const timetablesQuery = query(timetablesRef, where('eventId', '==', eventId));
       const timetablesSnapshot = await getDocs(timetablesQuery);
-      
-      const timetableDeletePromises = timetablesSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(timetableDeletePromises);
-      console.log(`[eventService.deleteEvent] ${timetablesSnapshot.size}件のタイムテーブルを削除`);
 
-      // イベントに関連する全てのバンドを削除
       const bandsRef = collection(db, 'bands');
       const bandsQuery = query(bandsRef, where('eventId', '==', eventId));
       const bandsSnapshot = await getDocs(bandsQuery);
-      
-      const bandDeletePromises = bandsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(bandDeletePromises);
-      console.log(`[eventService.deleteEvent] ${bandsSnapshot.size}件のバンドを削除`);
 
-      // イベント設定を削除
       const eventRef = doc(db, 'events', eventId);
-      await deleteDoc(eventRef);
-      console.log('[eventService.deleteEvent] イベント設定を削除');
 
+      // 全削除対象を1つのリストにまとめ、500件ごとにバッチ実行（Firestoreの上限）
+      const allRefs = [
+        ...timetablesSnapshot.docs.map(d => d.ref),
+        ...bandsSnapshot.docs.map(d => d.ref),
+        eventRef,
+      ];
+
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < allRefs.length; i += BATCH_SIZE) {
+        const batch = writeBatch(db);
+        for (const ref of allRefs.slice(i, i + BATCH_SIZE)) {
+          batch.delete(ref);
+        }
+        await batch.commit();
+      }
+
+      console.log(`[eventService.deleteEvent] ${timetablesSnapshot.size}件のタイムテーブル、${bandsSnapshot.size}件のバンド、イベント設定を削除`);
       console.log('[eventService.deleteEvent] 完了');
     } catch (error) {
       console.error('[eventService.deleteEvent] エラー:', error);
