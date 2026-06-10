@@ -23,6 +23,7 @@ import { CustomColumnManager } from '../CustomColumnManager';
 import { MobileBottomSheet, type SheetHeight } from './MobileBottomSheet';
 import { MobileBandBank } from './MobileBandBank';
 import { eventService } from '../../services/firestore';
+import { RateLimitError } from '../../utils/writeRateLimiter';
 import { Icon } from '../Icon';
 
 interface MobileTimetableViewProps {
@@ -194,9 +195,10 @@ export const MobileTimetableView = ({
   // \u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u304c\u5909\u66f4\u3055\u308c\u305f\u3089Firestore\u3092\u66f4\u65b0
   useEffect(() => {
     if (JSON.stringify(customEvents) !== JSON.stringify(eventSettings.customEvents || [])) {
-      eventService.updateEvent(eventSettings.id, { customEvents }).catch(err =>
-        console.error('\u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u306e\u4fdd\u5b58\u306b\u5931\u6557:', err)
-      );
+      eventService.updateEvent(eventSettings.id, { customEvents }).catch(err => {
+        console.error('\u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u306e\u4fdd\u5b58\u306b\u5931\u6557:', err);
+        alert(err instanceof RateLimitError ? err.message : '\u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u306e\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u901a\u4fe1\u72b6\u614b\u3092\u78ba\u8a8d\u3057\u3066\u518d\u5ea6\u304a\u8a66\u3057\u304f\u3060\u3055\u3044\u3002');
+      });
       if (onEventSettingsChange) {
         onEventSettingsChange({ customEvents });
       }
@@ -266,6 +268,7 @@ export const MobileTimetableView = ({
         }
       } catch (error) {
         console.error('カスタムフィールドの保存に失敗しました:', error);
+        alert(error instanceof RateLimitError ? error.message : 'カスタムフィールドの保存に失敗しました。通信状態を確認して再度お試しください。');
       }
     },
     [eventSettings.id, onEventSettingsChange]

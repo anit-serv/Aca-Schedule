@@ -23,6 +23,7 @@ import { createTimetableCollisionDetection } from '../utils/timetableCollisionDe
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 import { generateUUID } from '../utils/generateUUID';
 import { eventService } from '../services/firestore';
+import { RateLimitError } from '../utils/writeRateLimiter';
 import {
   hasCustomFieldsDataForEntry,
   cleanupCustomFieldsForEntry,
@@ -113,6 +114,7 @@ export const TimetableEditing = ({
         // ロールバック
         setCustomEvents(previousList);
         lastSavedCustomEventsRef.current = JSON.stringify(previousList);
+        alert(error instanceof RateLimitError ? error.message : 'カスタムイベントの保存に失敗しました。通信状態を確認して再度お試しください。');
       } finally {
         customEventsSavingCountRef.current -= 1;
       }
@@ -160,6 +162,7 @@ export const TimetableEditing = ({
         }
       } catch (error) {
         console.error('カスタムフィールドの保存に失敗しました:', error);
+        alert(error instanceof RateLimitError ? error.message : 'カスタムフィールドの保存に失敗しました。通信状態を確認して再度お試しください。');
       }
     },
     [eventSettings.id, onEventSettingsChange]

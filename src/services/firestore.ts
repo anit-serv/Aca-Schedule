@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { AppUser, Band, EventSettings, Timetable, DailyTimetable } from '../types';
-import { writeRateLimiter } from '../utils/writeRateLimiter';
+import { writeRateLimiter, RateLimitError } from '../utils/writeRateLimiter';
 
 // ユーザー管理のFirestore操作
 export const userService = {
@@ -147,7 +147,7 @@ export const bandService = {
 
   // バンドを追加
   async addBand(band: Band, eventId: string): Promise<string> {
-    if (!writeRateLimiter.check('addBand')) return band.id;
+    if (!writeRateLimiter.check('addBand')) throw new RateLimitError();
     const bandRef = doc(db, 'bands', band.id);
     const bandData = bandToFirestore(band, eventId);
     await setDoc(bandRef, bandData);
@@ -156,7 +156,7 @@ export const bandService = {
 
   // バンドを更新
   async updateBand(bandId: string, updates: Partial<Band>): Promise<void> {
-    if (!writeRateLimiter.check('updateBand')) return;
+    if (!writeRateLimiter.check('updateBand')) throw new RateLimitError();
     const bandRef = doc(db, 'bands', bandId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {
@@ -173,7 +173,7 @@ export const bandService = {
 
   // バンドを削除
   async deleteBand(bandId: string): Promise<void> {
-    if (!writeRateLimiter.check('deleteBand')) return;
+    if (!writeRateLimiter.check('deleteBand')) throw new RateLimitError();
     const bandRef = doc(db, 'bands', bandId);
     await deleteDoc(bandRef);
   },
@@ -347,7 +347,7 @@ export const eventService = {
 
   // イベント設定を更新
   async updateEvent(eventId: string, updates: Partial<EventSettings>): Promise<void> {
-    if (!writeRateLimiter.check('updateEvent')) return;
+    if (!writeRateLimiter.check('updateEvent')) throw new RateLimitError();
     const eventRef = doc(db, 'events', eventId);
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -633,7 +633,7 @@ export const timetableService = {
 
   // タイムテーブルを作成
   async createTimetable(timetable: Omit<Timetable, 'id'>): Promise<string> {
-    if (!writeRateLimiter.check('createTimetable')) return '';
+    if (!writeRateLimiter.check('createTimetable')) throw new RateLimitError();
     const timetablesRef = collection(db, 'timetables');
     const timetableData = timetableToFirestore({ ...timetable, id: '' });
     const docRef = await addDoc(timetablesRef, timetableData);
@@ -642,7 +642,7 @@ export const timetableService = {
 
   // タイムテーブルを更新
   async updateTimetable(timetableId: string, updates: Partial<Timetable>): Promise<void> {
-    if (!writeRateLimiter.check('updateTimetable')) return;
+    if (!writeRateLimiter.check('updateTimetable')) throw new RateLimitError();
     const timetableRef = doc(db, 'timetables', timetableId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {
@@ -661,7 +661,7 @@ export const timetableService = {
     timetableId: string,
     dailyTimetable: DailyTimetable
   ): Promise<void> {
-    if (!writeRateLimiter.check('updateDailyTimetable')) return;
+    if (!writeRateLimiter.check('updateDailyTimetable')) throw new RateLimitError();
     const timetableRef = doc(db, 'timetables', timetableId);
     
     await runTransaction(db, async (transaction) => {

@@ -8,6 +8,14 @@
  * ループバグ時: 300〜360回/分 → 確実に遮断される
  */
 
+/** レート制限により書き込みが遮断されたことを示すエラー */
+export class RateLimitError extends Error {
+  constructor() {
+    super('書き込みが集中したため一時的に保存を制限しています。しばらく待って再度お試しください。');
+    this.name = 'RateLimitError';
+  }
+}
+
 const WINDOW_MS = 60_000;       // カウントウィンドウ: 1分
 const WARN_THRESHOLD = 60;      // 1分に60回で警告
 const BLOCK_THRESHOLD = 120;    // 1分に120回で遮断
