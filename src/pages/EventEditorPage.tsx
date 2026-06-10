@@ -18,6 +18,16 @@ import { type SheetHeight } from '../components/mobile/MobileBottomSheet';
 import { MobileBandManagement } from '../components/mobile/MobileBandManagement';
 import { MobileTimetableView } from '../components/mobile/MobileTimetableView';
 import { useUndoRedo } from '../hooks/useUndoRedo';
+import { detectTimetableOperation, isTimetableConflicted } from '../utils/timetableUndoUtils';
+import {
+  getFirstCoolStartTime,
+  normalizeFirstCoolStartTime,
+  isSameDailyTimetable,
+  getRehearsalEndTime,
+  recalculatePerformanceEntryTimes,
+  recalculatePerformanceCoolTimes,
+  recalculateRehearsalCoolTimes,
+} from '../utils/timetableTimeUtils';
 import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, BandUndoMeta, CustomFieldsUndoMeta, TimetableOpType, UndoRecord } from '../types';
 
 // モードを定義するための型
@@ -658,22 +668,6 @@ export const EventEditorPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bands, performanceTimetable, eventSettings, eventId]);
 
-  const getFirstCoolStartTime = (dailyTimetable?: DailyTimetable): string | undefined => {
-    return dailyTimetable?.cools?.[0]?.startTime;
-  };
-
-  const normalizeFirstCoolStartTime = (dailyTimetable: DailyTimetable, unifiedStartTime: string): DailyTimetable => {
-    // cool.startTime の未設定（継続）を保持するため、日付開始時刻のみ正規化する
-    return {
-      ...dailyTimetable,
-      startTime: unifiedStartTime,
-    };
-  };
-
-  const isSameDailyTimetable = (a: DailyTimetable, b: DailyTimetable): boolean => {
-    return JSON.stringify(a) === JSON.stringify(b);
-  };
-
   // クール直前リハーサルの場合、本番タイムテーブルの変更を監視してリハーサルタイムテーブルを同期
   useEffect(() => {
     if (!eventSettings || !performanceTimetable || !rehearsalTimetable) return;
@@ -802,7 +796,7 @@ export const EventEditorPage = () => {
     const updatedRehearsalDailyTimetable: DailyTimetable = {
       ...rehearsalDailyTimetable,
       startTime: unifiedStartTime,
-      cools: recalculateRehearsalCoolTimes(rehearsalCools, unifiedStartTime, performanceCools),
+      cools: recalculateRehearsalCoolTimes(rehearsalCools, unifiedStartTime, eventSettings.rehearsalDuration || 0, performanceCools),
     };
 
     if (isSameDailyTimetable(rehearsalDailyTimetable, updatedRehearsalDailyTimetable)) {
@@ -853,195 +847,6 @@ export const EventEditorPage = () => {
     setBands(updatedBands);
   };
 
-  // リハーサルの最終エントリーの終了時刻を取得
-  const getRehearsalEndTime = (dailyTimetable: DailyTimetable): string | null => {
-    // クール構造から最終エントリーの終了時刻を取得
-    if (dailyTimetable.cools && dailyTimetable.cools.length > 0) {
-      for (let i = dailyTimetable.cools.length - 1; i >= 0; i--) {
-        const cool = dailyTimetable.cools[i];
-        if (cool.entries.length > 0) {
-          const lastEntry = cool.entries[cool.entries.length - 1];
-          if (lastEntry.endTime) return lastEntry.endTime;
-        }
-      }
-    }
-    // フラット構造
-    if (dailyTimetable.entries && dailyTimetable.entries.length > 0) {
-      const lastEntry = dailyTimetable.entries[dailyTimetable.entries.length - 1];
-      if (lastEntry.endTime) return lastEntry.endTime;
-    }
-    return null;
-  };
-
-  // 本番用のエントリー時刻を再計算するヘルパー
-  const recalculatePerformanceEntryTimes = (entries: TimetableEntry[], startTime: string): TimetableEntry[] => {
-    let currentTime = startTime;
-    return entries.map((entry, index) => {
-      const band = entry.bandId ? bands.find((b) => b.id === entry.bandId) : null;
-      const duration = band?.performanceDuration || entry.customEvent?.duration || 0;
-      const transitionTime = entry.transitionTime || 0;
-      const [hours, minutes] = currentTime.split(':').map(Number);
-      const startMinutes = hours * 60 + minutes + transitionTime;
-      const endMinutes = startMinutes + duration;
-      const entryStart = `${Math.floor(startMinutes / 60).toString().padStart(2, '0')}:${(startMinutes % 60).toString().padStart(2, '0')}`;
-      const entryEnd = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
-      currentTime = entryEnd;
-      return { ...entry, startTime: entryStart, endTime: entryEnd, order: index };
-    });
-  };
-
-  // リハーサル用のエントリー時刻を再計算するヘルパー
-  const recalculateRehearsalEntryTimes = (entries: TimetableEntry[], startTime: string): TimetableEntry[] => {
-    let currentTime = startTime;
-    const rehearsalDuration = eventSettings?.rehearsalDuration || 0;
-
-    return entries.map((entry, index) => {
-      const duration = entry.customEvent?.duration || rehearsalDuration;
-      const transitionTime = entry.transitionTime || 0;
-      const [hours, minutes] = currentTime.split(':').map(Number);
-      const startMinutes = hours * 60 + minutes + transitionTime;
-      const endMinutes = startMinutes + duration;
-      const entryStart = `${Math.floor(startMinutes / 60).toString().padStart(2, '0')}:${(startMinutes % 60).toString().padStart(2, '0')}`;
-      const entryEnd = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
-      currentTime = entryEnd;
-      return { ...entry, startTime: entryStart, endTime: entryEnd, order: index };
-    });
-  };
-
-  const getCoolEndTime = (cool?: Cool): string | undefined => {
-    if (!cool || !cool.entries || cool.entries.length === 0) return undefined;
-    return cool.entries[cool.entries.length - 1].endTime;
-  };
-
-  const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: string, linkedRehearsalCools?: Cool[]): Cool[] => {
-    if (!cools || cools.length === 0) return cools;
-    let currentTime = dailyStartTime;
-    return cools.map((cool, index) => {
-      if (cool.startTime) currentTime = cool.startTime;
-
-      // クール直前リハーサル: 対応するリハ終了時刻を本番開始に反映
-      const linkedRehearsalEndTime = getCoolEndTime(linkedRehearsalCools?.[index]);
-      if (linkedRehearsalEndTime) {
-        currentTime = linkedRehearsalEndTime;
-      }
-
-      const updatedEntries = recalculatePerformanceEntryTimes(cool.entries, currentTime);
-      if (updatedEntries.length > 0) {
-        const lastEntry = updatedEntries[updatedEntries.length - 1];
-        currentTime = lastEntry.endTime || currentTime;
-      }
-      return { ...cool, entries: updatedEntries };
-    });
-  };
-
-  const recalculateRehearsalCoolTimes = (cools: Cool[], dailyStartTime: string, linkedPerformanceCools?: Cool[]): Cool[] => {
-    if (!cools || cools.length === 0) return cools;
-    let currentTime = dailyStartTime;
-
-    return cools.map((cool, index) => {
-      if (cool.startTime) currentTime = cool.startTime;
-
-      // クール直前リハーサル: 前クール本番終了時刻を次クールリハ開始に反映
-      if (index > 0) {
-        const previousPerformanceEndTime = getCoolEndTime(linkedPerformanceCools?.[index - 1]);
-        if (previousPerformanceEndTime) {
-          currentTime = previousPerformanceEndTime;
-        }
-      }
-
-      const updatedEntries = recalculateRehearsalEntryTimes(cool.entries, currentTime);
-      if (updatedEntries.length > 0) {
-        const lastEntry = updatedEntries[updatedEntries.length - 1];
-        currentTime = lastEntry.endTime || currentTime;
-      }
-
-      return { ...cool, entries: updatedEntries };
-    });
-  };
-
-  // ===== Undo/Redo ヘルパー =====
-
-  // DailyTimetable の全エントリーをフラットに取得（{id, coolId} 付き）
-  const getAllEntries = (dt: DailyTimetable) => {
-    const result: { id: string; coolId: string | null; index: number }[] = [];
-    if (dt.cools && dt.cools.length > 0) {
-      for (const cool of dt.cools) {
-        cool.entries.forEach((e, i) => result.push({ id: e.id, coolId: cool.id, index: i }));
-      }
-    } else {
-      (dt.entries || []).forEach((e, i) => result.push({ id: e.id, coolId: null, index: i }));
-    }
-    return result;
-  };
-
-  // before/after の差分からタイムテーブル操作種別と targetId を推定
-  const detectTimetableOperation = (
-    before: DailyTimetable | undefined,
-    after: DailyTimetable
-  ): { targetId: string; opType: TimetableOpType } | null => {
-    if (!before) return null;
-
-    const beforeCoolIds = new Set(before.cools.map(c => c.id));
-    const afterCoolIds = new Set(after.cools.map(c => c.id));
-
-    const addedCool = after.cools.find(c => !beforeCoolIds.has(c.id));
-    if (addedCool) return { targetId: addedCool.id, opType: 'cool:add' };
-
-    const deletedCool = before.cools.find(c => !afterCoolIds.has(c.id));
-    if (deletedCool) return { targetId: deletedCool.id, opType: 'cool:delete' };
-
-    const beforeEntries = new Map(getAllEntries(before).map(e => [e.id, e]));
-    const afterEntries = new Map(getAllEntries(after).map(e => [e.id, e]));
-
-    for (const [id] of afterEntries) {
-      if (!beforeEntries.has(id)) return { targetId: id, opType: 'entry:add' };
-    }
-    for (const [id] of beforeEntries) {
-      if (!afterEntries.has(id)) return { targetId: id, opType: 'entry:delete' };
-    }
-    for (const [id, ae] of afterEntries) {
-      const be = beforeEntries.get(id);
-      if (be && (be.coolId !== ae.coolId || be.index !== ae.index)) {
-        return { targetId: id, opType: 'entry:reorder' };
-      }
-    }
-    for (const afterCool of after.cools) {
-      const beforeCool = before.cools.find(c => c.id === afterCool.id);
-      if (beforeCool && beforeCool.startTime !== afterCool.startTime) {
-        return { targetId: afterCool.id, opType: 'cool:startTime' };
-      }
-    }
-    return null;
-  };
-
-  // 現在の DailyTimetable から targetId の要素が expectedAfter と一致するか確認
-  const isTimetableConflicted = (
-    currentDt: DailyTimetable | undefined,
-    targetId: string,
-    opType: TimetableOpType,
-    afterDt: DailyTimetable
-  ): boolean => {
-    if (!currentDt) return true;
-
-    if (opType === 'entry:add' || opType === 'entry:delete' || opType === 'entry:reorder') {
-      const current = getAllEntries(currentDt).find(e => e.id === targetId);
-      const expected = getAllEntries(afterDt).find(e => e.id === targetId);
-      if (!current && !expected) return false;
-      if (!current || !expected) return true;
-      return current.coolId !== expected.coolId || current.index !== expected.index;
-    }
-
-    if (opType === 'cool:add' || opType === 'cool:delete' || opType === 'cool:startTime') {
-      const current = currentDt.cools.find(c => c.id === targetId);
-      const expected = afterDt.cools.find(c => c.id === targetId);
-      if (!current && !expected) return false;
-      if (!current || !expected) return true;
-      return current.startTime !== expected.startTime;
-    }
-
-    return false;
-  };
-
   // タイムテーブル操作の UndoRecord をプッシュ
   const pushTimetableUndoOp = useCallback((
     timetableType: 'performance' | 'rehearsal',
@@ -1075,7 +880,6 @@ export const EventEditorPage = () => {
       },
     };
     pushOperation(record);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pushOperation]);
 
   // バンド操作の UndoRecord をプッシュ
@@ -1179,7 +983,7 @@ export const EventEditorPage = () => {
       normalizedDailyTimetable = {
         ...normalized,
         cools: normalized.cools && normalized.cools.length > 0
-          ? recalculatePerformanceCoolTimes(normalized.cools, unifiedStartTime, linkedRehearsalTimetable?.cools)
+          ? recalculatePerformanceCoolTimes(normalized.cools, unifiedStartTime, bands, linkedRehearsalTimetable?.cools)
           : normalized.cools,
       };
     }
@@ -1284,7 +1088,7 @@ export const EventEditorPage = () => {
       normalizedDailyTimetable = {
         ...normalized,
         cools: normalized.cools && normalized.cools.length > 0
-          ? recalculateRehearsalCoolTimes(normalized.cools, unifiedStartTime, linkedPerformanceDaily?.cools)
+          ? recalculateRehearsalCoolTimes(normalized.cools, unifiedStartTime, eventSettings.rehearsalDuration || 0, linkedPerformanceDaily?.cools)
           : normalized.cools,
       };
     }
@@ -1387,8 +1191,8 @@ export const EventEditorPage = () => {
         const updatedPerformanceDt: DailyTimetable = {
           ...normalizedPerformanceDt,
           ...(normalizedPerformanceDt.cools && normalizedPerformanceDt.cools.length > 0
-            ? { cools: recalculatePerformanceCoolTimes(normalizedPerformanceDt.cools, unifiedStartTime, normalizedDailyTimetable.cools) }
-            : { entries: recalculatePerformanceEntryTimes(normalizedPerformanceDt.entries || [], unifiedStartTime) }
+            ? { cools: recalculatePerformanceCoolTimes(normalizedPerformanceDt.cools, unifiedStartTime, bands, normalizedDailyTimetable.cools) }
+            : { entries: recalculatePerformanceEntryTimes(normalizedPerformanceDt.entries || [], unifiedStartTime, bands) }
           ),
         };
 
@@ -1420,8 +1224,8 @@ export const EventEditorPage = () => {
             ...performanceDt,
             startTime: rehearsalEndTime,
             ...(performanceDt.cools && performanceDt.cools.length > 0
-              ? { cools: recalculatePerformanceCoolTimes(performanceDt.cools, rehearsalEndTime) }
-              : { entries: recalculatePerformanceEntryTimes(performanceDt.entries || [], rehearsalEndTime) }
+              ? { cools: recalculatePerformanceCoolTimes(performanceDt.cools, rehearsalEndTime, bands) }
+              : { entries: recalculatePerformanceEntryTimes(performanceDt.entries || [], rehearsalEndTime, bands) }
             ),
           };
           // onSnapshotによる自動更新に任せる（楽観的更新を削除）
@@ -1461,7 +1265,6 @@ export const EventEditorPage = () => {
       }
     }
     await rawPerformanceTimetableChangeRef.current?.(updatedDailyTimetable);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUndoingRef, pushTimetableUndoOp]);
 
   // undo記録付きラッパー（リハーサルタイムテーブル）
@@ -1482,7 +1285,6 @@ export const EventEditorPage = () => {
       }
     }
     await rawRehearsalTimetableChangeRef.current?.(updatedDailyTimetable);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUndoingRef, pushTimetableUndoOp]);
 
   // refを常に最新のラッパーに更新
