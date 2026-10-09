@@ -1,0 +1,11 @@
+.npm-cache/
+.env*
+node_modules/
+dist/
+*.zip
+.codex-remote-attachments/
+.tmp-vitest/
+tmp/
+.claude/
+figma/
+devserver.log

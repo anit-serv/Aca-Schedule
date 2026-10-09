@@ -12,6 +12,7 @@ interface UseDragHandlersParams {
   onCustomEventDropToFlat: (customEventId: string, targetId: string) => void;
   onEntryReorderInCools: (activeId: string, targetId: string) => void;
   onEntryReorderFlat: (activeId: string, targetId: string) => void;
+  canDrop?: (event: DragEndEvent) => boolean;
 }
 
 export interface CancelAbsorbAnimation {
@@ -46,6 +47,7 @@ export const useDragHandlers = ({
   onCustomEventDropToFlat,
   onEntryReorderInCools,
   onEntryReorderFlat,
+  canDrop,
 }: UseDragHandlersParams) => {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [overEntryId, setOverEntryId] = useState<string | null>(null);
@@ -222,6 +224,7 @@ export const useDragHandlers = ({
         overId.startsWith('cool-gap-before-') ||
         overId.startsWith('cool-gap-after-') ||
         overId === 'timetable-droppable' ||
+        overId === 'band-bank-droppable' ||
         overId === 'mobile-cancel-dropzone'
       ) {
         if (overId === 'mobile-cancel-dropzone') {
@@ -305,6 +308,10 @@ export const useDragHandlers = ({
     latestOverIdRef.current = null;
 
     const activeId = active.id as string;
+    // 詰められたドラッグ元の行へ dnd-kit が戻すアニメーションを行うと、
+    // 幅 0 の行が画面左端の目標座標として扱われる。
+    if (activeId.startsWith('entry-')) setDropSucceeded(true);
+    if (canDrop && !canDrop(event)) return;
     
 
     // バンドバンクからタイムテーブルへの追加
@@ -470,9 +477,15 @@ export const useDragHandlers = ({
     // タイムテーブル内での並び替え
     if (!over && !savedOverEntryId) return;
     
-    const targetId = savedOverEntryId || (over!.id as string);
+    const targetId = over?.id === 'band-bank-droppable'
+      ? 'band-bank-droppable'
+      : savedOverEntryId || (over!.id as string);
     
     if (activeId.startsWith('entry-')) {
+      if (targetId === 'band-bank-droppable') {
+        setDropSucceeded(true);
+        return;
+      }
       const isValidTarget = targetId.startsWith('entry-') ||
         targetId.startsWith('cool-droppable-') ||
         targetId.startsWith('cool-header-') ||
@@ -501,7 +514,8 @@ export const useDragHandlers = ({
       : null;
 
     const activeEntry = activeDragId?.startsWith('entry-')
-      ? currentTimetable.entries.find((e) => `entry-${e.id}` === activeDragId)
+      ? currentTimetable.cools?.flatMap(cool => cool.entries).find(entry => `entry-${entry.id}` === activeDragId)
+        || currentTimetable.entries.find(entry => `entry-${entry.id}` === activeDragId)
       : null;
 
     return { activeBand, activeCustomEvent, activeEntry };

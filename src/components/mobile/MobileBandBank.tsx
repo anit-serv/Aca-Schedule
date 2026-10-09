@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { Icon } from '../Icon';
 import type { Band, Timetable, CustomEvent } from '../../types';
@@ -40,6 +40,10 @@ function useLongPressDrag(delay = 180, threshold = 8) {
 interface MobileBandBankProps {
   bands: Band[];
   timetableType: 'performance' | 'rehearsal';
+  unifiedCoolPre?: boolean;
+  onTimetableTypeChange?: (type: 'performance' | 'rehearsal') => void;
+  selectedDate?: string;
+  showAutomation?: boolean;
   performanceTimetable: Timetable | null;
   rehearsalTimetable: Timetable | null;
   selectedBandId: string | null;
@@ -49,6 +53,13 @@ interface MobileBandBankProps {
   onSelectCustomEvent: (event: CustomEvent | null) => void;
   onDeleteCustomEvent: (eventId: string) => void;
   onShowCreateCustomEvent: () => void;
+  onAutoSchedule: () => void;
+  isAutoScheduling: boolean;
+  autoScheduleMessage: string | null;
+  onResetAll: () => void;
+  isResetting: boolean;
+  resetEntryCount: number;
+  onAddFixed?: (bandId: string) => void;
 }
 
 // ドラッグ可能なバンドアイテム
@@ -56,11 +67,23 @@ const DraggableBandItem = ({
   band,
   isSelected,
   onSelect,
+  onAddFixed,
 }: {
   band: Band;
   isSelected: boolean;
   onSelect: (bandId: string | null) => void;
+  onAddFixed?: (bandId: string) => void;
 }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [menuOpen]);
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: `band-${band.id}`,
   });
@@ -72,6 +95,7 @@ const DraggableBandItem = ({
   }, [isDragging, isSelected, band.id, onSelect]);
 
   return (
+    <div className="relative flex items-stretch gap-1">
     <button
       ref={setNodeRef}
       {...listeners}
@@ -81,7 +105,7 @@ const DraggableBandItem = ({
       onTouchMove={move}
       onTouchEnd={end}
       style={{ touchAction: longPressed ? 'none' : 'pan-y' }}
-      className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all text-left touch-manipulation ${
+      className={`min-w-0 flex-1 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all text-left touch-manipulation ${
         isDragging
           ? 'opacity-30'
           : isSelected
@@ -108,6 +132,10 @@ const DraggableBandItem = ({
         </div>
       )}
     </button>
+    {onAddFixed && <div ref={menuRef} className="relative self-start"><button type="button" aria-label={`${band.name}のメニュー`} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} className="rounded-lg border border-emerald-200 px-2 py-1 text-gray-600"><Icon name="more_vert" /></button>
+      {menuOpen && <div className="absolute right-0 top-full z-50 mt-1 min-w-48 rounded-lg border bg-white p-1 shadow-lg"><button type="button" onClick={() => { setMenuOpen(false); onAddFixed(band.id); }} className="w-full px-2 py-2 text-left text-sm">時刻を固定して追加</button></div>}
+    </div>}
+    </div>
   );
 };
 
@@ -182,6 +210,10 @@ const DraggableCustomEventItem = ({
 export const MobileBandBank = ({
   bands,
   timetableType,
+  unifiedCoolPre = false,
+  onTimetableTypeChange,
+  selectedDate,
+  showAutomation = true,
   performanceTimetable,
   rehearsalTimetable,
   selectedBandId,
@@ -191,6 +223,13 @@ export const MobileBandBank = ({
   onSelectCustomEvent,
   onDeleteCustomEvent,
   onShowCreateCustomEvent,
+  onAutoSchedule,
+  isAutoScheduling,
+  autoScheduleMessage,
+  onResetAll,
+  isResetting,
+  resetEntryCount,
+  onAddFixed,
 }: MobileBandBankProps) => {
   const timetable = timetableType === 'performance' ? performanceTimetable : rehearsalTimetable;
 
@@ -216,13 +255,54 @@ export const MobileBandBank = ({
       });
     });
 
+    if (unifiedCoolPre && timetableType === 'rehearsal') {
+      const missingIds = new Set<string>();
+      const performanceDay = performanceTimetable?.dailyTimetables.find(day => day.date === selectedDate);
+      const rehearsalDay = rehearsalTimetable?.dailyTimetables.find(day => day.date === selectedDate);
+      performanceDay?.cools.forEach((cool, index) => {
+        const placed = new Set(rehearsalDay?.cools[index]?.entries.filter(entry => entry.type === 'band').map(entry => entry.bandId));
+        cool.entries.forEach(entry => {
+          if (entry.type === 'band' && entry.bandId && !placed.has(entry.bandId)) missingIds.add(entry.bandId);
+        });
+      });
+      return bands.filter(band => missingIds.has(band.id));
+    }
     return bands.filter(band => !placedBandIds.has(band.id));
-  }, [bands, timetable]);
+  }, [bands, timetable, unifiedCoolPre, timetableType, performanceTimetable, rehearsalTimetable, selectedDate]);
 
   const placedCount = bands.length - unplacedBands.length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-band-bank-kind={timetableType}>
+      {unifiedCoolPre && (
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-emerald-50 p-1" aria-label="バンドバンクの種類">
+          {(['performance', 'rehearsal'] as const).map(type => (
+            <button key={type} type="button" onClick={() => onTimetableTypeChange?.(type)}
+              className={`rounded-md px-2 py-2 text-xs font-medium ${timetableType === type ? 'bg-emerald-600 text-white' : 'text-emerald-700'}`}>
+              {type === 'performance' ? '本番バンク' : 'リハバンク'}
+            </button>
+          ))}
+        </div>
+      )}
+      {(showAutomation || resetEntryCount > 0) && (
+        <div className="space-y-2">
+          {showAutomation && <button
+            type="button"
+            onClick={onAutoSchedule}
+            disabled={isAutoScheduling || isResetting}
+            className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {isAutoScheduling ? '配置中…' : `${timetableType === 'performance' ? '本番' : 'リハ'}の全日程を自動配置`}
+          </button>}
+          {resetEntryCount > 0 && (
+            <button type="button" onClick={onResetAll} disabled={isAutoScheduling || isResetting}
+              className="w-full rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 disabled:opacity-50">
+              {timetableType === 'rehearsal' ? 'リハの全日程をリセット' : unifiedCoolPre ? '本番と連動リハをリセット' : '本番の全日程をリセット'}
+            </button>
+          )}
+          {autoScheduleMessage && <div role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{autoScheduleMessage}</div>}
+        </div>
+      )}
       {/* カスタムイベントセクション */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
@@ -282,6 +362,7 @@ export const MobileBandBank = ({
               band={band}
               isSelected={selectedBandId === band.id}
               onSelect={onSelectBand}
+              onAddFixed={onAddFixed}
             />
           ))}
         </div>

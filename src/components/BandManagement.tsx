@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import type { Band, EventSettings, BandUndoMeta } from '../types';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import type { Band, EventSettings, BandUndoMeta, Timetable } from '../types';
 import { useBandManagement } from '../hooks/useBandManagement';
 import { BandRow } from './BandRow';
 import { BandAvailabilityModal } from './BandAvailabilityModal';
@@ -7,19 +7,32 @@ import { BandImportCSV } from './BandImportCSV';
 import { Icon } from './Icon';
 
 interface BandManagementProps {
+  initialScrollPosition?: { top: number; left: number };
+  onScrollPositionChange?: (position: { top: number; left: number }) => void;
   bands: Band[];
   eventSettings: EventSettings;
+  performanceTimetable: Timetable | null;
+  rehearsalTimetable: Timetable | null;
   onBandsChange: (bands: Band[]) => void;
   onUndoRecord?: (meta: BandUndoMeta) => void;
 }
 
-export const BandManagement = ({ bands, eventSettings, onBandsChange, onUndoRecord }: BandManagementProps) => {
+export const BandManagement = ({ initialScrollPosition, onScrollPositionChange, bands, eventSettings, performanceTimetable, rehearsalTimetable, onBandsChange, onUndoRecord }: BandManagementProps) => {
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [showImportInfo, setShowImportInfo] = useState(false);
   const [pendingFocusBandId, setPendingFocusBandId] = useState<string | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const restoredScrollRef = useRef(false);
   const prevBandCountRef = useRef(bands.length);
+
+  useLayoutEffect(() => {
+    if (restoredScrollRef.current || !tableContainerRef.current) return;
+    if ((initialScrollPosition?.top ?? 0) > 0 && bands.length === 0) return;
+    tableContainerRef.current.scrollTop = initialScrollPosition?.top ?? 0;
+    tableContainerRef.current.scrollLeft = initialScrollPosition?.left ?? 0;
+    restoredScrollRef.current = true;
+  }, [bands.length, initialScrollPosition]);
 
   // バンド追加時にテーブル末尾へ自動スクロール
   useEffect(() => {
@@ -123,7 +136,11 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange, onUndoReco
       {/* CSVインポート機能は上部に移動したため削除 */}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0">
-        <div ref={tableContainerRef} className="overflow-x-auto overflow-y-auto flex-1">
+        <div ref={tableContainerRef} onScroll={event => {
+          if (restoredScrollRef.current) onScrollPositionChange?.({
+            top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft,
+          });
+        }} className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full">
             <thead className="bg-emerald-50 sticky top-0 z-10">
               <tr>
@@ -131,15 +148,18 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange, onUndoReco
                 <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 min-w-[200px]">バンド名</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-32">演奏時間</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-24">出演回数</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-32 whitespace-nowrap">トリ優先度</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-20">衣装</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 min-w-[160px]">バンドマスター</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 min-w-[300px]">メンバー</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-44 whitespace-nowrap">出演可能時間帯</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-800 w-24">操作</th>
+                <th className="w-24 px-4 py-3" aria-label="削除操作" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {bands.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
                     バンドが登録されていません。「+ バンドを追加」ボタンから登録してください。
                   </td>
                 </tr>
@@ -175,12 +195,14 @@ export const BandManagement = ({ bands, eventSettings, onBandsChange, onUndoReco
         <BandAvailabilityModal
           band={bands.find(b => b.id === selectedBandId)!}
           eventSettings={eventSettings}
+          performanceTimetable={performanceTimetable}
+          rehearsalTimetable={rehearsalTimetable}
           onClose={() => {
             setShowAvailabilityModal(false);
             setSelectedBandId(null);
           }}
-          onUpdate={(availableTimeSlots) => {
-            handleUpdateBand(selectedBandId, { availableTimeSlots });
+          onUpdate={(availableTimeSlots, backupRehearsalTimeSlots) => {
+            handleUpdateBand(selectedBandId, { availableTimeSlots, backupRehearsalTimeSlots });
             setShowAvailabilityModal(false);
             setSelectedBandId(null);
           }}

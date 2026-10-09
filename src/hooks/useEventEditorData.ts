@@ -42,11 +42,15 @@ export const useEventEditorData = (eventId: string | undefined) => {
   });
   const lastSavedPerformanceHashRef = useRef<string>('');
   const lastSavedRehearsalHashRef = useRef<string>('');
+  const performanceLoadedEventIdRef = useRef<string | null>(null);
+  const rehearsalLoadedEventIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setHasCompletedInitialTimetableSync(false);
     setPerformanceTimetableLoaded(false);
     setRehearsalTimetableLoaded(false);
+    performanceLoadedEventIdRef.current = null;
+    rehearsalLoadedEventIdRef.current = null;
     isInitialTimetableSyncInFlightRef.current = false;
     initialCreateAttemptedRef.current = {
       performance: false,
@@ -239,6 +243,7 @@ export const useEventEditorData = (eventId: string | undefined) => {
       eventId,
       'performance',
       (fetchedTimetable) => {
+        performanceLoadedEventIdRef.current = eventId;
         setPerformanceTimetable(fetchedTimetable);
         if (fetchedTimetable?.dailyTimetables) {
           lastSavedPerformanceHashRef.current = JSON.stringify(fetchedTimetable.dailyTimetables);
@@ -269,6 +274,7 @@ export const useEventEditorData = (eventId: string | undefined) => {
     if (!eventId || !hasEventSettings) return;
 
     if (eventSettings?.rehearsalType === 'none') {
+      rehearsalLoadedEventIdRef.current = eventId;
       setRehearsalTimetable(null);
       setRehearsalTimetableLoaded(true);
       return;
@@ -281,6 +287,7 @@ export const useEventEditorData = (eventId: string | undefined) => {
       eventId,
       'rehearsal',
       (fetchedTimetable) => {
+        rehearsalLoadedEventIdRef.current = eventId;
         setRehearsalTimetable(fetchedTimetable);
         if (fetchedTimetable?.dailyTimetables) {
           lastSavedRehearsalHashRef.current = JSON.stringify(fetchedTimetable.dailyTimetables);
@@ -312,7 +319,7 @@ export const useEventEditorData = (eventId: string | undefined) => {
       if (mode === 'timetable-editing') {
         try {
           // 本番用タイムテーブル
-          if (performanceTimetable === null && !initialCreateAttemptedRef.current.performance) {
+          if (performanceTimetableLoaded && performanceLoadedEventIdRef.current === eventId && performanceTimetable === null && !initialCreateAttemptedRef.current.performance) {
             initialCreateAttemptedRef.current.performance = true;
             const newPerformanceTimetable: Omit<Timetable, 'id'> = {
               eventId: eventId,
@@ -327,6 +334,8 @@ export const useEventEditorData = (eventId: string | undefined) => {
           // リハーサル用タイムテーブル（リハーサル設定がある場合のみ）
           if (
             rehearsalTimetable === null &&
+            rehearsalTimetableLoaded &&
+            rehearsalLoadedEventIdRef.current === eventId &&
             eventSettings.rehearsalType !== 'none' &&
             !initialCreateAttemptedRef.current.rehearsal
           ) {
@@ -347,7 +356,7 @@ export const useEventEditorData = (eventId: string | undefined) => {
     };
 
     createInitialTimetables();
-  }, [performanceTimetable, rehearsalTimetable, mode, eventId, eventSettings]);
+  }, [performanceTimetable, rehearsalTimetable, performanceTimetableLoaded, rehearsalTimetableLoaded, mode, eventId, eventSettings]);
 
   // refを常に最新状態に同期
   performanceTimetableRef.current = performanceTimetable;

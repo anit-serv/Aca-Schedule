@@ -11,10 +11,6 @@ service cloud.firestore {
       return request.auth != null && eventData(eventId).ownerId == request.auth.uid;
     }
 
-    function isEventPublic(eventId) {
-      return eventData(eventId).isPublic == true;
-    }
-
     // 承認済み共同編集者かどうかを確認
     function isEventCollaborator(eventId) {
       return request.auth != null
@@ -44,11 +40,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // 関係者用パスワードのハッシュはサーバーAPIだけが参照する
+    match /viewerPasswords/{eventId} {
+      allow read, write: if false;
+    }
+
+    // 現場進行の実績と見込みは関係者パスワードを検証するAPIからのみ操作する
+    match /stakeholderProgress/{eventId} {
+      allow read, write: if false;
+    }
+
     // イベント
     // - オーナーのみ読み書き可能
     // - 承認済み共同編集者は読み取り可能
     // - 招待中の共同編集者も読み取り可能（ホームで表示するため）
-    // - isPublic=true の場合は認証なしでも読み取り可能（共有URL用）
+    // - 一般公開・関係者向けの読み取りはサーバーAPIで必要な項目だけ返す
     match /events/{eventId} {
       allow read: if (request.auth != null && resource.data.ownerId == request.auth.uid)
                    || (request.auth != null
@@ -56,8 +62,7 @@ service cloud.firestore {
                        && request.auth.token.email in resource.data.collaboratorEmails)
                    || (request.auth != null
                        && request.auth.token.email != null
-                       && request.auth.token.email in resource.data.pendingCollaboratorEmails)
-                   || resource.data.isPublic == true;
+                       && request.auth.token.email in resource.data.pendingCollaboratorEmails);
       allow create: if request.auth != null
                      && request.resource.data.ownerId == request.auth.uid;
       // オーナーは全フィールド更新可能
@@ -101,20 +106,18 @@ service cloud.firestore {
 
     // バンド
     // - 関連するイベントのオーナーまたは承認済み共同編集者が読み書き可能
-    // - 関連するイベントが公開の場合は認証なしでも読み取り可能
+    // - 閲覧ページはサーバーAPIを経由する
     match /bands/{bandId} {
-      allow read: if isEventOwnerOrCollaborator(resource.data.eventId)
-                   || isEventPublic(resource.data.eventId);
+      allow read: if isEventOwnerOrCollaborator(resource.data.eventId);
       allow create: if isEventOwnerOrCollaborator(request.resource.data.eventId);
       allow update, delete: if isEventOwnerOrCollaborator(resource.data.eventId);
     }
 
     // タイムテーブル
     // - 関連するイベントのオーナーまたは承認済み共同編集者が読み書き可能
-    // - 関連するイベントが公開の場合は認証なしでも読み取り可能
+    // - 閲覧ページはサーバーAPIを経由する
     match /timetables/{timetableId} {
-      allow read: if isEventOwnerOrCollaborator(resource.data.eventId)
-                   || isEventPublic(resource.data.eventId);
+      allow read: if isEventOwnerOrCollaborator(resource.data.eventId);
       allow create: if isEventOwnerOrCollaborator(request.resource.data.eventId);
       allow update, delete: if isEventOwnerOrCollaborator(resource.data.eventId);
     }

@@ -4,7 +4,6 @@ import { generateRequestId } from "../../_lib/request.js";
 import {
   createOrRefreshUnverifiedUser,
   parseRegisterPendingBody,
-  sendVerificationLink,
   upsertPendingRegistration,
 } from "../../_lib/registration.js";
 
@@ -31,7 +30,6 @@ export default async function handler(req, res) {
   try {
     const payload = parseRegisterPendingBody(parseBody(req));
     const user = await createOrRefreshUnverifiedUser(payload);
-    await sendVerificationLink({ req, email: payload.email });
     const pendingId = await upsertPendingRegistration({
       userId: user.uid,
       email: payload.email,

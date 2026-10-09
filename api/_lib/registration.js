@@ -5,22 +5,6 @@ import { sha256Hex } from "./request.js";
 
 const REGISTRATION_PENDING_TTL_HOURS = 48;
 
-function getAppBaseUrl(req) {
-  const envBaseUrl = process.env.APP_BASE_URL || process.env.PUBLIC_APP_BASE_URL;
-  if (envBaseUrl) {
-    return envBaseUrl.replace(/\/$/, "");
-  }
-
-  const hostHeader = req.headers["x-forwarded-host"] || req.headers.host;
-  const protocol = req.headers["x-forwarded-proto"] || "https";
-
-  if (!hostHeader || typeof hostHeader !== "string") {
-    throw new ApiError(500, "APP_BASE_URL_NOT_CONFIGURED", "Application base URL is not configured.");
-  }
-
-  return `${protocol}://${hostHeader}`.replace(/\/$/, "");
-}
-
 function normalizeEmail(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -159,16 +143,4 @@ export async function createOrRefreshUnverifiedUser({ email, password, displayNa
   });
 
   return { uid: created.uid, email: created.email || email };
-}
-
-export async function sendVerificationLink({ req, email }) {
-  const adminAuth = getAdminAuth();
-  const appBaseUrl = getAppBaseUrl(req);
-
-  const actionCodeSettings = {
-    url: `${appBaseUrl}/login?registered=1`,
-    handleCodeInApp: false,
-  };
-
-  return adminAuth.generateEmailVerificationLink(email, actionCodeSettings);
 }

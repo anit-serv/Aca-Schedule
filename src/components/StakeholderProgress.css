@@ -1,0 +1,917 @@
+.stakeholder-progress {
+  color: #202b28;
+  background: #f3f5f4;
+  font-family: "Noto Sans JP:Regular", "Noto Sans JP", sans-serif;
+  font-size: 14px;
+  font-synthesis: none;
+}
+
+.stakeholder-progress * {
+  box-sizing: border-box;
+}
+
+.stakeholder-progress {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100dvh;
+}
+
+.stakeholder-progress button, .stakeholder-progress input, .stakeholder-progress select {
+  color: inherit;
+  font: inherit;
+}
+
+.stakeholder-progress button, .stakeholder-progress select {
+  cursor: pointer;
+}
+
+.stakeholder-progress button:focus-visible, .stakeholder-progress input:focus-visible, .stakeholder-progress select:focus-visible {
+  outline: 2px solid #0c4a3c;
+  outline-offset: 2px;
+}
+
+.stakeholder-progress .ui-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+}
+
+.stakeholder-progress .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.stakeholder-progress .app {
+  min-height: 100dvh;
+  background: #f3f5f4;
+}
+
+.stakeholder-progress .site-header {
+  padding: 24px;
+  border-bottom: 1px solid #d7deda;
+  background: #fff;
+}
+
+.stakeholder-progress .brand-row, .stakeholder-progress .event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stakeholder-progress .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stakeholder-progress .brand img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.stakeholder-progress .brand strong {
+  font-family: "Noto Sans JP:Bold", sans-serif;
+  font-size: 19px;
+}
+
+.stakeholder-progress .brand span, .stakeholder-progress .operation-title span, .stakeholder-progress .page-heading span {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #f6f8f7;
+  color: #63706b;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+  font-size: 12px;
+}
+
+.stakeholder-progress .account, .stakeholder-progress .venue, .stakeholder-progress .filters > span {
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .event-row {
+  margin-top: 20px;
+}
+
+.stakeholder-progress .event-row h1 {
+  margin: 0;
+  font: 700 26px/1.5 "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .event-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.stakeholder-progress .current-clock {
+  color: #0c4a3c;
+  font: 700 22px/1.1 "Roboto Mono:Regular", monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stakeholder-progress .current-clock small {
+  margin-left: 6px;
+  color: #63706b;
+  font: 11px "Noto Sans JP:Regular", sans-serif;
+}
+
+.stakeholder-progress .filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.stakeholder-progress .filters select {
+  width: 250px;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid #d7deda;
+  border-radius: 6px;
+  background: #fff;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+  font-size: 14px;
+}
+
+.stakeholder-progress main {
+  padding: 24px;
+}
+
+.stakeholder-progress .page-heading, .stakeholder-progress .table-heading, .stakeholder-progress .cool-title, .stakeholder-progress .operation-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stakeholder-progress .page-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stakeholder-progress .page-heading h2, .stakeholder-progress .table-heading h2 {
+  margin: 0;
+  font: 700 22px/1.5 "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .page-heading p {
+  margin: 0;
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.stakeholder-progress .timetable {
+  min-width: 0;
+}
+
+.stakeholder-progress .table-heading {
+  margin-bottom: 14px;
+}
+
+.stakeholder-progress .table-heading span, .stakeholder-progress .cool-title span {
+  display: block;
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .table-heading b {
+  color: #855e20;
+  font-size: 12px;
+}
+
+.stakeholder-progress .search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stakeholder-progress .search-row input, .stakeholder-progress .search-row button {
+  height: 42px;
+  border: 1px solid #d7deda;
+  border-radius: 4px;
+}
+
+.stakeholder-progress .search-row input {
+  width: 280px;
+  padding: 0 12px;
+  background: #fff;
+}
+
+.stakeholder-progress .search-row button {
+  min-width: 210px;
+  padding: 0 16px;
+  border-color: #0c4a3c;
+  background: #0c4a3c;
+  color: #fff;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .search-row span {
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .table-card {
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid #d7deda;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.stakeholder-progress .cool-title {
+  min-height: 52px;
+  padding: 12px 16px;
+}
+
+.stakeholder-progress .cool-title h3 {
+  margin: 0;
+  font: 700 16px/1.5 "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .desktop-scroll {
+  overflow-x: auto;
+}
+
+.stakeholder-progress table {
+  width: 100%;
+  min-width: 1015px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.stakeholder-progress th, .stakeholder-progress td {
+  height: 80px;
+  padding: 12px 8px;
+  overflow: hidden;
+  border-top: 1px solid #e6ebe8;
+  border-right: 1px solid #e6ebe8;
+  text-align: left;
+  vertical-align: middle;
+  line-height: 1.5;
+}
+
+.stakeholder-progress th {
+  height: 64px;
+  background: #f6f8f7;
+  font-family: "Noto Sans JP:Regular", sans-serif;
+  font-weight: 400;
+}
+
+.stakeholder-progress th small {
+  display: block;
+  margin-top: 7px;
+  color: #63706b;
+}
+
+.stakeholder-progress th:nth-child(1) { width: 34px; }
+.stakeholder-progress th:nth-child(2) { width: 94px; }
+.stakeholder-progress th:nth-child(3) { width: 176px; }
+.stakeholder-progress th:nth-child(4) { width: 112px; }
+.stakeholder-progress th:nth-child(5) { width: 120px; }
+.stakeholder-progress th:nth-child(6) { width: 72px; }
+.stakeholder-progress th:nth-child(n+7) { width: 160px; }
+.stakeholder-progress .desktop-table tbody tr,
+.stakeholder-progress .mobile-table .split-row { cursor: pointer; }
+.stakeholder-progress .desktop-table tbody tr:hover,
+.stakeholder-progress .mobile-table .split-row:hover { background: #f2f8f5; }
+
+.stakeholder-progress td b {
+  font-family: "Noto Sans JP:Bold", sans-serif;
+  font-size: 12px;
+}
+
+.stakeholder-progress .current-row {
+  background: #eaf4f0;
+}
+
+.stakeholder-progress .current-row td:first-child {
+  border-left: 2px solid #0c4a3c;
+}
+
+.stakeholder-progress .changed {
+  color: #855e20;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .preview-cell {
+  background: #fbf5e8;
+}
+
+.stakeholder-progress .legend {
+  display: flex;
+  gap: 24px;
+  padding: 12px;
+  background: #f6f8f7;
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .legend span:first-child {
+  color: #0c4a3c;
+}
+
+.stakeholder-progress .footnote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 0;
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .operation {
+  padding: 16px;
+  border: 1px solid #d7deda;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.stakeholder-progress .operation-title h2 {
+  margin: 0;
+  font: 700 18px/1.5 "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .operation-title span {
+  color: #855e20;
+}
+
+.stakeholder-progress .operation.applied .operation-title span {
+  background: #eaf4f0;
+  color: #0c4a3c;
+}
+
+.stakeholder-progress .progress {
+  display: flex;
+  justify-content: space-between;
+  margin: 16px 0 20px;
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .progress > div {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.stakeholder-progress .progress .ui-icon {
+  margin-left: 22px;
+}
+
+.stakeholder-progress .progress .active {
+  color: #0c4a3c;
+}
+
+.stakeholder-progress .now-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #0c4a3c;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+  font-size: 12px;
+}
+
+.stakeholder-progress .operation h3 {
+  margin: 5px 0 14px;
+  font: 700 22px/1.5 "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .summary-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  border: 1px solid #d7deda;
+  background: #f6f8f7;
+  font-size: 12px;
+}
+
+.stakeholder-progress .summary-grid > * {
+  min-height: 34px;
+  padding: 8px;
+}
+
+.stakeholder-progress .summary-grid strong {
+  font: 600 16px/1.2 "Inter:Semi Bold", sans-serif;
+}
+
+.stakeholder-progress .summary-grid > *:nth-last-child(-n + 3) {
+  background: #eaf4f0;
+  color: #0c4a3c;
+}
+
+.stakeholder-progress .delay-line {
+  display: flex;
+  justify-content: space-between;
+  margin: 12px 0;
+  color: #63706b;
+  font-size: 12px;
+}
+
+.stakeholder-progress .delay-line b {
+  color: #0c4a3c;
+  font-size: 14px;
+}
+
+.stakeholder-progress .operation hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid #e6ebe8;
+}
+
+.stakeholder-progress .segmented, .stakeholder-progress .radio-row, .stakeholder-progress .offset-input {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stakeholder-progress .segmented button, .stakeholder-progress .radio-row button, .stakeholder-progress .secondary {
+  min-height: 42px;
+  border: 1px solid #d7deda;
+  background: #fff;
+  font-size: 12px;
+}
+
+.stakeholder-progress .segmented button.selected {
+  border-bottom: 2px solid #0c4a3c;
+  color: #0c4a3c;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .radio-row button.selected {
+  border-color: #0c4a3c;
+}
+
+.stakeholder-progress .field {
+  display: block;
+  margin: 12px 0;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+  font-size: 12px;
+}
+
+.stakeholder-progress .time-input, .stakeholder-progress .offset-input {
+  position: relative;
+  margin-top: 6px;
+}
+
+.stakeholder-progress .time-input input, .stakeholder-progress .offset-input input, .stakeholder-progress .offset-input select {
+  width: 100%;
+  height: 48px;
+  padding: 0 12px;
+  border: 1px solid #d7deda;
+  background: #fff;
+}
+
+.stakeholder-progress .time-input input {
+  border: 2px solid #0c4a3c;
+  border-radius: 5px;
+  font: 600 24px/1 "Inter:Semi Bold", sans-serif;
+}
+
+.stakeholder-progress .time-input small {
+  position: absolute;
+  top: 16px;
+  right: 12px;
+  color: #63706b;
+}
+
+.stakeholder-progress .offset-input {
+  grid-template-columns: 1fr 1fr;
+}
+
+.stakeholder-progress .offset-input small {
+  position: absolute;
+  top: 16px;
+  right: 10px;
+}
+
+.stakeholder-progress .info, .stakeholder-progress .warning, .stakeholder-progress .success {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 12px 0;
+  padding: 12px;
+  background: #f6f8f7;
+  color: #63706b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.stakeholder-progress .warning {
+  background: #fbf5e8;
+  color: #855e20;
+}
+
+.stakeholder-progress .success {
+  background: #eaf4f0;
+  color: #0c4a3c;
+}
+
+.stakeholder-progress .scope {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 14px 0;
+  font-size: 12px;
+}
+
+.stakeholder-progress .primary, .stakeholder-progress .secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 4px;
+  font-family: "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .primary {
+  border: 1px solid #0c4a3c;
+  background: #0c4a3c;
+  color: #fff;
+}
+
+.stakeholder-progress .primary:disabled { cursor: not-allowed; opacity: .55; }
+
+.stakeholder-progress .secondary {
+  margin-top: 12px;
+}
+
+.stakeholder-progress .panel-note {
+  display: block;
+  margin-top: 10px;
+  color: #63706b;
+}
+
+.stakeholder-progress .operation h4 {
+  margin: 10px 0;
+  font: 700 14px/1.5 "Noto Sans JP:Bold", sans-serif;
+}
+
+.stakeholder-progress .impact-list {
+  font-size: 12px;
+}
+
+.stakeholder-progress .impact-list p {
+  margin: 9px 0 2px;
+}
+
+.stakeholder-progress .impact-list b {
+  font-weight: 400;
+}
+
+.stakeholder-progress .impact-count {
+  display: flex;
+  justify-content: space-between;
+  margin: 12px 0;
+  padding: 12px;
+  background: #f6f8f7;
+  font-size: 12px;
+}
+
+.stakeholder-progress .applied-copy, .stakeholder-progress .history {
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.stakeholder-progress .history {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e6ebe8;
+}
+
+.stakeholder-progress .history a {
+  color: #0c4a3c;
+  text-decoration: none;
+}
+
+.stakeholder-progress .history button {
+  border: 0;
+  background: transparent;
+  color: #0c4a3c;
+  padding: 0;
+  text-align: left;
+}
+
+.stakeholder-progress .mobile-operation, .stakeholder-progress .mobile-table {
+  display: none;
+}
+
+.stakeholder-progress footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 24px 24px;
+  color: #63706b;
+  font-size: 12px;
+}
+
+@media (max-width: 759px) {
+  .stakeholder-progress {
+    font-size: 13px;
+  }
+
+  .stakeholder-progress .site-header {
+    padding: 16px;
+  }
+
+  .stakeholder-progress .brand img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .stakeholder-progress .brand strong {
+    font-size: 16px;
+  }
+
+  .stakeholder-progress .brand span {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .stakeholder-progress .account {
+    font-size: 10px;
+  }
+
+  .stakeholder-progress .event-row {
+    margin-top: 12px;
+  }
+
+  .stakeholder-progress .event-row h1 {
+    font-size: 20px;
+  }
+
+  .stakeholder-progress .current-clock {
+    font-size: 18px;
+  }
+
+  .stakeholder-progress .venue {
+    font-size: 10px;
+  }
+
+  .stakeholder-progress .filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 28px;
+  }
+
+  .stakeholder-progress .filters label, .stakeholder-progress .filters select {
+    width: 100%;
+  }
+
+  .stakeholder-progress .filters select {
+    height: 44px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .stakeholder-progress .filters > span {
+    grid-column: 1 / -1;
+    font-size: 10px;
+  }
+
+  .stakeholder-progress main {
+    padding: 0;
+  }
+
+  .stakeholder-progress .page-heading {
+    padding: 16px;
+  }
+
+  .stakeholder-progress .page-heading h2 {
+    font-size: 18px;
+  }
+
+  .stakeholder-progress .page-heading p {
+    display: none;
+  }
+
+  .stakeholder-progress .layout {
+    display: block;
+    margin-top: 0;
+  }
+
+  .stakeholder-progress .desktop-operation, .stakeholder-progress .desktop-table {
+    display: none;
+  }
+
+  .stakeholder-progress .mobile-operation, .stakeholder-progress .mobile-table {
+    display: block;
+  }
+
+  .stakeholder-progress .operation {
+    margin: 0 16px 20px;
+    padding: 14px;
+  }
+
+  .stakeholder-progress .operation-title h2 {
+    font-size: 16px;
+  }
+
+  .stakeholder-progress .progress {
+    margin: 14px 0;
+  }
+
+  .stakeholder-progress .progress .ui-icon {
+    margin-left: 8px;
+  }
+
+  .stakeholder-progress .operation h3 {
+    font-size: 22px;
+  }
+
+  .stakeholder-progress .timetable {
+    padding: 0 16px;
+  }
+
+  .stakeholder-progress .table-heading {
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .stakeholder-progress .table-heading h2 {
+    font-size: 18px;
+  }
+
+  .stakeholder-progress .table-heading b {
+    display: block;
+    margin-top: 8px;
+  }
+
+  .stakeholder-progress .search-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .stakeholder-progress .search-row input, .stakeholder-progress .search-row button {
+    width: 100%;
+  }
+
+  .stakeholder-progress .search-row span {
+    font-size: 10px;
+  }
+
+  .stakeholder-progress .table-card {
+    border-radius: 4px;
+  }
+
+  .stakeholder-progress .cool-title {
+    display: block;
+    min-height: auto;
+    padding: 12px;
+  }
+
+  .stakeholder-progress .cool-title h3 {
+    font-size: 14px;
+  }
+
+  .stakeholder-progress .split-head {
+    display: grid;
+    grid-template-columns: 158px 170px 90px;
+    width: 418px;
+    height: 44px;
+    background: #f6f8f7;
+    font: 700 11px/1.4 "Noto Sans JP:Bold", sans-serif;
+  }
+
+  .stakeholder-progress .split-head > div {
+    padding: 8px;
+    border-top: 1px solid #e6ebe8;
+    border-right: 1px solid #e6ebe8;
+  }
+
+  .stakeholder-progress .split-head > div:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: #f6f8f7;
+  }
+
+  .stakeholder-progress .split-head > div:nth-child(2) {
+    position: sticky;
+    left: 158px;
+    z-index: 3;
+    background: #f6f8f7;
+    border-right: 2px solid #d7deda;
+  }
+
+  .stakeholder-progress .mobile-table {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .stakeholder-progress .split-row {
+    display: flex;
+    width: 688px;
+    min-height: 124px;
+    border-top: 1px solid #e6ebe8;
+    font-size: 11px;
+  }
+
+  .stakeholder-progress .fixed-columns {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 158px 170px;
+    flex: 0 0 328px;
+    background: #fff;
+    border-right: 2px solid #d7deda;
+  }
+
+  .stakeholder-progress .current-row .fixed-columns {
+    background: #eaf4f0;
+  }
+
+  .stakeholder-progress .fixed-columns > div {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 10px;
+    line-height: 1.5;
+  }
+
+  .stakeholder-progress .band-state b {
+    font: 700 12px/1.5 "Noto Sans JP:Bold", sans-serif;
+  }
+
+  .stakeholder-progress .fixed-columns small {
+    color: #63706b;
+  }
+
+  .stakeholder-progress .extra-columns {
+    display: grid;
+    grid-template-columns: 90px 78px 192px;
+    flex: 0 0 360px;
+  }
+
+  .stakeholder-progress .extra-columns span {
+    display: flex;
+    align-items: center;
+    padding: 12px 8px;
+    border-right: 1px solid #e6ebe8;
+  }
+
+  .stakeholder-progress .scroll-indicator {
+    position: sticky;
+    left: 328px;
+    width: 360px;
+    height: 12px;
+    padding-top: 4px;
+    background: #fff;
+  }
+
+  .stakeholder-progress .scroll-indicator::before {
+    position: absolute;
+    right: 12px;
+    left: 12px;
+    height: 4px;
+    border-radius: 2px;
+    background: #e6ebe8;
+    content: "";
+  }
+
+  .stakeholder-progress .scroll-indicator i {
+    position: absolute;
+    left: 12px;
+    width: 24px;
+    height: 4px;
+    border-radius: 2px;
+    background: #87918d;
+  }
+
+  .stakeholder-progress .legend {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .stakeholder-progress footer {
+    padding: 16px;
+    font-size: 10px;
+  }
+}

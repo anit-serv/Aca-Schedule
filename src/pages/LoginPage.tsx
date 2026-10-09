@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { PasswordField } from '../components/PasswordField';
 
 type AuthMode = 'login' | 'register' | 'register-pending';
 
@@ -17,6 +18,9 @@ export const LoginPage = () => {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
   const registered = searchParams.get('registered') === '1';
 
   const getFirebaseErrorMessage = (code: string): string => {
@@ -159,7 +163,7 @@ export const LoginPage = () => {
                   setError(null);
                   setIsSubmitting(true);
                   try {
-                    await resendRegistrationEmail(email);
+                    await resendRegistrationEmail(email, password);
                   } catch (err) {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const apiError = err as any;
@@ -182,6 +186,7 @@ export const LoginPage = () => {
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); emailRef.current?.focus(); } }}
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   placeholder="例: 田中太郎"
                   required
@@ -192,9 +197,11 @@ export const LoginPage = () => {
             <div>
               <label className="block text-sm font-medium mb-1 text-gray-700">メールアドレス</label>
               <input
+                ref={emailRef}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); passwordRef.current?.focus(); } }}
                 className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="example@email.com"
                 required
@@ -203,10 +210,11 @@ export const LoginPage = () => {
 
             <div>
               <label className="block text-sm font-medium mb-1 text-gray-700">パスワード</label>
-              <input
-                type="password"
+              <PasswordField
+                ref={passwordRef}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && mode === 'register') { e.preventDefault(); confirmPasswordRef.current?.focus(); } }}
                 className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="6文字以上"
                 minLength={6}
@@ -217,8 +225,8 @@ export const LoginPage = () => {
             {mode === 'register' && (
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700">パスワード（確認）</label>
-                <input
-                  type="password"
+                <PasswordField
+                  ref={confirmPasswordRef}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"

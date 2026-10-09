@@ -1,15 +1,19 @@
-import type { Band, DailyTimetable, ConstraintViolation } from '../types';
+import type { ReactNode } from 'react';
+import type { Band, DailyTimetable, ConstraintViolation, CustomColumn, TimetableEntry } from '../types';
 import { CoolSection } from './CoolSection';
 import { TimetableDropZone } from './TimetableDropZone';
 import { CoolGapDropZone } from './CoolGapDropZone';
+import { effectiveCoolStart } from '../utils/dailyTimeBounds';
 
 interface TimetableContentProps {
   currentTimetable: DailyTimetable;
   bands: Band[];
   overEntryId: string | null;
+  reserveInsertionSpace?: boolean;
   violations: ConstraintViolation[];
   bandNumbers: Map<string, number>;
   isReadOnly: boolean;
+  lockCoolStructure?: boolean;
   timetableType: 'performance' | 'rehearsal';
   rehearsalType: 'rehearsal-day' | 'cool-pre-rehearsal' | 'day-start-rehearsal' | 'none';
   linkedRehearsalDailyTimetable?: DailyTimetable;
@@ -18,17 +22,25 @@ interface TimetableContentProps {
   onMoveCoolUp: (coolIndex: number) => void;
   onMoveCoolDown: (coolIndex: number) => void;
   onTransitionTimeChange: (entryId: string, transitionTime: number) => void;
+  onTimeClick?: (entryId: string, field: 'start' | 'end', coolIndex: number) => void;
   onCoolStartTimeChange: (coolIndex: number, startTime: string | undefined) => void;
   searchQuery?: string;
+  customMode?: boolean;
+  customColumns?: CustomColumn[];
+  enteringColumnIds?: ReadonlySet<string>;
+  renderCustomCell?: (entry: TimetableEntry, column: CustomColumn, index: number) => ReactNode;
+  returningEntryId?: string | null;
 }
 
 export const TimetableContent = ({
   currentTimetable,
   bands,
   overEntryId,
+  reserveInsertionSpace = false,
   violations,
   bandNumbers,
   isReadOnly,
+  lockCoolStructure = false,
   timetableType,
   rehearsalType,
   linkedRehearsalDailyTimetable,
@@ -37,11 +49,17 @@ export const TimetableContent = ({
   onMoveCoolUp,
   onMoveCoolDown,
   onTransitionTimeChange,
+  onTimeClick,
   onCoolStartTimeChange,
   searchQuery = '',
+  customMode = false,
+  customColumns = [],
+  enteringColumnIds,
+  renderCustomCell,
+  returningEntryId = null,
 }: TimetableContentProps) => {
   return (
-    <div className="flex-1 bg-white rounded-lg px-6 overflow-y-auto min-w-0 shadow">
+    <div className="flex-1 bg-white rounded-lg px-6 overflow-y-auto min-w-0 shadow" data-custom-mode={customMode}>
       <div>
         {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
           <div>
@@ -80,6 +98,7 @@ export const TimetableContent = ({
                     <div className="pt-6">
                       <CoolGapDropZone
                         id={`cool-gap-before-${coolIndex}`}
+                        disabled={isReadOnly}
                       />
                     </div>
                   )}
@@ -90,32 +109,44 @@ export const TimetableContent = ({
                     totalCools={currentTimetable.cools!.length}
                     bands={bands}
                     overEntryId={overEntryId}
+                    reserveInsertionSpace={reserveInsertionSpace}
                     onRemoveEntry={(entryId) => onRemoveEntry(entryId, coolIndex)}
                     onDeleteCool={onDeleteCool}
                     onMoveCoolUp={onMoveCoolUp}
                     onMoveCoolDown={onMoveCoolDown}
                     isReadOnly={isReadOnly}
+                    lockCoolStructure={lockCoolStructure}
                     rehearsalType={rehearsalType}
                     onTransitionTimeChange={onTransitionTimeChange}
+                    onTimeClick={onTimeClick}
                     onCoolStartTimeChange={onCoolStartTimeChange}
                     previousCoolEndTime={previousCoolEndTime}
                     overlapBaselineTime={overlapBaselineTime}
                     nextCoolStartTime={nextCoolStartTime}
                     dailyStartTime={currentTimetable.startTime}
+                    dailyEndTime={currentTimetable.endTime}
+                    previousCoolStartTime={coolIndex > 0 ? effectiveCoolStart(currentTimetable, coolIndex - 1) : undefined}
                     violations={violations.filter(v => v.coolId === cool.id)}
                     bandNumbers={bandNumbers}
                     searchQuery={searchQuery}
+                    customMode={customMode}
+                    customColumns={customColumns}
+                    enteringColumnIds={enteringColumnIds}
+                    renderCustomCell={renderCustomCell}
+                    returningEntryId={returningEntryId}
                   />
 
                   {/* クールの後のギャップ */}
                   {!isLastCool ? (
                     <CoolGapDropZone
                       id={`cool-gap-after-${coolIndex}`}
+                      disabled={isReadOnly}
                     />
                   ) : (
                     <div className="pb-6 min-h-[100px]">
                       <CoolGapDropZone
                         id={`cool-gap-after-${coolIndex}`}
+                        disabled={isReadOnly}
                         className="h-full min-h-[76px]"
                       />
                     </div>
@@ -127,13 +158,20 @@ export const TimetableContent = ({
         ) : (
           <TimetableDropZone
             entries={currentTimetable.entries}
+            isReadOnly={isReadOnly}
             bands={bands}
             overEntryId={overEntryId}
+            reserveInsertionSpace={reserveInsertionSpace}
             onRemoveEntry={onRemoveEntry}
             onTransitionTimeChange={onTransitionTimeChange}
             violations={violations}
             bandNumbers={bandNumbers}
             searchQuery={searchQuery}
+            customMode={customMode}
+            customColumns={customColumns}
+            enteringColumnIds={enteringColumnIds}
+            renderCustomCell={renderCustomCell}
+            returningEntryId={returningEntryId}
           />
         )}
       </div>

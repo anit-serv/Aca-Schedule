@@ -1,6 +1,6 @@
 # Aca-Schedule API リファレンス
 
-外部スクリプトやツールからバンド情報を登録するためのREST APIです。
+外部スクリプトやツールからバンド情報を登録・更新するためのREST APIです。
 
 ## ベースURL
 
@@ -10,7 +10,7 @@ https://aca-schedule.vercel.app
 
 ## 認証
 
-APIエンドポイントは2種類の認証方式をサポートしています。
+編集・管理用APIは2種類の認証方式をサポートしています。閲覧用APIは末尾の「閲覧ページ用API」を参照してください。
 
 ### 方式1: Firebase IDトークン（Bearer）
 
@@ -83,6 +83,9 @@ PATには以下の特徴があります。
 | `INVALID_BODY` | 400 | JSONのパースに失敗 |
 | `INVALID_FIELD` | 400 | リクエストのバリデーション失敗（`details` にフィールド別の詳細あり） |
 | `EVENT_NOT_FOUND` | 404 | 指定したイベントが存在しない |
+| `BAND_NOT_FOUND` | 404 | 指定したバンドが存在しない |
+| `INVALID_BAND_ID` | 400 | `bandId` が不正 |
+| `BAND_CHANGED` | 409 | 更新中にバンドの所属イベントが変更された |
 | `EVENT_NOT_EDITABLE` | 403 | そのイベントの編集権限がない |
 | `EVENT_NOT_ALLOWED_BY_TOKEN` | 403 | PATの `allowedEventIds` に含まれていないイベント |
 | `IDEMPOTENCY_CONFLICT` | 409 | 同じキーで異なる内容のリクエストを送信した |
@@ -129,12 +132,23 @@ PATには以下の特徴があります。
   "name": "バンド名",
   "performanceDuration": 30,
   "performanceCount": 1,
+  "toriPriority": 1,
+  "costume": true,
+  "bandMaster": "田中太郎",
   "members": ["田中太郎", "鈴木花子"],
   "availableTimeSlots": [
     {
       "date": "2026-06-01",
       "timeRanges": [
         { "startTime": "14:00", "endTime": "17:00" }
+      ]
+    }
+  ],
+  "backupRehearsalTimeSlots": [
+    {
+      "date": "2026-06-01",
+      "timeRanges": [
+        { "startTime": "17:00", "endTime": "17:30" }
       ]
     }
   ]
@@ -149,12 +163,18 @@ PATには以下の特徴があります。
 | `name` | string | ✅ | 1〜100文字 |
 | `performanceDuration` | integer | ✅ | 1〜180（分） |
 | `performanceCount` | integer | | 1〜10（デフォルト: 1） |
+| `toriPriority` | integer | | トリ優先度。1〜3（デフォルト: 1） |
+| `costume` | boolean | | 衣装の有無（デフォルト: `false`） |
+| `bandMaster` | string | | バンドマスター。最大100文字（デフォルト: 空文字列） |
 | `members` | string[] | | 最大30件、各メンバー1〜40文字 |
 | `availableTimeSlots` | object[] | | 最大30件 |
 | `availableTimeSlots[].date` | string | ✅ | `YYYY-MM-DD` 形式、同じ日付は1回まで |
 | `availableTimeSlots[].timeRanges` | object[] | ✅ | 最大8件、重複・逆順不可 |
-| `availableTimeSlots[].timeRanges[].startTime` | string | ✅ | `HH:mm` 形式、分は `00` または `30` のみ |
+| `availableTimeSlots[].timeRanges[].startTime` | string | ✅ | `HH:mm` 形式、分単位で指定可能 |
 | `availableTimeSlots[].timeRanges[].endTime` | string | ✅ | `HH:mm` 形式、`startTime` より後であること |
+| `backupRehearsalTimeSlots` | object[] | | リハーサルの予備出演可能時間。構造と件数制限は `availableTimeSlots` と同じ。通常時間と重複せず、リハーサル日の開始・終了時刻内に収めます。本番の自動配置には使用しません。 |
+
+予備時間の日付には、イベントで設定したリハーサル日を指定します。リハーサルのタイムテーブルにその日付の開始時刻が設定されている必要があります。終了時刻が未設定なら、その日の上限は `24:00` です。通常時間との境界で接することはできますが、1分でも重なる範囲は `400 INVALID_FIELD` になります。
 
 **レスポンス例（201 Created）**
 
@@ -193,6 +213,24 @@ curl -X POST https://aca-schedule.vercel.app/api/v1/bands \
     ]
   }'
 ```
+
+---
+
+### PATCH /api/v1/bands?bandId=\<id\>
+
+作成済みバンドの予備出演可能時間を更新します。指定した配列で**全件置き換え**ます。空配列で削除できます。通常の `availableTimeSlots` は変更しません。
+
+認証方式と `x-idempotency-key` はバンド作成 API と同じです。リクエストボディには `backupRehearsalTimeSlots` だけを指定します。通常時間との重複、リハーサル日以外の日付、当日の開始前・終了後は `400 INVALID_FIELD` です。
+
+```bash
+curl -X PATCH 'https://aca-schedule.vercel.app/api/v1/bands?bandId=abc123def456' \
+  -H 'Content-Type: application/json' \
+  -H 'x-user-api-token: pat_xxxxxxxxxxxxxxxx' \
+  -H 'x-idempotency-key: backup-update-001' \
+  -d '{"backupRehearsalTimeSlots":[{"date":"2026-06-01","timeRanges":[{"startTime":"17:00","endTime":"17:30"}]}]}'
+```
+
+成功時は `200 OK` で `data.bandId`、`data.eventId`、`data.updated: true` を返します。
 
 ---
 
@@ -406,7 +444,7 @@ PATを失効させます。失効後はそのトークンでのAPIアクセス�
 
 ### POST /api/v1/auth/register-resend
 
-確認メールを再送します。
+確認メールの送信には Firebase クライアントでメールアドレスとパスワードを使ってログインし、`sendEmailVerification` を呼び出してください。この旧エンドポイントは未確認ユーザーには `501 RESEND_REQUIRES_SIGN_IN` を返します。
 
 **認証**: 不要
 
@@ -430,7 +468,7 @@ PATを失効させます。失効後はそのトークンでのAPIアクセス�
 }
 ```
 
-メールが確認済みの場合は `"status": "completed"` が返ります。存在しないメールアドレスの場合も同じく `"status": "pending"` を返します（セキュリティ上の理由）。
+メールが確認済みの場合は `"status": "completed"` が返ります。存在しないメールアドレスの場合も同じく `"status": "pending"` を返します（セキュリティ上の理由）。どちらの場合もこのエンドポイントからメールは送信されません。
 
 ---
 
@@ -477,3 +515,16 @@ for (const band of bands) {
   console.log(`${band.name}:`, res.status, data.data?.bandId ?? data.error?.code);
 }
 ```
+## 閲覧ページ用API
+
+閲覧用APIにはサーバー側の `FIREBASE_SERVICE_ACCOUNT_JSON` が必要です。Firestoreの直接公開読み取りは無効にし、一般公開データと関係者データをAPIで分けます。
+
+- `GET /api/v1/viewer?eventId=...`：`isPublic=true` のイベントだけ取得します。カスタム列は `isPublic=true` の列とそのセル値に限定し、バンドのメンバー・出演可能時間帯、所有者・共同編集者情報は返しません。
+- `POST /api/v1/viewer`：`{ "eventId": "...", "password": "..." }` を送信し、関係者用パスワードが一致した場合に全カスタム列を取得します。試行回数をイベントとIPごとに制限します。
+- `GET /api/v1/viewer-password?eventId=...`：イベント所有者のFirebase IDトークンで設定状態を取得します。
+- `PUT /api/v1/viewer-password`：イベント所有者が `{ "eventId": "...", "password": "8文字以上" }` を送信してパスワードを設定・変更します。
+- `DELETE /api/v1/viewer-password`：イベント所有者が `{ "eventId": "..." }` を送信して関係者ページを無効にします。
+
+パスワードはソルト付きscryptハッシュだけを `viewerPasswords` に保存します。元のパスワードは再表示できません。パスワード認証後のデータはページのメモリ内だけに保持され、再読み込み時は再入力が必要です。
+
+**公開手順:** 閲覧用APIを含むアプリを公開してから `firestore.rules` を適用してください。規則を先に適用すると旧版の一般公開ページが読み取れなくなります。

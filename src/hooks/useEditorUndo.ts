@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { bandService, eventService } from '../services/firestore';
 import { deepEqual } from '../utils/deepEqual';
+import { applyCustomFieldsChanges, getCustomFieldsChanges, isCustomFieldsChangeConflicted } from '../utils/customFieldsUndoUtils';
 import { useUndoRedo } from './useUndoRedo';
 import { detectTimetableOperation, isTimetableConflicted } from '../utils/timetableUndoUtils';
 import type {
@@ -146,26 +147,26 @@ export const useEditorUndo = ({
   // カスタムフィールド操作の UndoRecord をプッシュ
   const handleCustomFieldsUndoRecord = useCallback((meta: CustomFieldsUndoMeta) => {
     const { opType, targetId, before, after } = meta;
+    const changes = getCustomFieldsChanges(before, after);
+    if (changes.length === 0) return;
 
     const record: Omit<UndoRecord, 'id' | 'sessionId' | 'timestamp' | 'invalidated'> = {
       targetId,
       opType,
       undo: async () => {
         const id = eventSettingsRef.current!.id;
-        await eventService.updateEvent(id, { customFields: before });
-        setEventSettings(prev => prev ? { ...prev, customFields: before } : null);
+        const updated = applyCustomFieldsChanges(eventSettingsRef.current!.customFields!, changes, 'undo');
+        await eventService.updateEvent(id, { customFields: updated });
+        setEventSettings(prev => prev ? { ...prev, customFields: updated } : null);
       },
       redo: async () => {
         const id = eventSettingsRef.current!.id;
-        await eventService.updateEvent(id, { customFields: after });
-        setEventSettings(prev => prev ? { ...prev, customFields: after } : null);
+        const updated = applyCustomFieldsChanges(eventSettingsRef.current!.customFields!, changes, 'redo');
+        await eventService.updateEvent(id, { customFields: updated });
+        setEventSettings(prev => prev ? { ...prev, customFields: updated } : null);
       },
       isConflicted: (direction) => {
-        // 現在の customFields が「適用後(after)」または「適用前(before)」の状態と一致しなければ、
-        // 別デバイス/ユーザーによる外部変更があったとみなしてスキップ
-        const current = eventSettingsRef.current?.customFields;
-        const expected = direction === 'undo' ? after : before;
-        return !deepEqual(current, expected);
+        return isCustomFieldsChangeConflicted(eventSettingsRef.current?.customFields, changes, direction);
       },
     };
     pushOperation(record);
@@ -250,6 +251,7 @@ export const useEditorUndo = ({
   }, [undo, redo]);
 
   return {
+    pushOperation,
     canUndo,
     canRedo,
     undo,

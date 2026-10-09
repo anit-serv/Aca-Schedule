@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Papa from 'papaparse';
-import type { Band, EventSettings, BandUndoMeta } from '../../types';
+import type { Band, EventSettings, BandUndoMeta, Timetable } from '../../types';
 import { useBandManagement } from '../../hooks/useBandManagement';
 import { BandAvailabilityModal } from '../BandAvailabilityModal';
 import { Icon } from '../Icon';
@@ -9,14 +9,18 @@ import { bandService } from '../../services/firestore';
 import { generateUUID } from '../../utils/generateUUID';
 
 interface MobileBandManagementProps {
+  initialScrollPosition?: { top: number; left: number };
+  onScrollPositionChange?: (position: { top: number; left: number }) => void;
   bands: Band[];
   eventSettings: EventSettings;
+  performanceTimetable: Timetable | null;
+  rehearsalTimetable: Timetable | null;
   onBandsChange: (bands: Band[]) => void;
   onUndoRecord?: (meta: BandUndoMeta) => void;
   isLoading?: boolean;
 }
 
-export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUndoRecord, isLoading = false }: MobileBandManagementProps) => {
+export const MobileBandManagement = ({ initialScrollPosition, onScrollPositionChange, bands, eventSettings, performanceTimetable, rehearsalTimetable, onBandsChange, onUndoRecord, isLoading = false }: MobileBandManagementProps) => {
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [expandedBandId, setExpandedBandId] = useState<string | null>(null);
@@ -27,6 +31,14 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUn
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bandListRef = useRef<HTMLDivElement>(null);
+  const restoredScrollRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (restoredScrollRef.current || !bandListRef.current || isLoading) return;
+    bandListRef.current.scrollTop = initialScrollPosition?.top ?? 0;
+    restoredScrollRef.current = true;
+  }, [bands.length, initialScrollPosition, isLoading]);
 
   const {
     handleAddBand,
@@ -143,8 +155,12 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUn
               name: row.bandName.trim(),
               performanceDuration,
               performanceCount,
+              toriPriority: 1,
+              costume: false,
+              bandMaster: '',
               members,
               availableTimeSlots: [],
+              backupRehearsalTimeSlots: [],
               createdAt: new Date(),
               updatedAt: new Date(),
             });
@@ -280,7 +296,11 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUn
       </AnimatePresence>
 
       {/* バンドリスト */}
-      <div className="flex-1 overflow-y-auto px-4 pb-20" data-band-list>
+      <div ref={bandListRef} onScroll={event => {
+        if (restoredScrollRef.current) onScrollPositionChange?.({
+          top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft,
+        });
+      }} className="flex-1 overflow-y-auto px-4 pb-20" data-band-list>
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -415,6 +435,42 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUn
 
                     {/* メンバー */}
                     <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1" htmlFor={`tori-priority-${band.id}`}>トリ優先度</label>
+                      <select
+                        id={`tori-priority-${band.id}`}
+                        value={band.toriPriority ?? 1}
+                        onChange={(e) => handleUpdateBand(band.id, { toriPriority: Number(e.target.value) as 1 | 2 | 3 })}
+                        className="bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-sm"
+                      >
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                      </select>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={band.costume ?? false}
+                        onChange={(e) => handleUpdateBand(band.id, { costume: e.target.checked })}
+                        className="h-4 w-4 accent-emerald-600"
+                      />
+                      衣装
+                    </label>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1" htmlFor={`band-master-${band.id}`}>バンドマスター</label>
+                      <input
+                        id={`band-master-${band.id}`}
+                        type="text"
+                        value={band.bandMaster ?? ''}
+                        onChange={(e) => handleUpdateBand(band.id, { bandMaster: e.target.value })}
+                        maxLength={100}
+                        className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-sm"
+                      />
+                    </div>
+
+                    {/* メンバー */}
+                    <div>
                       <label className="text-xs font-medium text-gray-500 block mb-1">
                         メンバー ({band.members.length}人)
                       </label>
@@ -477,10 +533,10 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUn
                       >
                         <span>出演可能時間帯</span>
                         <div className="flex items-center gap-1 text-gray-400">
-                          {band.availableTimeSlots && band.availableTimeSlots.length > 0 ? (
-                            <span className="text-xs text-emerald-600">{band.availableTimeSlots.length}件設定済み</span>
+                          {band.availableTimeSlots.length > 0 || (band.backupRehearsalTimeSlots?.length ?? 0) > 0 ? (
+                            <span className="text-xs text-emerald-600">通常 {band.availableTimeSlots.reduce((sum, slot) => sum + slot.timeRanges.length, 0)}・予備リハ {(band.backupRehearsalTimeSlots ?? []).reduce((sum, slot) => sum + slot.timeRanges.length, 0)}範囲</span>
                           ) : (
-                            <span className="text-xs">未設定</span>
+                            <span className="text-xs">未設定（出演不可）</span>
                           )}
                           <Icon name="chevron_right" className="text-base" />
                         </div>
@@ -496,10 +552,11 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUn
                             setExpandedBandId(null);
                           }
                         }}
-                        className="flex items-center gap-1 px-3 py-1.5 text-red-500 hover:bg-red-50 rounded text-xs transition-colors"
+                        className="flex h-9 w-9 items-center justify-center rounded text-red-500 transition-colors hover:bg-red-50"
+                        aria-label={`${band.name}を削除`}
+                        title={`${band.name}を削除`}
                       >
-                        <Icon name="delete" className="text-sm" />
-                        削除
+                        <Icon name="delete" className="text-xl" />
                       </button>
                     </div>
                   </div>
@@ -517,12 +574,14 @@ export const MobileBandManagement = ({ bands, eventSettings, onBandsChange, onUn
         <BandAvailabilityModal
           band={bands.find(b => b.id === selectedBandId)!}
           eventSettings={eventSettings}
+          performanceTimetable={performanceTimetable}
+          rehearsalTimetable={rehearsalTimetable}
           onClose={() => {
             setShowAvailabilityModal(false);
             setSelectedBandId(null);
           }}
-          onUpdate={(availableTimeSlots) => {
-            handleUpdateBand(selectedBandId, { availableTimeSlots });
+          onUpdate={(availableTimeSlots, backupRehearsalTimeSlots) => {
+            handleUpdateBand(selectedBandId, { availableTimeSlots, backupRehearsalTimeSlots });
             setShowAvailabilityModal(false);
             setSelectedBandId(null);
           }}

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { EventSettings } from '../types';
-import { eventService } from '../services/firestore';
+import { eventManagementService, type EventCreateInput } from '../services/eventManagement';
 import { useAuth } from '../hooks/useAuth';
 import { Icon } from './Icon';
 
 export const EventCreationWizard = () => {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { firebaseUser } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // フォームの状態管理
@@ -104,8 +104,9 @@ export const EventCreationWizard = () => {
     setIsSubmitting(true);
     
     try {
+      if (!firebaseUser) throw new Error('ログインが必要です。');
       // EventSettings作成
-      const eventData: Omit<EventSettings, 'id'> = {
+      const eventData: EventCreateInput = {
         name: formData.name.trim(),
         year: formData.year,
         venue: formData.venue.trim(),
@@ -117,13 +118,11 @@ export const EventCreationWizard = () => {
           : undefined,
         rehearsalDuration: formData.rehearsalType !== 'none' ? formData.rehearsalDuration : undefined,
         presetDurations: formData.presetDurations,
-        ownerId: currentUser?.uid || '',
       };
       
       console.log('[イベント作成] 開始:', eventData);
       
-      // Firestoreに保存
-      const eventId = await eventService.createEvent(eventData);
+      const eventId = await eventManagementService.create(firebaseUser, eventData);
       
       console.log('[イベント作成] 成功:', eventId);
       

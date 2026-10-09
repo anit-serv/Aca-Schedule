@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import { arrayMove } from '@dnd-kit/sortable';
 import type { Band, DailyTimetable, TimetableEntry, Cool, CustomEvent } from '../types';
 import { generateUUID } from '../utils/generateUUID';
 
@@ -11,6 +10,7 @@ interface UseTimetableDragDropProps {
   calculateTimes: (entries: TimetableEntry[], startTime: string) => TimetableEntry[];
   recalculateCoolTimes: (cools: Cool[], startTime: string) => Cool[];
   isReadOnly?: boolean;
+  canPlaceBandInCool?: (bandId: string, coolIndex: number) => boolean;
 }
 
 export const useTimetableDragDrop = ({
@@ -21,6 +21,7 @@ export const useTimetableDragDrop = ({
   calculateTimes,
   recalculateCoolTimes,
   isReadOnly = false,
+  canPlaceBandInCool,
 }: UseTimetableDragDropProps) => {
   
   // バンドをクール分けされたタイムテーブルに追加
@@ -36,6 +37,8 @@ export const useTimetableDragDrop = ({
     // クールのドロップゾーンへのドロップ
     if (overId.startsWith('cool-droppable-')) {
       const coolIndex = parseInt(overId.replace('cool-droppable-', ''));
+      if (canPlaceBandInCool && !canPlaceBandInCool(bandId, coolIndex)) return;
+      if (canPlaceBandInCool && updatedCools[coolIndex].entries.some(entry => entry.type === 'band' && entry.bandId === bandId)) return;
       const newEntry: TimetableEntry = {
         id: generateUUID(),
         type: 'band',
@@ -57,6 +60,8 @@ export const useTimetableDragDrop = ({
       for (let coolIndex = 0; coolIndex < updatedCools.length; coolIndex++) {
         const targetIndex = updatedCools[coolIndex].entries.findIndex((e) => `entry-${e.id}` === entryId);
         if (targetIndex !== -1) {
+          if (canPlaceBandInCool && !canPlaceBandInCool(bandId, coolIndex)) return;
+          if (canPlaceBandInCool && updatedCools[coolIndex].entries.some(entry => entry.type === 'band' && entry.bandId === bandId)) return;
           const newEntry: TimetableEntry = {
             id: generateUUID(),
             type: 'band',
@@ -88,7 +93,7 @@ export const useTimetableDragDrop = ({
       ...currentTimetable,
       cools: calculatedCools,
     });
-  }, [bands, currentTimetable, recalculateCoolTimes, onTimetableChange]);
+  }, [bands, currentTimetable, recalculateCoolTimes, onTimetableChange, canPlaceBandInCool]);
 
   // バンドをフラットなタイムテーブルに追加
   const handleBandDropToFlat = useCallback((bandId: string, overId: string) => {
@@ -202,6 +207,10 @@ export const useTimetableDragDrop = ({
 
     if (sourceCoolIndex === -1 || targetCoolIndex === -1) return;
 
+    const movingEntry = updatedCools[sourceCoolIndex].entries[sourceEntryIndex];
+    if (movingEntry.type === 'band' && movingEntry.bandId && canPlaceBandInCool &&
+        !canPlaceBandInCool(movingEntry.bandId, targetCoolIndex)) return;
+
     // クール直前リハーサルの場合、クール間移動を禁止
     if (isReadOnly && sourceCoolIndex !== targetCoolIndex) {
       return;
@@ -220,12 +229,14 @@ export const useTimetableDragDrop = ({
     // 同じクール内での並び替え
     if (sourceCoolIndex === targetCoolIndex) {
       const entries = [...updatedCools[sourceCoolIndex].entries];
-      // arrayMoveは削除前のインデックスを基準にするため、
-      // 後ろに移動する場合は調整不要
-      const reordered = arrayMove(entries, sourceEntryIndex, adjustedTargetIndex);
+      // 表示された挿入スペースの位置は削除前の配列を基準にしている。
+      // 下方向への移動では元の行を除いた分だけ挿入位置を一つ戻す。
+      const [movedEntry] = entries.splice(sourceEntryIndex, 1);
+      const insertionIndex = adjustedTargetIndex - (sourceEntryIndex < adjustedTargetIndex ? 1 : 0);
+      entries.splice(insertionIndex, 0, movedEntry);
       updatedCools[sourceCoolIndex] = {
         ...updatedCools[sourceCoolIndex],
-        entries: reordered,
+        entries,
       };
     } else {
       // 異なるクール間での移動 → 元のクールから削除して、ターゲットクールに追加
@@ -254,16 +265,23 @@ export const useTimetableDragDrop = ({
       ...currentTimetable,
       cools: calculatedCools,
     });
-  }, [currentTimetable, recalculateCoolTimes, onTimetableChange, isReadOnly]);
+  }, [currentTimetable, recalculateCoolTimes, onTimetableChange, isReadOnly, canPlaceBandInCool]);
 
   // フラットなタイムテーブルでのエントリー並び替え
   const handleEntryReorderFlat = useCallback((activeId: string, overId: string) => {
+    const isAfter = overId.endsWith('-after');
+    const targetId = isAfter ? overId.slice(0, -'-after'.length) : overId;
     const oldIndex = currentTimetable.entries.findIndex((e) => `entry-${e.id}` === activeId);
-    const newIndex = currentTimetable.entries.findIndex((e) => `entry-${e.id}` === overId);
+    const targetIndex = currentTimetable.entries.findIndex((e) => `entry-${e.id}` === targetId);
 
-    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+    if (oldIndex === -1 || targetIndex === -1) return;
 
-    const reorderedEntries = arrayMove(currentTimetable.entries, oldIndex, newIndex);
+    const targetBoundary = targetIndex + (isAfter ? 1 : 0);
+    const insertionIndex = targetBoundary - (oldIndex < targetBoundary ? 1 : 0);
+    if (oldIndex === insertionIndex) return;
+    const reorderedEntries = [...currentTimetable.entries];
+    const [movedEntry] = reorderedEntries.splice(oldIndex, 1);
+    reorderedEntries.splice(insertionIndex, 0, movedEntry);
     const calculatedEntries = calculateTimes(reorderedEntries, currentTimetable.startTime);
 
     onTimetableChange({

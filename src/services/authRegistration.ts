@@ -30,16 +30,6 @@ export const authRegistrationService = {
     });
   },
 
-  async resendRegistration(email: string): Promise<void> {
-    await requestJson('/api/v1/auth/register-resend', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email }),
-    });
-  },
-
   async confirmRegistration(idToken: string): Promise<void> {
     await requestJson('/api/v1/auth/register-confirm', {
       method: 'POST',

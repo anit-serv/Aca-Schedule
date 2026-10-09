@@ -28,10 +28,10 @@ export interface EventSettings {
   pendingOwnerEmail?: string; // オーナー権限移譲の保留中メールアドレス
 }
 
-// 時間範囲（30分単位）
+// 出演可能時間範囲（グリッドは15分単位、端の時刻は分単位で調整可能）
 export interface TimeRange {
-  startTime: string; // HH:mm形式（例: "10:00", "10:30"）
-  endTime: string; // HH:mm形式（例: "11:00", "11:30"）
+  startTime: string; // HH:mm形式（例: "10:00", "10:15"）
+  endTime: string; // HH:mm形式（例: "11:00", "11:15"）
 }
 
 // 出演可能時間帯（1日に複数の時間範囲を持てる）
@@ -46,8 +46,12 @@ export interface Band {
   name: string;
   performanceDuration: number; // 演奏時間（分）
   performanceCount: number; // 出演回数
+  toriPriority: 1 | 2 | 3; // トリ優先度
+  costume: boolean; // 衣装
+  bandMaster: string; // バンドマスター
   members: string[]; // 出演メンバー名の配列
   availableTimeSlots: AvailableTimeSlot[]; // 出演可能時間帯
+  backupRehearsalTimeSlots?: AvailableTimeSlot[]; // リハーサルで通常時間に入れられない場合の予備時間帯
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,6 +77,7 @@ export interface TimetableEntry {
   customEvent?: CustomEvent; // type が 'custom' の場合
   startTime?: string; // HH:mm形式（自動計算される）
   endTime?: string; // HH:mm形式（自動計算される）
+  fixedStartTime?: string; // HH:mm形式。自動配置・再計算でも動かさない開始時刻
   order: number; // 並び順
   transitionTime?: number; // 転換時間（分単位、このエントリの前に挿入される）
 }
@@ -89,6 +94,7 @@ export interface Cool {
 export interface DailyTimetable {
   date: string; // ISO 8601形式
   startTime: string; // HH:mm形式（その日の開始時刻）
+  endTime?: string; // HH:mm形式（その日の終了時刻、未設定なら上限なし）
   cools: Cool[]; // クール構造（空配列の場合はクール分けなし）
   entries: TimetableEntry[]; // クール分けしない場合のエントリー（後方互換性のため残す）
 }
@@ -98,7 +104,8 @@ export interface Timetable {
   id: string;
   eventId: string;
   type: 'performance' | 'rehearsal'; // 本番用かリハーサル用か
-  dailyTimetables: DailyTimetable[];
+    dailyTimetables: DailyTimetable[];
+    rehearsalInitialized?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -108,12 +115,27 @@ export interface Timetable {
 // カスタム列の紐付け方式
 export type CustomColumnBindingType = 'sequence' | 'entity';
 
+export interface ShiftSlot {
+  id: string;
+  size: number; // クール内で連続する行数。カスタムイベントも1行として数える
+  assignee?: string;
+}
+
+export interface CustomColumnShift {
+  candidates: string[];
+  split: { mode: 'per-cool' | 'per-entries'; value: number };
+  slotsByDate: { [date: string]: { [coolId: string]: ShiftSlot[] } };
+}
+
 // カスタム列定義
 export interface CustomColumn {
   id: string;
   name: string;
   bindingType: CustomColumnBindingType; // 'sequence': 位置固定, 'entity': エントリー追従
   order: number;
+  isPublic?: boolean; // 明示的にtrueの列だけ一般公開する（既存列は非公開）
+  sharedColumnId?: string | null; // もう一方の共通列ID。nullは明示的に共通解除済み
+  shift?: CustomColumnShift; // 各タイムテーブル側の枠・担当者。共通列では候補だけ同期
 }
 
 // カスタムセルデータ
@@ -143,9 +165,12 @@ export interface CustomFieldsSettings {
 // 制約違反の種類
 export type ViolationType = 
   | 'availability-exceeded' // 出演可能時間帯の超過
+  | 'backup-rehearsal-used' // リハーサルの予備出演可能時間を使用
   | 'duplicate-in-cool'      // 同一クール内での重複
   | 'consecutive-performance' // 連続出演
-  | 'cool-time-exceeded';    // 次のクール開始時刻を超過
+  | 'cool-time-exceeded'      // 次のクール開始時刻を超過
+  | 'day-end-exceeded'        // 当日の終了時刻を超過
+  | 'shift-conflict';         // カスタム列の担当者重複
 
 // 制約違反の重大度
 export type ViolationSeverity = 'high' | 'medium' | 'low';
@@ -161,6 +186,7 @@ export interface ConstraintViolation {
   message: string; // 違反の説明メッセージ
   bandId?: string; // 該当するバンドのID
   relatedEntryIds?: string[]; // 関連する他のエントリID（重複や連続出演の場合）
+  shiftSlotId?: string; // カスタム列の重複箇所への移動用
 }
 
 // ユーザー発行APIトークン（サマリー）
@@ -189,6 +215,8 @@ export interface ApiPasswordTestCredentials {
 // ========== Undo/Redo 関連 ==========
 
 export type TimetableOpType =
+  | 'timetable:autoSchedule'
+  | 'timetable:resetAll'
   | 'entry:add'
   | 'entry:delete'
   | 'entry:reorder'
@@ -205,7 +233,10 @@ export type CustomFieldsOpType =
   | 'customColumn:add'
   | 'customColumn:delete'
   | 'customColumn:rename'
-  | 'customColumn:reorder';
+  | 'customColumn:reorder'
+  | 'customColumn:visibility'
+  | 'customColumn:shared'
+  | 'customColumn:shift';
 
 export type OperationType = TimetableOpType | BandOpType | CustomFieldsOpType;
 

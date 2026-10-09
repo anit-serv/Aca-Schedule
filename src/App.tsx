@@ -8,6 +8,7 @@ const MyEventsPage = lazy(() => import('./pages/MyEventsPage').then(m => ({ defa
 const EventCreationWizard = lazy(() => import('./components/EventCreationWizard').then(m => ({ default: m.EventCreationWizard })));
 const EventEditorPage = lazy(() => import('./pages/EventEditorPage').then(m => ({ default: m.EventEditorPage })));
 const PublicTimetablePage = lazy(() => import('./pages/PublicTimetablePage').then(m => ({ default: m.PublicTimetablePage })));
+const StakeholderSettingsPage = lazy(() => import('./pages/StakeholderSettingsPage').then(m => ({ default: m.StakeholderSettingsPage })));
 const SetPasswordPage = lazy(() => import('./pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
 
 const PageLoadingFallback = () => (
@@ -24,7 +25,8 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/set-password" element={<SetPasswordPage />} />
-            <Route path="/share/:eventId" element={<PublicTimetablePage />} />
+            <Route path="/share/:eventId" element={<PublicTimetablePage key="public" />} />
+            <Route path="/stakeholder/:eventId" element={<PublicTimetablePage key="stakeholder" audience="stakeholder" />} />
             <Route
               path="/"
               element={
@@ -38,6 +40,14 @@ function App() {
               element={
                 <AuthGuard>
                   <EventCreationWizard />
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/events/:eventId/stakeholder-settings"
+              element={
+                <AuthGuard>
+                  <StakeholderSettingsPage />
                 </AuthGuard>
               }
             />

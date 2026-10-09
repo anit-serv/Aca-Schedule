@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { PasswordField } from '../components/PasswordField';
 
 export const SetPasswordPage = () => {
   const { currentUser, needsPasswordSetup, setPasswordForCurrentUser, logout } = useAuth();
@@ -10,6 +11,7 @@ export const SetPasswordPage = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!currentUser) {
@@ -87,10 +89,10 @@ export const SetPasswordPage = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1 text-gray-700">新しいパスワード</label>
-              <input
-                type="password"
+              <PasswordField
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmPasswordRef.current?.focus(); } }}
                 className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="6文字以上"
                 minLength={6}
@@ -100,8 +102,8 @@ export const SetPasswordPage = () => {
 
             <div>
               <label className="block text-sm font-medium mb-1 text-gray-700">パスワード（確認）</label>
-              <input
-                type="password"
+              <PasswordField
+                ref={confirmPasswordRef}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"

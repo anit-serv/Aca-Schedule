@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.npm-cache/
 dist
 dist-ssr
 *.local
@@ -28,3 +29,9 @@ TECHNICAL_GUIDE.md
 .env.local 
 .vercel
 .claude
+tmp/
+.codex-remote-attachments/
+.tmp-vitest/
+figma/
+api/_lib/autoScheduleAlgorithm.js
+api/_lib/stakeholderScheduleAlgorithm.js

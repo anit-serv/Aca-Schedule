@@ -48,6 +48,19 @@ export const useTimetableHelpers = ({
 
   // 未配置バンドのリスト
   const unplacedBands = useMemo(() => {
+    if (timetableType === 'rehearsal' && eventSettings.rehearsalType === 'cool-pre-rehearsal') {
+      const performanceDay = performanceTimetable?.dailyTimetables.find(day => day.date === selectedDate);
+      const rehearsalDay = rehearsalTimetable?.dailyTimetables.find(day => day.date === selectedDate);
+      const missingIds = new Set<string>();
+      performanceDay?.cools.forEach((cool, index) => {
+        const placed = new Set(rehearsalDay?.cools[index]?.entries
+          .filter(entry => entry.type === 'band').map(entry => entry.bandId));
+        cool.entries.forEach(entry => {
+          if (entry.type === 'band' && entry.bandId && !placed.has(entry.bandId)) missingIds.add(entry.bandId);
+        });
+      });
+      return bands.filter(band => missingIds.has(band.id)).map(band => ({ ...band, placedCount: 0 }));
+    }
     // リハーサルタイムテーブルで、かつ当日リハーサル(クール直前/当日一括)の場合の特別処理
     if (timetableType === 'rehearsal' && (eventSettings.rehearsalType === 'cool-pre-rehearsal' || eventSettings.rehearsalType === 'day-start-rehearsal')) {
       // 本番タイムテーブルから当日配置されているバンドIDを抽出
@@ -150,7 +163,7 @@ export const useTimetableHelpers = ({
         const transitionTime = entry.transitionTime || 0;
         
         const [hours, minutes] = currentTime.split(':').map(Number);
-        const startMinutes = hours * 60 + minutes + transitionTime;
+        const startMinutes = entry.fixedStartTime ? Number(entry.fixedStartTime.slice(0, 2)) * 60 + Number(entry.fixedStartTime.slice(3)) : hours * 60 + minutes + transitionTime;
         const endMinutes = startMinutes + duration;
         const startHours = Math.floor(startMinutes / 60);
         const startMins = startMinutes % 60;
@@ -182,7 +195,7 @@ export const useTimetableHelpers = ({
       const transitionTime = entry.transitionTime || 0;
 
       const [hours, minutes] = currentTime.split(':').map(Number);
-      const startMinutes = hours * 60 + minutes + transitionTime;
+      const startMinutes = entry.fixedStartTime ? Number(entry.fixedStartTime.slice(0, 2)) * 60 + Number(entry.fixedStartTime.slice(3)) : hours * 60 + minutes + transitionTime;
       const endMinutes = startMinutes + duration;
       const startHours = Math.floor(startMinutes / 60);
       const startMins = startMinutes % 60;
@@ -239,7 +252,7 @@ export const useTimetableHelpers = ({
         if (timetableType === 'performance') {
           // 対応するクールのリハ終了時刻を本番クール開始時刻として常に優先
           const linkedRehearsalEndTime = getCoolEndTime(rehearsalDailyTimetable?.cools?.[coolIndex]);
-          if (linkedRehearsalEndTime) {
+          if (linkedRehearsalEndTime && !cool.startTime) {
             currentTime = linkedRehearsalEndTime;
           }
         } else if (timetableType === 'rehearsal' && coolIndex > 0) {

@@ -8,6 +8,7 @@ interface DesktopClockTimePickerProps {
   onChange: (value: string | undefined) => void;
   disabled?: boolean;
   allowClear?: boolean;
+  allow24Hour?: boolean;
   placeholder?: string;
   className?: string;
   inputClassName?: string;
@@ -75,6 +76,7 @@ export const DesktopClockTimePicker = ({
   onChange,
   disabled = false,
   allowClear = false,
+  allow24Hour = false,
   placeholder = '--:--',
   className = '',
   inputClassName = '',
@@ -89,11 +91,31 @@ export const DesktopClockTimePicker = ({
   const [dragMode, setDragMode] = useState<'hour' | 'minute' | null>(null);
   const [popupStyle, setPopupStyle] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  const parsed = useMemo(() => parseTime(value), [value]);
+  const parsed = useMemo(() => parseTime(value === '24:00' ? '00:00' : value), [value]);
 
   const now = new Date();
   const [draftHour, setDraftHour] = useState<number>(parsed?.hour ?? now.getHours());
   const [draftMinute, setDraftMinute] = useState<number>(parsed?.minute ?? now.getMinutes());
+
+  const updatePopupPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const popupWidth = 280;
+    const popupHeight = 360;
+    const margin = 8;
+
+    let left = rect.left;
+    if (left + popupWidth > window.innerWidth - margin) left = window.innerWidth - popupWidth - margin;
+    if (left < margin) left = margin;
+
+    let top = rect.bottom + margin;
+    if (top + popupHeight > window.innerHeight - margin) top = rect.top - popupHeight - margin;
+    if (top < margin) top = margin;
+
+    setPopupStyle({ top, left });
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -107,32 +129,6 @@ export const DesktopClockTimePicker = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    const updatePopupPosition = () => {
-      const trigger = triggerRef.current;
-      if (!trigger) return;
-
-      const rect = trigger.getBoundingClientRect();
-      const popupWidth = 280;
-      const popupHeight = 360;
-      const margin = 8;
-
-      let left = rect.left;
-      if (left + popupWidth > window.innerWidth - margin) {
-        left = window.innerWidth - popupWidth - margin;
-      }
-      if (left < margin) left = margin;
-
-      let top = rect.bottom + margin;
-      if (top + popupHeight > window.innerHeight - margin) {
-        top = rect.top - popupHeight - margin;
-      }
-      if (top < margin) top = margin;
-
-      setPopupStyle({ top, left });
-    };
-
-    updatePopupPosition();
-
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (
@@ -145,20 +141,18 @@ export const DesktopClockTimePicker = ({
       }
     };
 
-    const handleReposition = () => updatePopupPosition();
-
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('resize', handleReposition);
-    window.addEventListener('scroll', handleReposition, true);
+    window.addEventListener('resize', updatePopupPosition);
+    window.addEventListener('scroll', updatePopupPosition, true);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('resize', handleReposition);
-      window.removeEventListener('scroll', handleReposition, true);
+      window.removeEventListener('resize', updatePopupPosition);
+      window.removeEventListener('scroll', updatePopupPosition, true);
     };
-  }, [isOpen]);
+  }, [isOpen, updatePopupPosition]);
 
-  const displayValue = parsed ? formatTime(parsed.hour, parsed.minute) : placeholder;
+  const displayValue = value === '24:00' && allow24Hour ? value : parsed ? formatTime(parsed.hour, parsed.minute) : placeholder;
 
   const hourSelection = useMemo(() => {
     if (draftHour === 0 || draftHour >= 13) {
@@ -243,7 +237,13 @@ export const DesktopClockTimePicker = ({
           ref={triggerRef}
           type="button"
           disabled={disabled}
-          onClick={() => setIsOpen((v) => !v)}
+          onClick={() => {
+            if (isOpen) setIsOpen(false);
+            else {
+              updatePopupPosition();
+              setIsOpen(true);
+            }
+          }}
           className={inputClassName || `px-3 py-1.5 bg-white border border-gray-300 rounded text-sm text-gray-900 min-w-[88px] text-left ${
             disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-emerald-400'
           }`}
@@ -398,7 +398,20 @@ export const DesktopClockTimePicker = ({
           )}
 
           <div className="mt-3 flex items-center justify-between">
-            <div />
+            <div>
+              {allow24Hour && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange('24:00');
+                    setIsOpen(false);
+                  }}
+                  className="rounded px-2 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50"
+                >
+                  24:00
+                </button>
+              )}
+            </div>
             <div className="flex gap-2">
               <button
                 type="button"

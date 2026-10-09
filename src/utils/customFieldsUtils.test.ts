@@ -4,6 +4,9 @@ import {
   addColumn,
   removeColumn,
   renameColumn,
+  setColumnPublic,
+  setColumnShared,
+  getSharedColumnId,
   reorderColumns,
   setCellValue,
   getCellData,
@@ -32,14 +35,75 @@ const entityColumn = (id: string, order: number): CustomColumn => ({
 });
 
 describe('addColumn / removeColumn / renameColumn / reorderColumns', () => {
+  it('同名の既存列を値を残して共通化し、解除しても両側の列を残す', () => {
+    let settings = addColumn(undefined, 'performance', { id: 'p', name: '担当', bindingType: 'sequence' });
+    settings = addColumn(settings, 'rehearsal', { id: 'r', name: '担当', bindingType: 'sequence' });
+    settings = setCellValue(settings, 'rehearsal', '2026-06-10', sequenceColumn('r', 0), 1, '音響');
+    settings = setColumnShared(settings, 'performance', 'p', true, 'r');
+    expect(settings.performance.columns[0].sharedColumnId).toBe('r');
+    expect(settings.rehearsal.columns[0].sharedColumnId).toBe('p');
+    settings = renameColumn(settings, 'performance', 'p', 'スタッフ');
+    settings = setColumnPublic(settings, 'rehearsal', 'r', true);
+    expect(settings.performance.columns[0]).toMatchObject({ name: 'スタッフ', isPublic: true });
+    expect(settings.rehearsal.dailyData['2026-06-10'].bySequence[1].r.value).toBe('音響');
+    settings = setColumnShared(settings, 'performance', 'p', false);
+    expect(getSharedColumnId(settings, 'performance', settings.performance.columns[0])).toBeUndefined();
+    expect(getSharedColumnId(settings, 'rehearsal', settings.rehearsal.columns[0])).toBeUndefined();
+    expect(settings.rehearsal.columns).toHaveLength(1);
+  });
+
+  it('以前に同じIDで両方へ追加した列は共通として認識し、解除後は再連携しない', () => {
+    let settings = addColumn(undefined, 'performance', { id: 'legacy', name: '担当', bindingType: 'sequence' });
+    settings = addColumn(settings, 'rehearsal', { id: 'legacy', name: '担当', bindingType: 'sequence' });
+    expect(getSharedColumnId(settings, 'performance', settings.performance.columns[0])).toBe('legacy');
+    settings = setColumnShared(settings, 'performance', 'legacy', false);
+    expect(getSharedColumnId(settings, 'performance', settings.performance.columns[0])).toBeUndefined();
+    expect(getSharedColumnId(settings, 'rehearsal', settings.rehearsal.columns[0])).toBeUndefined();
+    settings = renameColumn(settings, 'performance', 'legacy', '本番担当');
+    expect(settings.rehearsal.columns[0].name).toBe('担当');
+  });
+
+  it('新規の共通列をもう一方に作り、削除時は両方の列を削除する', () => {
+    let settings = addColumn(undefined, 'performance', { id: 'p', name: '担当', bindingType: 'entity' });
+    settings = setColumnShared(settings, 'performance', 'p', true, undefined, 'r');
+    expect(settings.rehearsal.columns[0]).toMatchObject({ id: 'r', name: '担当', sharedColumnId: 'p' });
+    settings = removeColumn(settings, 'performance', 'p');
+    expect(settings.performance.columns).toHaveLength(0);
+    expect(settings.rehearsal.columns).toHaveLength(0);
+  });
+
+  it('共通列を別の共通列より前に動かすと、もう一方の共通列順も揃える', () => {
+    let settings = createEmptyCustomFieldsSettings();
+    for (const [type, id, name] of [
+      ['performance', 'pa', 'A'], ['performance', 'local', '本番のみ'], ['performance', 'pb', 'B'],
+      ['rehearsal', 'ra', 'A'], ['rehearsal', 'rehearsal-local', 'リハのみ'], ['rehearsal', 'rb', 'B'],
+    ] as const) settings = addColumn(settings, type, { id, name, bindingType: 'sequence' });
+    settings = setColumnShared(settings, 'performance', 'pa', true, 'ra');
+    settings = setColumnShared(settings, 'performance', 'pb', true, 'rb');
+    settings = reorderColumns(settings, 'performance', 2, 0);
+    expect(settings.performance.columns.map(column => column.id)).toEqual(['pb', 'pa', 'local']);
+    expect(settings.rehearsal.columns.map(column => column.id)).toEqual(['rb', 'rehearsal-local', 'ra']);
+    settings = reorderColumns(settings, 'performance', 2, 1);
+    expect(settings.rehearsal.columns.map(column => column.id)).toEqual(['rb', 'rehearsal-local', 'ra']);
+    settings = reorderColumns(settings, 'rehearsal', 2, 0);
+    expect(settings.rehearsal.columns.map(column => column.id)).toEqual(['ra', 'rb', 'rehearsal-local']);
+    expect(settings.performance.columns.map(column => column.id)).toEqual(['pa', 'local', 'pb']);
+  });
+  it('新しい列と公開設定のない既存列は一般公開されない', () => {
+    const settings = addColumn(undefined, 'performance', { id: 'c1', name: '備考', bindingType: 'sequence' });
+    expect(settings.performance.columns[0].isPublic).toBe(false);
+    const published = setColumnPublic(settings, 'performance', 'c1', true);
+    expect(published.performance.columns[0].isPublic).toBe(true);
+    expect(settings.performance.columns[0].isPublic).toBe(false);
+  });
   it('列を追加するとorderが末尾に設定される', () => {
     let settings = createEmptyCustomFieldsSettings();
     settings = addColumn(settings, 'performance', { id: 'c1', name: '備考', bindingType: 'sequence' });
     settings = addColumn(settings, 'performance', { id: 'c2', name: 'メモ', bindingType: 'entity' });
 
     expect(settings.performance.columns).toEqual([
-      { id: 'c1', name: '備考', bindingType: 'sequence', order: 0 },
-      { id: 'c2', name: 'メモ', bindingType: 'entity', order: 1 },
+      { id: 'c1', name: '備考', bindingType: 'sequence', order: 0, isPublic: false },
+      { id: 'c2', name: 'メモ', bindingType: 'entity', order: 1, isPublic: false },
     ]);
   });
 
@@ -52,7 +116,7 @@ describe('addColumn / removeColumn / renameColumn / reorderColumns', () => {
 
     settings = removeColumn(settings, 'performance', 'c1');
 
-    expect(settings.performance.columns).toEqual([{ id: 'c2', name: 'B', bindingType: 'entity', order: 0 }]);
+    expect(settings.performance.columns).toEqual([{ id: 'c2', name: 'B', bindingType: 'entity', order: 0, isPublic: false }]);
     expect(settings.performance.dailyData['2026-06-10'].bySequence[1]?.['c1']).toBeUndefined();
     expect(settings.performance.dailyData['2026-06-10'].byEntity['entry1']?.['c2']?.value).toBe('val2');
   });

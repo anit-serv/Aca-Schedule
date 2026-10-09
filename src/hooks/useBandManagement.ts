@@ -16,8 +16,12 @@ export const useBandManagement = (
       name: '',
       performanceDuration: eventSettings.presetDurations[0] || 10,
       performanceCount: 1,
+      toriPriority: 1,
+      costume: false,
+      bandMaster: '',
       members: [],
       availableTimeSlots: [],
+      backupRehearsalTimeSlots: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };

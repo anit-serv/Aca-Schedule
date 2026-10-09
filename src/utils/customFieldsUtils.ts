@@ -2,11 +2,14 @@ import type {
   CustomFieldsSettings,
   CustomFieldsTypeData,
   CustomColumn,
+  CustomColumnShift,
   CustomCellData,
   DailyCustomData,
   Timetable,
   DailyTimetable,
 } from '../types';
+import { generateUUID } from './generateUUID';
+import { createShift, editShiftSlots, fitShiftSlots, getOverlappingShiftAssignees, getShiftSlotAt, getShiftSlots, makeShiftSlots, normalizePersonName, uniquePeople, type ShiftSlotAction } from './customShift';
 
 // ========== 初期化ヘルパー ==========
 
@@ -54,6 +57,7 @@ export const addColumn = (
   const newColumn: CustomColumn = {
     ...column,
     order: typeData.columns.length,
+    isPublic: column.isPublic === true,
   };
   typeData.columns.push(newColumn);
   return result;
@@ -66,23 +70,21 @@ export const removeColumn = (
   columnId: string
 ): CustomFieldsSettings => {
   const result = structuredClone(settings);
-  const typeData = result[type];
-
-  // 列定義から削除
-  typeData.columns = typeData.columns
-    .filter(c => c.id !== columnId)
-    .map((c, i) => ({ ...c, order: i }));
-
-  // 全日付のデータから該当列のデータを削除
-  for (const date of Object.keys(typeData.dailyData)) {
-    const daily = typeData.dailyData[date];
-    for (const seq of Object.keys(daily.bySequence)) {
-      delete daily.bySequence[Number(seq)][columnId];
+  const current = result[type].columns.find(column => column.id === columnId);
+  const linkedId = current ? getSharedColumnId(result, type, current) : undefined;
+  const removeFromType = (targetType: 'performance' | 'rehearsal', targetId: string) => {
+    const typeData = result[targetType];
+    typeData.columns = typeData.columns
+      .filter(column => column.id !== targetId)
+      .map((column, index) => ({ ...column, order: index }));
+    for (const daily of Object.values(typeData.dailyData)) {
+      for (const cells of Object.values(daily.bySequence)) delete cells[targetId];
+      for (const cells of Object.values(daily.byEntity)) delete cells[targetId];
     }
-    for (const entryId of Object.keys(daily.byEntity)) {
-      delete daily.byEntity[entryId][columnId];
-    }
-  }
+  };
+
+  removeFromType(type, columnId);
+  if (linkedId) removeFromType(otherTimetableType(type), linkedId);
 
   return result;
 };
@@ -98,8 +100,256 @@ export const renameColumn = (
   const col = result[type].columns.find(c => c.id === columnId);
   if (col) {
     col.name = newName;
+    const counterpart = result[otherTimetableType(type)].columns.find(column => column.id === getSharedColumnId(result, type, col));
+    if (counterpart) counterpart.name = newName;
   }
   return result;
+};
+
+/** 一般公開する列を明示的に設定する */
+export const setColumnPublic = (
+  settings: CustomFieldsSettings,
+  type: 'performance' | 'rehearsal',
+  columnId: string,
+  isPublic: boolean
+): CustomFieldsSettings => {
+  const result = structuredClone(settings);
+  const column = result[type].columns.find(c => c.id === columnId);
+  if (column) {
+    column.isPublic = isPublic;
+    const counterpart = result[otherTimetableType(type)].columns.find(item => item.id === getSharedColumnId(result, type, column));
+    if (counterpart) counterpart.isPublic = isPublic;
+  }
+  return result;
+};
+
+const otherTimetableType = (type: 'performance' | 'rehearsal') =>
+  type === 'performance' ? 'rehearsal' : 'performance';
+
+/** 以前の「両方に追加」で同じIDを持つ列も共通列として扱う。 */
+export const getSharedColumnId = (
+  settings: CustomFieldsSettings | undefined,
+  type: 'performance' | 'rehearsal',
+  column: CustomColumn,
+): string | undefined => {
+  if (column.sharedColumnId === null) return undefined;
+  if (column.sharedColumnId) return column.sharedColumnId;
+  return settings?.[otherTimetableType(type)].columns.some(other => other.id === column.id) ? column.id : undefined;
+};
+
+/** シフト列を位置固定にし、既存のエントリー追従セルを現在の出演順へ移す。 */
+const forceShiftPositionBinding = (
+  settings: CustomFieldsSettings,
+  type: 'performance' | 'rehearsal',
+  column: CustomColumn,
+  timetable?: Timetable | null,
+): boolean => {
+  if (!column.shift) return false;
+  let changed = column.bindingType !== 'sequence';
+  column.bindingType = 'sequence';
+  for (const day of timetable?.dailyTimetables ?? []) {
+    const daily = settings[type].dailyData[day.date];
+    if (!daily) continue;
+    for (const { entryId, sequenceNumber } of getEntriesWithCoolInfo(day)) {
+      const cell = daily.byEntity[entryId]?.[column.id];
+      if (!cell) continue;
+      daily.bySequence[sequenceNumber] ??= {};
+      daily.bySequence[sequenceNumber][column.id] ??= { value: cell.value };
+      delete daily.byEntity[entryId][column.id];
+      if (Object.keys(daily.byEntity[entryId]).length === 0) delete daily.byEntity[entryId];
+      changed = true;
+    }
+  }
+  return changed;
+};
+
+export const normalizeShiftPositionBindings = (
+  settings: CustomFieldsSettings,
+  performanceTimetable?: Timetable | null,
+  rehearsalTimetable?: Timetable | null,
+): CustomFieldsSettings => {
+  const result = structuredClone(settings);
+  let changed = false;
+  for (const [type, timetable] of [
+    ['performance', performanceTimetable], ['rehearsal', rehearsalTimetable],
+  ] as const) {
+    for (const column of result[type].columns) {
+      changed = forceShiftPositionBinding(result, type, column, timetable) || changed;
+    }
+  }
+  return changed ? result : settings;
+};
+
+/** 列を共通化する。既存の同名列は値を保ったまま連携する。 */
+export const setColumnShared = (
+  settings: CustomFieldsSettings,
+  type: 'performance' | 'rehearsal',
+  columnId: string,
+  shared: boolean,
+  otherColumnId?: string,
+  newColumnId?: string,
+  currentTimetable?: Timetable | null,
+  otherTimetable?: Timetable | null,
+): CustomFieldsSettings => {
+  const result = structuredClone(settings);
+  const current = result[type].columns.find(column => column.id === columnId);
+  if (!current) return settings;
+  const other = result[otherTimetableType(type)].columns;
+  if (!shared) {
+    const counterpart = other.find(column => column.id === getSharedColumnId(result, type, current));
+    if (counterpart) counterpart.sharedColumnId = null;
+    current.sharedColumnId = null;
+    return result;
+  }
+
+  const counterpart = otherColumnId
+    ? other.find(column => column.id === otherColumnId)
+    : other.find(column => column.name === current.name);
+  if (counterpart && getSharedColumnId(result, otherTimetableType(type), counterpart)
+    && getSharedColumnId(result, otherTimetableType(type), counterpart) !== current.id) {
+    throw new Error('同名の列は別の共通列と連携しています。');
+  }
+  const linked: CustomColumn = counterpart ?? {
+    id: newColumnId ?? generateUUID(),
+    name: current.name,
+    bindingType: current.bindingType,
+    order: other.length,
+    isPublic: current.isPublic === true,
+  };
+  if (!counterpart) other.push(linked);
+  current.sharedColumnId = linked.id;
+  linked.sharedColumnId = current.id;
+  linked.isPublic = current.isPublic === true;
+  if (current.shift || linked.shift) {
+    const candidates = uniquePeople([...(current.shift?.candidates ?? []), ...(linked.shift?.candidates ?? [])]);
+    const split = (current.shift ?? linked.shift)!.split;
+    if (current.shift) current.shift = { ...current.shift, candidates, split };
+    else current.shift = createShift(candidates, split, currentTimetable ?? null);
+    if (linked.shift) linked.shift = { ...linked.shift, candidates, split };
+    else linked.shift = createShift(candidates, split, otherTimetable ?? null);
+    forceShiftPositionBinding(result, type, current, currentTimetable);
+    forceShiftPositionBinding(result, otherTimetableType(type), linked, otherTimetable);
+  }
+  return result;
+};
+
+/** 既存の共通列もシフトモード・候補・枠数設定を揃える。枠境界と担当者は各側に残す。 */
+export const synchronizeSharedColumnShifts = (
+  settings: CustomFieldsSettings,
+  performanceTimetable?: Timetable | null,
+  rehearsalTimetable?: Timetable | null,
+): CustomFieldsSettings => {
+  let result = settings;
+  for (const column of settings.performance.columns) {
+    const linkedId = getSharedColumnId(settings, 'performance', column);
+    const linked = settings.rehearsal.columns.find(other => other.id === linkedId);
+    if (!linked || (!column.shift && !linked.shift)) continue;
+    const candidates = uniquePeople([...(column.shift?.candidates ?? []), ...(linked.shift?.candidates ?? [])]);
+    const split = (column.shift ?? linked.shift)!.split;
+    const matches = (shift: CustomColumnShift | undefined) => shift
+      && shift.split.mode === split.mode && shift.split.value === split.value
+      && JSON.stringify(shift.candidates) === JSON.stringify(candidates);
+    if (matches(column.shift) && matches(linked.shift)) continue;
+    result = setColumnShared(result, 'performance', column.id, true, linked.id, undefined,
+      performanceTimetable, rehearsalTimetable);
+  }
+  return result;
+};
+
+/** 共通列のシフトモード・候補・枠数設定を同期し、枠と担当者は各側に保持する。 */
+export const setColumnShift = (
+  settings: CustomFieldsSettings,
+  type: 'performance' | 'rehearsal',
+  columnId: string,
+  shift?: CustomColumnShift,
+  counterpartTimetable?: Timetable | null,
+  currentTimetable?: Timetable | null,
+): CustomFieldsSettings => {
+  const result = structuredClone(settings);
+  const column = result[type].columns.find(item => item.id === columnId);
+  if (!column) return settings;
+  const sharedId = getSharedColumnId(result, type, column);
+  const counterpart = result[otherTimetableType(type)].columns.find(item => item.id === sharedId);
+  const removedCandidates = shift
+    ? uniquePeople([...(column.shift?.candidates ?? []), ...(counterpart?.shift?.candidates ?? [])]).filter(name => !shift.candidates.includes(name))
+    : [];
+  if (shift) column.shift = { ...shift, candidates: uniquePeople(shift.candidates) };
+  else delete column.shift;
+  if (counterpart) {
+    if (!shift) delete counterpart.shift;
+    else if (!counterpart.shift || counterpart.shift.split.mode !== shift.split.mode || counterpart.shift.split.value !== shift.split.value) {
+      counterpart.shift = createShift(column.shift!.candidates, shift.split, counterpartTimetable ?? null);
+    } else {
+      counterpart.shift.candidates = column.shift!.candidates;
+      counterpart.shift.split = { ...shift.split };
+    }
+  }
+  forceShiftPositionBinding(result, type, column, currentTimetable);
+  if (counterpart) forceShiftPositionBinding(result, otherTimetableType(type), counterpart, counterpartTimetable);
+  if (removedCandidates.length) for (const target of [column, counterpart]) {
+    for (const day of Object.values(target?.shift?.slotsByDate ?? {})) for (const slots of Object.values(day)) for (const slot of slots) {
+      if (slot.assignee && removedCandidates.includes(slot.assignee)) delete slot.assignee;
+    }
+  }
+  return result;
+};
+
+export const updateShiftSlot = (
+  settings: CustomFieldsSettings,
+  type: 'performance' | 'rehearsal',
+  columnId: string,
+  date: string,
+  coolId: string,
+  count: number,
+  action: ShiftSlotAction,
+): CustomFieldsSettings => {
+  const result = structuredClone(settings);
+  const column = result[type].columns.find(item => item.id === columnId);
+  if (!column?.shift) return settings;
+  const slots = getShiftSlots(column, date, coolId, count);
+  if (action.index < 0 || action.index >= slots.length) return settings;
+  if (action.type === 'assign' && action.assignee && !column.shift.candidates.includes(action.assignee)) return settings;
+  if (action.type === 'assign' && action.assignee) {
+    const start = slots.slice(0, action.index).reduce((sum, slot) => sum + slot.size, 0);
+    const target = getShiftSlotAt(slots, start);
+    if (!target || getOverlappingShiftAssignees(result[type].columns, columnId, date, coolId, count, start, target.slot.size)
+      .some(name => normalizePersonName(name) === normalizePersonName(action.assignee!))) return settings;
+  }
+  if (!column.shift.slotsByDate[date]) column.shift.slotsByDate[date] = {};
+  column.shift.slotsByDate[date][coolId] = editShiftSlots(slots, action);
+  return result;
+};
+
+/** 行数・クール構造の変更後も各枠を有効な連続範囲に保つ。 */
+export const reconcileShiftForDay = (
+  settings: CustomFieldsSettings,
+  type: 'performance' | 'rehearsal',
+  day: DailyTimetable,
+): CustomFieldsSettings => {
+  const columns = settings[type].columns.filter(column => column.shift);
+  if (!columns.length) return settings;
+  const result = structuredClone(settings);
+  const groups = day.cools.length
+    ? day.cools.map(cool => ({ id: cool.id, count: cool.entries.length }))
+    : [{ id: 'flat', count: day.entries.length }];
+  let changed = false;
+  for (const column of result[type].columns.filter(item => item.shift)) {
+    const shift = column.shift!;
+    const previous = shift.slotsByDate[day.date] ?? {};
+    const next: typeof previous = {};
+    for (const group of groups) {
+      if (!group.count) continue;
+      const slots = previous[group.id]
+        ? fitShiftSlots(previous[group.id], group.count)
+        : makeShiftSlots(group.count, shift.split);
+      next[group.id] = slots;
+    }
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      shift.slotsByDate[day.date] = next;
+      changed = true;
+    }
+  }
+  return changed ? result : settings;
 };
 
 /** 列の並び替え */
@@ -114,6 +364,14 @@ export const reorderColumns = (
   const [moved] = columns.splice(fromIndex, 1);
   columns.splice(toIndex, 0, moved);
   columns.forEach((c, i) => { c.order = i; });
+  const otherColumns = result[otherTimetableType(type)].columns.sort((a, b) => a.order - b.order);
+  const sharedIds = columns.map(column => getSharedColumnId(result, type, column))
+    .filter((id): id is string => !!id && otherColumns.some(other => other.id === id));
+  const sharedSet = new Set(sharedIds);
+  const sharedSlots = otherColumns.flatMap((column, index) => sharedSet.has(column.id) ? [index] : []);
+  const byId = new Map(otherColumns.map(column => [column.id, column]));
+  sharedSlots.forEach((slot, index) => { otherColumns[slot] = byId.get(sharedIds[index])!; });
+  otherColumns.forEach((column, index) => { column.order = index; });
   return result;
 };
 
@@ -143,10 +401,9 @@ export const setCellValue = (
       daily.bySequence[seq] = {};
     }
     const existing = daily.bySequence[seq][column.id];
-    daily.bySequence[seq][column.id] = {
-      value,
-      rowSpan: existing?.rowSpan,
-    };
+    daily.bySequence[seq][column.id] = existing?.rowSpan === undefined
+      ? { value }
+      : { value, rowSpan: existing.rowSpan };
   } else {
     const entryId = identifier as string;
     if (!daily.byEntity[entryId]) {

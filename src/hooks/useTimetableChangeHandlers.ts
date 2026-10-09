@@ -57,7 +57,7 @@ export const useTimetableChangeHandlers = ({
 
     console.log('[本番TT変更] 日付:', normalizedDailyTimetable.date, 'クール数:', normalizedDailyTimetable.cools?.length || 0);
 
-    // 楽観的更新: ローカル状態を即座に更新
+    // クール番号と重複保存の判定に使う表示中のスナップショット
     const updatedDailyTimetables = performanceTimetable.dailyTimetables.map(dt =>
       dt.date === normalizedDailyTimetable.date ? normalizedDailyTimetable : dt
     ).concat(
@@ -112,13 +112,11 @@ export const useTimetableChangeHandlers = ({
       dailyTimetables: updatedDailyTimetables,
     };
 
-    // 楽観的更新を削除：Firestoreが書き込み時にローカルキャッシュを即座に更新し、
-    // onSnapshotがトリガーされてstateが更新されるため、手動でsetStateする必要はない
-    // これによりrace conditionが完全に排除される
+    // 状態の反映は Firestore の onSnapshot に任せる。
 
     console.log('[本番TT変更] Firestore書き込み開始');
 
-    // Firestoreに保存（全日付を一括で保存して競合を防止）
+    // 最新のドキュメントを基に変更日だけ保存する。
     try {
       const nextHash = JSON.stringify(updatedTimetable.dailyTimetables);
       if (lastSavedPerformanceHashRef.current === nextHash) {
@@ -126,11 +124,12 @@ export const useTimetableChangeHandlers = ({
         return;
       }
 
-      await timetableService.updateTimetable(performanceTimetable.id, {
-        dailyTimetables: updatedTimetable.dailyTimetables,
-      });
-      lastSavedPerformanceHashRef.current = nextHash;
-      console.log('[本番TT変更] Firestore一括保存成功');
+      await timetableService.updateDailyTimetable(
+        performanceTimetable.id,
+        normalizedDailyTimetable,
+        eventSettings.performanceDates
+      );
+      console.log('[本番TT変更] Firestore日別保存成功');
     } catch (error) {
       console.error('タイムテーブル更新エラー:', error);
       alert('タイムテーブルの更新に失敗しました。');
@@ -162,7 +161,7 @@ export const useTimetableChangeHandlers = ({
 
     console.log('[リハTT変更] 日付:', normalizedDailyTimetable.date, 'クール数:', normalizedDailyTimetable.cools?.length || 0);
 
-    // 楽観的更新: ローカル状態を即座に更新
+    // クール番号と重複保存の判定に使う表示中のスナップショット
     const updatedDailyTimetables = rehearsalTimetable.dailyTimetables.map(dt =>
       dt.date === normalizedDailyTimetable.date ? normalizedDailyTimetable : dt
     ).concat(
@@ -226,7 +225,7 @@ export const useTimetableChangeHandlers = ({
 
     console.log('[リハTT変更] Firestore書き込み開始');
 
-    // Firestoreに保存（全日付を一括で保存して競合を防止）
+    // 最新のドキュメントを基に変更日だけ保存する。
     try {
       const nextHash = JSON.stringify(updatedTimetable.dailyTimetables);
       if (lastSavedRehearsalHashRef.current === nextHash) {
@@ -234,11 +233,12 @@ export const useTimetableChangeHandlers = ({
         return;
       }
 
-      await timetableService.updateTimetable(rehearsalTimetable.id, {
-        dailyTimetables: updatedTimetable.dailyTimetables,
-      });
-      lastSavedRehearsalHashRef.current = nextHash;
-      console.log('[リハTT変更] Firestore一括保存成功');
+      await timetableService.updateDailyTimetable(
+        rehearsalTimetable.id,
+        normalizedDailyTimetable,
+        dateList
+      );
+      console.log('[リハTT変更] Firestore日別保存成功');
     } catch (error) {
       console.error('タイムテーブル更新エラー:', error);
       alert('タイムテーブルの更新に失敗しました。');

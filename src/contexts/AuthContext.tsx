@@ -23,7 +23,7 @@ interface AuthContextType {
   needsPasswordSetup: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, displayName: string) => Promise<void>;
-  resendRegistrationEmail: (email: string) => Promise<void>;
+  resendRegistrationEmail: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   setPasswordForCurrentUser: (password: string) => Promise<void>;
   refreshFirebaseUser: () => Promise<void>;
@@ -95,10 +95,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const registerWithEmail = async (email: string, password: string, displayName: string) => {
     await authRegistrationService.registerPending(email, password, displayName);
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    try {
+      await sendEmailVerification(credential.user);
+    } finally {
+      await signOut(auth);
+    }
   };
 
-  const resendRegistrationEmail = async (email: string) => {
-    await authRegistrationService.resendRegistration(email);
+  const resendRegistrationEmail = async (email: string, password: string) => {
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    try {
+      await reload(credential.user);
+      if (!credential.user.emailVerified) {
+        await sendEmailVerification(credential.user);
+      }
+    } finally {
+      await signOut(auth);
+    }
   };
 
   const loginWithGoogle = async () => {

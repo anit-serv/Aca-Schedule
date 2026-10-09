@@ -1,8 +1,11 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useState, useEffect, useMemo, useRef } from 'react';
-import type { Band, TimetableEntry, ConstraintViolation } from '../types';
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import type { Band, TimetableEntry, ConstraintViolation, CustomColumn } from '../types';
 import { Icon } from './Icon';
+import { BandCard } from './BandCard';
+import { matchesTimetableBandSearch } from '../utils/timetableSearch';
 
 interface SortableTimetableRowProps {
   id: string;
@@ -13,9 +16,15 @@ interface SortableTimetableRowProps {
   onRemove: () => void;
   isReadOnly?: boolean; // クール直前リハーサルなどで編集を制限
   onTransitionTimeChange?: (entryId: string, transitionTime: number) => void;
+  onTimeClick?: (entryId: string, field: 'start' | 'end') => void;
   violations?: ConstraintViolation[]; // この行の制約違反リスト
   bandNumber?: number; // バンド番号（カスタムイベントの場合はundefined）
   searchQuery?: string; // 検索クエリ
+  customMode?: boolean;
+  customColumns?: CustomColumn[];
+  renderCustomCell?: (entry: TimetableEntry, column: CustomColumn, index: number) => ReactNode;
+  returningToBank?: boolean;
+  reserveInsertionSpace?: boolean;
 }
 
 export const SortableTimetableRow = ({
@@ -27,22 +36,40 @@ export const SortableTimetableRow = ({
   onRemove,
   isReadOnly = false,
   onTransitionTimeChange,
+  onTimeClick,
   violations = [],
   bandNumber,
   searchQuery = '',
+  customMode = false,
+  customColumns = [],
+  renderCustomCell,
+  returningToBank = false,
+  reserveInsertionSpace = false,
 }: SortableTimetableRowProps) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
+  const dragDisabled = customMode || isReadOnly || Boolean(entry.fixedStartTime);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, active } =
+    useSortable({ id, disabled: { draggable: dragDisabled, droppable: customMode || isReadOnly } });
 
   const [showTransitionModal, setShowTransitionModal] = useState(false);
   const [transitionInput, setTransitionInput] = useState((entry.transitionTime || 0).toString());
   const [tooltipStyle, setTooltipStyle] = useState<{ top?: number; bottom?: number; left: number }>({ left: 0 });
+  const [sourceRectCaptured, setSourceRectCaptured] = useState(false);
   const iconRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // DragOverlay が元の行の位置を測定するまでは、行をレイアウト内に残す。
+    const frame = requestAnimationFrame(() => setSourceRectCaptured(isDragging));
+    return () => cancelAnimationFrame(frame);
+  }, [isDragging]);
 
   // バンド情報が更新されたときに転換時間入力をリセット
   useEffect(() => {
     setTransitionInput((entry.transitionTime || 0).toString());
   }, [entry.transitionTime]);
+
+  useEffect(() => {
+    if (customMode) setShowTransitionModal(false);
+  }, [customMode]);
 
   // ツールチップの位置を計算
   const handleMouseEnter = () => {
@@ -68,9 +95,11 @@ export const SortableTimetableRow = ({
   };
 
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
+    // ドラッグ元の行を表のレイアウトから外す。挿入先の空間はドロップターゲット側だけで作る。
+    transform: active?.id.toString().startsWith('entry-') ? undefined : CSS.Transform.toString(transform),
+    transition: returningToBank || isDragging ? `${transition ? `${transition}, ` : ''}opacity 180ms ease-out` : transition,
+    opacity: returningToBank ? 0 : isDragging ? 0.5 : 1,
+    visibility: isDragging && sourceRectCaptured ? 'collapse' as const : 'visible' as const,
   };
 
   // バンド情報をメモ化して、確実に最新の情報を使用
@@ -109,13 +138,7 @@ export const SortableTimetableRow = ({
 
   // 検索マッチ判定
   const isSearchMatch = useMemo(() => {
-    if (!searchQuery.trim()) return false;
-    const q = searchQuery.toLowerCase();
-    if (band) {
-      if (band.name.toLowerCase().includes(q)) return true;
-      if (band.members.some(m => m.toLowerCase().includes(q))) return true;
-    }
-    return false;
+    return band ? matchesTimetableBandSearch(band, searchQuery) : false;
   }, [searchQuery, band]);
 
   // 制約違反の最も重大度の高いものを取得
@@ -143,10 +166,17 @@ export const SortableTimetableRow = ({
   };
 
   const violationStyle = getViolationStyle();
+  const usesBackupRehearsalTime = violations.some(violation => violation.type === 'backup-rehearsal-used');
+  const useCardGap = reserveInsertionSpace && entry.type === 'band' && Boolean(band);
+  const timetableBackground = isDragging ? 'bg-emerald-100'
+    : usesBackupRehearsalTime ? 'bg-violet-100/80'
+    : violationStyle.bgColor || (entry.type === 'custom' ? 'bg-emerald-100/70' : '');
+  const visibleTimetableBackground = `${timetableBackground} ${isSearchMatch ? 'bg-emerald-50' : ''}`;
+  const fixedCellBackground = customMode ? visibleTimetableBackground : '';
 
   return (
     <>
-      {isDropTarget && (
+      {isDropTarget && !reserveInsertionSpace && (
         <tr className="h-1">
           <td colSpan={6} className="p-0">
             <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
@@ -157,24 +187,31 @@ export const SortableTimetableRow = ({
         ref={setNodeRef}
         style={style}
         data-entry-id={entry.id}
-        className={`border-b border-gray-200 hover:bg-emerald-50 ${
-          isDragging ? 'bg-emerald-100' : 
-          violationStyle.bgColor ? violationStyle.bgColor :
-          entry.type === 'custom' ? 'bg-emerald-100/70' : ''
-        } ${isSearchMatch ? 'ring-2 ring-inset ring-emerald-400 bg-emerald-50' : ''} ${
+        className={`timetable-card-row border-b border-gray-200 ${
+          reserveInsertionSpace && !useCardGap && isDropTarget ? 'insertion-gap-before ' : ''
+        }${reserveInsertionSpace && !useCardGap && isDropTargetAfter ? 'insertion-gap-after ' : ''}${
+          customMode ? '' : visibleTimetableBackground
+        } ${isSearchMatch ? 'ring-2 ring-inset ring-emerald-400' : ''} ${
           searchQuery && !isSearchMatch && entry.type === 'band' ? 'opacity-40' : ''
         }`}
       >
+      {entry.type === 'band' && band ? <td colSpan={6} className={`p-0 ${fixedCellBackground}`}>
+        <motion.div initial={false} animate={{ height: useCardGap && isDropTarget ? 56 : 0 }} transition={{ duration: 0.18, ease: 'easeOut' }} className="overflow-hidden bg-emerald-100/60" />
+        <BandCard band={band} mode="timetable" duration={duration} number={bandNumber} startTime={entry.startTime} endTime={entry.endTime} fixedTime={Boolean(entry.fixedStartTime)} onTimeClick={!isReadOnly ? field => onTimeClick?.(entry.id, field) : undefined} transitionTime={entry.transitionTime} onTransitionClick={!customMode && !isReadOnly ? () => setShowTransitionModal(true) : undefined} onRemove={onRemove} isReadOnly={isReadOnly} violations={violations} dragListeners={dragDisabled ? undefined : listeners} dragAttributes={dragDisabled ? undefined : attributes} customMode={customMode} />
+        <motion.div initial={false} animate={{ height: useCardGap && isDropTargetAfter ? 56 : 0 }} transition={{ duration: 0.18, ease: 'easeOut' }} className="overflow-hidden bg-emerald-100/60" />
+      </td> : <>
       {/* バンド番号列 */}
-      <td className="px-3 py-3 text-sm text-center font-semibold text-gray-600">
+      <td className={`px-3 py-3 text-sm text-center font-semibold text-gray-600 ${fixedCellBackground}`}>
         {bandNumber !== undefined ? bandNumber : ''}
       </td>
-      <td className="px-2 py-3 text-sm">
-        <div className="flex items-center gap-1">
+      <td className={`px-2 py-3 text-sm ${fixedCellBackground}`}>
+        <div className="relative flex items-center gap-1">
+          {entry.fixedStartTime && <Icon name="lock" className="absolute -left-4 top-1/2 -translate-y-1/2 text-sm leading-none text-emerald-700" />}
           {/* 転換時間アイコン */}
           <button
             onClick={() => setShowTransitionModal(true)}
-            className={`text-xs px-1 rounded hover:bg-gray-600 transition-colors ${
+            disabled={customMode || isReadOnly}
+            className={`w-5 flex-shrink-0 text-xs px-1 rounded hover:bg-gray-600 transition-colors ${
               entry.transitionTime && entry.transitionTime > 0
                 ? 'text-yellow-400'
                 : 'text-gray-500'
@@ -183,28 +220,28 @@ export const SortableTimetableRow = ({
               ? `転換時間: ${entry.transitionTime}分` 
               : '転換時間を設定'}
           >
-            <Icon name={entry.transitionTime && entry.transitionTime > 0 ? 'build' : 'settings'} className="text-sm align-middle" />
+            <Icon name="schedule" className="text-sm align-middle" />
           </button>
           <span>{entry.startTime || '-'}</span>
         </div>
       </td>
-      <td className="px-4 py-3 text-sm">{entry.endTime || '-'}</td>
-      <td className="px-4 py-3 text-sm">{duration}分</td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
+      <td className={`mode-optional-cell w-24 text-sm ${fixedCellBackground}`}><span className="mode-optional-content">{entry.endTime || '-'}</span></td>
+      <td className={`mode-optional-cell w-20 text-sm ${fixedCellBackground}`}><span className="mode-optional-content">{duration}分</span></td>
+      <td className={`px-4 py-3 ${fixedCellBackground}`}>
+        <div className="mode-band-cell flex items-center gap-2">
           <div
-            {...listeners}
-            {...attributes}
-            className="cursor-grab active:cursor-grabbing text-emerald-400 hover:text-emerald-600"
+            {...(dragDisabled ? {} : listeners)}
+            {...(dragDisabled ? {} : attributes)}
+            className={`mode-drag-handle w-5 flex-shrink-0 ${dragDisabled ? '' : 'cursor-grab active:cursor-grabbing text-emerald-400 hover:text-emerald-600'}`}
           >
-            <Icon name="drag_indicator" className="text-base align-middle" />
+            {!dragDisabled && <Icon name="drag_indicator" className="text-base align-middle" />}
           </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex w-full items-center gap-2">
               {/* バンド名（ツールチップでメンバー表示） */}
               {bandMembers && bandMembers.length > 0 ? (
-                <div className="group relative">
-                  <div className={`font-medium ${entry.type === 'custom' ? 'text-emerald-600' : 'text-gray-900'}`}>
+                <div className="group relative min-w-0 flex-1">
+                  <div className={`truncate font-medium ${entry.type === 'custom' ? 'text-emerald-600' : 'text-gray-900'}`}>
                     {bandName}
                   </div>
                   {/* メンバーツールチップ */}
@@ -217,14 +254,14 @@ export const SortableTimetableRow = ({
                   </div>
                 </div>
               ) : (
-                <div className={`font-medium ${entry.type === 'custom' ? 'text-emerald-600' : 'text-gray-900'}`}>
+                <div className={`min-w-0 flex-1 truncate font-medium ${entry.type === 'custom' ? 'text-emerald-600' : 'text-gray-900'}`}>
                   {bandName}
                 </div>
               )}
               {highestSeverityViolation && (
                 <div 
                   ref={iconRef}
-                  className="group relative"
+                  className="group relative ml-auto flex-shrink-0"
                   onMouseEnter={handleMouseEnter}
                 >
                   <span className={violationStyle.iconColor}>
@@ -237,7 +274,7 @@ export const SortableTimetableRow = ({
                   >
                     <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-2xl max-h-96 overflow-y-auto">
                       <div className="text-xs font-bold mb-2 text-gray-900">
-                        制約違反 ({violations.length}件)
+                        確認事項 ({violations.length}件)
                       </div>
                       {violations.map((violation, idx) => (
                         <div key={idx} className="text-xs text-gray-600 mb-1 break-words">
@@ -252,24 +289,29 @@ export const SortableTimetableRow = ({
           </div>
         </div>
       </td>
-      <td className="px-4 py-3">
+      <td className={`mode-optional-cell w-20 ${fixedCellBackground}`}>
+        <div className="mode-optional-content">
         <button
           onClick={onRemove}
           disabled={isReadOnly}
-          className={`px-2 py-1 text-white text-xs rounded transition-colors ${
+          className={`inline-flex h-8 w-8 items-center justify-center rounded transition-colors ${
             isReadOnly 
-              ? 'bg-gray-600 cursor-not-allowed opacity-50' 
-              : 'bg-red-600 hover:bg-red-700'
+              ? 'cursor-not-allowed text-gray-400 opacity-50'
+              : 'text-red-600 hover:bg-red-50'
           }`}
           title={isReadOnly ? 'クール直前リハーサルでは削除できません' : '削除'}
+          aria-label={`${bandName}を削除`}
         >
-          削除
+          <Icon name="delete" className="text-xl" />
         </button>
+        </div>
       </td>
+      </>}
+      <AnimatePresence>{customMode && customColumns.map((column, index) => renderCustomCell?.(entry, column, index))}</AnimatePresence>
     </tr>
     
     {/* 転換時間設定モーダル */}
-    {showTransitionModal && (
+    {showTransitionModal && !customMode && !isReadOnly && (
       <tr>
         <td colSpan={6} className="p-0">
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -319,7 +361,7 @@ export const SortableTimetableRow = ({
       </tr>
     )}
     {/* 行の後ろ（下）にドロップする場合のハイライト */}
-    {isDropTargetAfter && (
+    {isDropTargetAfter && !reserveInsertionSpace && (
       <tr className="h-1">
         <td colSpan={6} className="p-0">
           <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>

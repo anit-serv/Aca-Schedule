@@ -1,6 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { Icon } from './Icon';
+import { copyToClipboard } from '../utils/copyToClipboard';
 import { CollaboratorDetailModal } from './CollaboratorDetailModal';
+import { Link } from 'react-router-dom';
 import { eventService, collaboratorService } from '../services/firestore';
 import type { AppUser, EventSettings } from '../types';
 
@@ -46,6 +48,15 @@ export const DesktopSharePanel = ({
   showTransferConfirm,
   setShowTransferConfirm,
 }: DesktopSharePanelProps) => {
+  const handleCopyShareUrl = async () => {
+    if (!await copyToClipboard(`${window.location.origin}/share/${eventSettings.id}`)) {
+      alert('URLをコピーできませんでした。URL欄を選択してコピーしてください。');
+      return;
+    }
+    setShareUrlCopied(true);
+    setTimeout(() => setShareUrlCopied(false), 2000);
+  };
+
   return (
     <>
       {/* 共有パネル */}
@@ -56,7 +67,7 @@ export const DesktopSharePanel = ({
         {currentUser && eventSettings.ownerId === currentUser.uid && (
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-sm text-gray-700">閲覧用ページを公開</p>
+            <p className="text-sm text-gray-700">一般公開ページを公開</p>
             <p className="text-xs text-gray-400 mt-0.5">リンクを知っている人が閲覧できます</p>
           </div>
           <button
@@ -105,17 +116,20 @@ export const DesktopSharePanel = ({
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/share/${eventSettings.id}`);
-                  setShareUrlCopied(true);
-                  setTimeout(() => setShareUrlCopied(false), 2000);
-                }}
+                onClick={() => { void handleCopyShareUrl(); }}
                 className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors whitespace-nowrap"
               >
                 {shareUrlCopied ? <><Icon name="check" className="text-sm align-middle mr-0.5" />コピー済</> : 'コピー'}
               </button>
             </div>
           </div>
+        )}
+
+        {currentUser && eventSettings.ownerId === currentUser.uid && (
+          <Link to={`/events/${eventSettings.id}/stakeholder-settings`} className="mb-3 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-800">
+            関係者ページのパスワード設定
+            <Icon name="chevron_right" className="text-base" />
+          </Link>
         )}
 
         {/* 共同編集者の追加（オーナーのみ） */}
@@ -154,7 +168,7 @@ export const DesktopSharePanel = ({
                     await collaboratorService.addCollaborator(eventSettings.id, email);
                     setEventSettings(prev => prev ? {
                       ...prev,
-                      pendingCollaboratorEmails: [...(prev.pendingCollaboratorEmails || []), email],
+                      pendingCollaboratorEmails: [...new Set([...(prev.pendingCollaboratorEmails || []), email])],
                     } : null);
                     setCollaboratorEmail('');
                     setCollaboratorError('');
@@ -243,11 +257,7 @@ export const DesktopSharePanel = ({
                     onClick={(e) => (e.target as HTMLInputElement).select()}
                   />
                   <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/share/${eventSettings.id}`);
-                      setShareUrlCopied(true);
-                      setTimeout(() => setShareUrlCopied(false), 2000);
-                    }}
+                    onClick={() => { void handleCopyShareUrl(); }}
                     className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors whitespace-nowrap"
                   >
                     {shareUrlCopied ? <><Icon name="check" className="text-sm align-middle mr-0.5" />コピー済</> : 'コピー'}

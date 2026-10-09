@@ -47,7 +47,7 @@ export const EventSettingsModal = ({
         setIsLoadingTokens(true);
         setTokenError(null);
         const loaded = await userApiTokenService.list(firebaseUser);
-        setTokens(loaded);
+        setTokens(loaded.filter(token => token.allowedEventIds.includes(eventSettings.id)));
       } catch (error) {
         console.error('[EventSettingsModal] APIトークン一覧の取得に失敗:', error);
         setTokenError('APIトークン一覧の取得に失敗しました。');
@@ -57,7 +57,7 @@ export const EventSettingsModal = ({
     };
 
     void loadTokens();
-  }, [firebaseUser]);
+  }, [firebaseUser, eventSettings.id]);
 
   const handleSave = () => {
     onSave(editedSettings);
@@ -133,7 +133,9 @@ export const EventSettingsModal = ({
 
       setNewlyIssuedToken(created.token);
       setTokenName('');
-      setTokens((prev) => [created.metadata, ...prev]);
+      if (created.metadata.allowedEventIds.includes(eventSettings.id)) {
+        setTokens((prev) => [created.metadata, ...prev]);
+      }
     } catch (error) {
       console.error('[EventSettingsModal] APIトークン作成に失敗:', error);
       setTokenError(error instanceof Error ? error.message : 'APIトークン作成に失敗しました。');
@@ -221,7 +223,9 @@ export const EventSettingsModal = ({
         expiresInDays: editTokenExpiresInDays,
       });
 
-      setTokens((prev) => prev.map((token) => (token.id === tokenId ? updated : token)));
+      setTokens((prev) => prev
+        .map((token) => (token.id === tokenId ? updated : token))
+        .filter(token => token.allowedEventIds.includes(eventSettings.id)));
       cancelEditToken();
     } catch (error) {
       console.error('[EventSettingsModal] APIトークン更新に失敗:', error);

@@ -3,10 +3,11 @@ import { useDroppable } from '@dnd-kit/core';
 interface CoolGapDropZoneProps {
   id: string;
   className?: string;
+  disabled?: boolean;
 }
 
-export const CoolGapDropZone = ({ id, className }: CoolGapDropZoneProps) => {
-  const { setNodeRef } = useDroppable({ id });
+export const CoolGapDropZone = ({ id, className, disabled = false }: CoolGapDropZoneProps) => {
+  const { setNodeRef } = useDroppable({ id, disabled });
 
   return (
     <div

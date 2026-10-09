@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { eventService, collaboratorService } from '../services/firestore';
+import { eventManagementService } from '../services/eventManagement';
 import { Icon } from '../components/Icon';
 import type { EventSettings } from '../types';
 
 export const MyEventsPage = () => {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, firebaseUser, logout } = useAuth();
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventSettings[]>([]);
   const [sharedEvents, setSharedEvents] = useState<EventSettings[]>([]);
@@ -14,6 +16,9 @@ export const MyEventsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [copyingEvent, setCopyingEvent] = useState<EventSettings | null>(null);
+  const [exitingEventId, setExitingEventId] = useState<string | null>(null);
+  const reduceMotion = useReducedMotion();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,16 +81,27 @@ export const MyEventsPage = () => {
 
   // イベントを削除
   const handleDeleteEvent = async (eventId: string, eventName: string) => {
+    if (!firebaseUser) return;
+    const eventIndex = events.findIndex(event => event.id === eventId);
+    if (eventIndex < 0) return;
+    const removedEvent = events[eventIndex];
     if (!confirm(`「${eventName}」を削除しますか？\nこの操作は取り消せません。`)) {
       return;
     }
     setIsProcessing(true);
     setMenuOpenId(null);
+    setExitingEventId(eventId);
+    setEvents(prev => prev.filter(event => event.id !== eventId));
     try {
-      await eventService.deleteEvent(eventId);
-      setEvents(prev => prev.filter(e => e.id !== eventId));
+      await eventManagementService.remove(firebaseUser, eventId);
     } catch (error) {
       console.error('イベント削除エラー:', error);
+      setEvents(prev => {
+        const restored = [...prev];
+        restored.splice(Math.min(eventIndex, restored.length), 0, removedEvent);
+        return restored;
+      });
+      setExitingEventId(null);
       alert('イベントの削除に失敗しました');
     } finally {
       setIsProcessing(false);
@@ -94,20 +110,30 @@ export const MyEventsPage = () => {
 
   // イベントをコピー
   const handleCopyEvent = async (eventId: string) => {
-    if (!currentUser) return;
+    if (!currentUser || !firebaseUser) return;
+    const sourceEvent = events.find(event => event.id === eventId);
+    if (!sourceEvent) return;
     setIsProcessing(true);
     setMenuOpenId(null);
+    setCopyingEvent(sourceEvent);
     try {
-      const newEventId = await eventService.copyEvent(eventId, currentUser.uid);
-      // イベント一覧を再読み込み
-      const userEvents = await eventService.getEventsByOwner(currentUser.uid);
-      setEvents(userEvents);
-      // 新しいイベントに移動
-      navigate(`/events/${newEventId}`);
+      const newEventId = await eventManagementService.copy(firebaseUser, eventId);
+      setEvents(prev => [{
+        ...sourceEvent,
+        id: newEventId,
+        name: `${sourceEvent.name} (コピー)`,
+        ownerId: currentUser.uid,
+        isPublic: false,
+        collaboratorEmails: [],
+        pendingCollaboratorEmails: [],
+        pendingOwnerEmail: '',
+        transferFromOwnerEmail: '',
+      }, ...prev]);
     } catch (error) {
       console.error('イベントコピーエラー:', error);
       alert('イベントのコピーに失敗しました');
     } finally {
+      setCopyingEvent(null);
       setIsProcessing(false);
     }
   };
@@ -150,7 +176,7 @@ export const MyEventsPage = () => {
       <main className="max-w-6xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <p className="text-gray-500">
-            {isLoading ? '読み込み中...' : `${events.length}件のイベント`}
+            {isLoading ? '読み込み中...' : `${events.length}件のイベント${copyingEvent ? '・コピー中 1件' : ''}`}
           </p>
           <button
             onClick={() => navigate('/events/new')}
@@ -164,7 +190,7 @@ export const MyEventsPage = () => {
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
           </div>
-        ) : events.length === 0 ? (
+        ) : events.length === 0 && !copyingEvent && !exitingEventId ? (
           <div className="text-center py-20">
             <div className="text-6xl mb-4"><Icon name="music_note" className="text-6xl" /></div>
             <h2 className="text-xl font-bold mb-2">イベントがありません</h2>
@@ -180,9 +206,36 @@ export const MyEventsPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AnimatePresence onExitComplete={() => setExitingEventId(null)}>
+            {copyingEvent && (
+              <motion.div
+                key={`copying-${copyingEvent.id}`}
+                layout
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.94, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: -12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.22 }}
+                role="status"
+                aria-label={`${copyingEvent.name}のコピー中`}
+                aria-disabled="true"
+                className="rounded-lg border border-amber-200 border-l-4 border-l-amber-400 bg-amber-50 p-5 cursor-not-allowed"
+              >
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-amber-800">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" aria-hidden="true" />
+                  コピー中
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-gray-800">{copyingEvent.name} (コピー)</h3>
+                <p className="text-sm text-amber-900">バンドとタイムテーブルをコピーしています。完了すると開けるようになります。</p>
+              </motion.div>
+            )}
             {events.map((event) => (
-              <div
+              <motion.div
                 key={event.id}
+                layout
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.94, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: -12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.22 }}
                 className="bg-white rounded-lg p-5 text-left hover:shadow-md hover:ring-1 hover:ring-emerald-400 transition-all group border-l-4 border-l-emerald-400 border border-gray-200 relative"
               >
                 <button
@@ -256,8 +309,9 @@ export const MyEventsPage = () => {
                     </div>
                   )}
                 </div>
-              </div>
+              </motion.div>
             ))}
+            </AnimatePresence>
           </div>
         )}
 

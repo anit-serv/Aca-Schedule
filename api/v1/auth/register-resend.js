@@ -2,7 +2,7 @@ import { ApiError } from "../../_lib/errors.js";
 import { getAdminAuth } from "../../_lib/firestoreAdmin.js";
 import { methodNotAllowed, sendJson, serverError } from "../../_lib/http.js";
 import { generateRequestId } from "../../_lib/request.js";
-import { parseResendBody, sendVerificationLink, upsertPendingRegistration } from "../../_lib/registration.js";
+import { parseResendBody } from "../../_lib/registration.js";
 
 function parseBody(req) {
   if (typeof req.body === "string") {
@@ -46,12 +46,7 @@ export default async function handler(req, res) {
     }
 
     if (!user.emailVerified) {
-      await sendVerificationLink({ req, email });
-      await upsertPendingRegistration({
-        userId: user.uid,
-        email,
-        displayName: user.displayName || "",
-      });
+      throw new ApiError(501, "RESEND_REQUIRES_SIGN_IN", "Sign in with email and password to resend verification email.");
     }
 
     sendJson(res, 200, {

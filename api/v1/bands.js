@@ -2,11 +2,19 @@ import admin from "firebase-admin";
 import { authenticateRequest, ensureEventEditableByUser } from "../_lib/auth.js";
 import { ApiError } from "../_lib/errors.js";
 import { getAdminDb } from "../_lib/firestoreAdmin.js";
-import { methodNotAllowed, sendJson, serverError } from "../_lib/http.js";
+import { sendJson, serverError } from "../_lib/http.js";
 import { ensureIdempotency, saveIdempotencyResult } from "../_lib/idempotency.js";
 import { enforceRateLimit } from "../_lib/rateLimit.js";
 import { generateRequestId, getRawBody, sha256Hex } from "../_lib/request.js";
-import { validateCreateBandPayload } from "../_lib/validation.js";
+import { validateAvailabilitySlots, validateBackupRehearsalContext, validateCreateBandPayload } from "../_lib/validation.js";
+
+async function loadRehearsalDays(db, eventId) {
+  const snapshot = await db.collection("timetables").where("eventId", "==", eventId).get();
+  return snapshot.docs
+    .map(doc => doc.data())
+    .filter(timetable => timetable.type === "rehearsal")
+    .sort((a, b) => (b.dailyTimetables?.length || 0) - (a.dailyTimetables?.length || 0))[0]?.dailyTimetables || [];
+}
 
 function shouldWriteSuccessAudit() {
   const mode = String(process.env.API_SUCCESS_AUDIT_MODE || "errors-only").toLowerCase();
@@ -23,8 +31,12 @@ async function createBand({ requestId, authContext, payload, requestHash }) {
     name: payload.name,
     performanceDuration: payload.performanceDuration,
     performanceCount: payload.performanceCount,
+    toriPriority: payload.toriPriority,
+    costume: payload.costume,
+    bandMaster: payload.bandMaster,
     members: payload.members,
     availableTimeSlots: payload.availableTimeSlots,
+    backupRehearsalTimeSlots: payload.backupRehearsalTimeSlots,
     createdAt: now,
     updatedAt: now,
   };
@@ -86,15 +98,19 @@ async function saveErrorAudit({ requestId, authContext, eventId, statusCode, err
 export default async function handler(req, res) {
   const requestId = generateRequestId();
 
-  if (req.method !== "POST") {
-    methodNotAllowed(res, requestId);
+  if (req.method !== "POST" && req.method !== "PATCH") {
+    sendJson(res, 405, {
+      success: false, requestId,
+      error: { code: "METHOD_NOT_ALLOWED", message: "Only POST and PATCH are supported for this endpoint." },
+    });
     return;
   }
 
   let authContext = null;
   let eventIdForAudit = null;
   const rawBody = getRawBody(req);
-  const requestHash = sha256Hex(rawBody);
+  const bandId = Array.isArray(req.query?.bandId) ? req.query.bandId[0] : req.query?.bandId;
+  const requestHash = sha256Hex(req.method === "PATCH" ? `PATCH:bands:${bandId}:${rawBody}` : rawBody);
 
   try {
     const auth = await authenticateRequest(req);
@@ -112,15 +128,75 @@ export default async function handler(req, res) {
     } else {
       payloadSource = req.body;
     }
+    if (req.method === "PATCH") {
+      if (typeof bandId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(bandId)) {
+        throw new ApiError(400, "INVALID_BAND_ID", "A valid bandId query parameter is required.");
+      }
+      if (!payloadSource || typeof payloadSource !== "object" || Array.isArray(payloadSource)
+        || Object.keys(payloadSource).some(key => key !== "backupRehearsalTimeSlots")
+        || !Object.hasOwn(payloadSource, "backupRehearsalTimeSlots")) {
+        throw new ApiError(400, "INVALID_BODY", "Body must contain only backupRehearsalTimeSlots.");
+      }
+      const backupSlots = validateAvailabilitySlots(payloadSource.backupRehearsalTimeSlots, "backupRehearsalTimeSlots");
+      const db = getAdminDb();
+      const bandRef = db.collection("bands").doc(bandId);
+      const bandSnapshot = await bandRef.get();
+      if (!bandSnapshot.exists) throw new ApiError(404, "BAND_NOT_FOUND", "Band was not found.");
+      const band = bandSnapshot.data();
+      eventIdForAudit = band.eventId;
+      const { event } = await ensureEventEditableByUser({
+        eventId: band.eventId,
+        userId: auth.userId,
+        userEmail: auth.userEmail,
+        allowedEventIds: auth.allowedEventIds,
+      });
+      const rehearsalDays = backupSlots.length ? await loadRehearsalDays(db, band.eventId) : [];
+      validateBackupRehearsalContext(backupSlots, band.availableTimeSlots || [], event, rehearsalDays);
+      const idempotency = await ensureIdempotency({
+        apiKey: auth.idempotencyScopeKey, idempotencyKey: auth.idempotencyKey, requestHash,
+      });
+      if (idempotency.isReplay) {
+        sendJson(res, 200, idempotency.response);
+        return;
+      }
+      await db.runTransaction(async transaction => {
+        const current = await transaction.get(bandRef);
+        if (!current.exists) throw new ApiError(404, "BAND_NOT_FOUND", "Band was not found.");
+        const currentBand = current.data();
+        if (currentBand.eventId !== band.eventId) throw new ApiError(409, "BAND_CHANGED", "Band event changed during update.");
+        validateBackupRehearsalContext(backupSlots, currentBand.availableTimeSlots || [], event, rehearsalDays);
+        transaction.update(bandRef, {
+          backupRehearsalTimeSlots: backupSlots,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        if (shouldWriteSuccessAudit()) {
+          transaction.set(db.collection("apiRequests").doc(requestId), {
+            requestId, authType: auth.authType, userId: auth.userId,
+            userEmail: auth.userEmail, tokenId: auth.tokenId, eventId: band.eventId,
+            status: "success", statusCode: 200, requestHash,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      });
+      const responsePayload = { success: true, requestId, data: { bandId, eventId: band.eventId, updated: true } };
+      await saveIdempotencyResult(idempotency.ref, responsePayload);
+      sendJson(res, 200, responsePayload);
+      return;
+    }
+
     const payload = validateCreateBandPayload(payloadSource);
     eventIdForAudit = payload.eventId;
 
-    await ensureEventEditableByUser({
+    const { event } = await ensureEventEditableByUser({
       eventId: payload.eventId,
       userId: auth.userId,
       userEmail: auth.userEmail,
       allowedEventIds: auth.allowedEventIds,
     });
+    if (payload.backupRehearsalTimeSlots.length) {
+      const rehearsalDays = await loadRehearsalDays(getAdminDb(), payload.eventId);
+      validateBackupRehearsalContext(payload.backupRehearsalTimeSlots, payload.availableTimeSlots, event, rehearsalDays);
+    }
 
     const idempotency = await ensureIdempotency({
       apiKey: auth.idempotencyScopeKey,

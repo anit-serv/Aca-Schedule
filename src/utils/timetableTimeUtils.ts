@@ -45,7 +45,7 @@ export const recalculatePerformanceEntryTimes = (entries: TimetableEntry[], star
     const duration = band?.performanceDuration || entry.customEvent?.duration || 0;
     const transitionTime = entry.transitionTime || 0;
     const [hours, minutes] = currentTime.split(':').map(Number);
-    const startMinutes = hours * 60 + minutes + transitionTime;
+    const startMinutes = entry.fixedStartTime ? Number(entry.fixedStartTime.slice(0, 2)) * 60 + Number(entry.fixedStartTime.slice(3)) : hours * 60 + minutes + transitionTime;
     const endMinutes = startMinutes + duration;
     const entryStart = `${Math.floor(startMinutes / 60).toString().padStart(2, '0')}:${(startMinutes % 60).toString().padStart(2, '0')}`;
     const entryEnd = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
@@ -62,7 +62,7 @@ export const recalculateRehearsalEntryTimes = (entries: TimetableEntry[], startT
     const duration = entry.customEvent?.duration || rehearsalDuration;
     const transitionTime = entry.transitionTime || 0;
     const [hours, minutes] = currentTime.split(':').map(Number);
-    const startMinutes = hours * 60 + minutes + transitionTime;
+    const startMinutes = entry.fixedStartTime ? Number(entry.fixedStartTime.slice(0, 2)) * 60 + Number(entry.fixedStartTime.slice(3)) : hours * 60 + minutes + transitionTime;
     const endMinutes = startMinutes + duration;
     const entryStart = `${Math.floor(startMinutes / 60).toString().padStart(2, '0')}:${(startMinutes % 60).toString().padStart(2, '0')}`;
     const entryEnd = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
@@ -84,7 +84,7 @@ export const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: s
 
     // クール直前リハーサル: 対応するリハ終了時刻を本番開始に反映
     const linkedRehearsalEndTime = getCoolEndTime(linkedRehearsalCools?.[index]);
-    if (linkedRehearsalEndTime) {
+    if (linkedRehearsalEndTime && !cool.startTime) {
       currentTime = linkedRehearsalEndTime;
     }
 

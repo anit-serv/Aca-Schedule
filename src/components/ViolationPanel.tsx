@@ -6,11 +6,12 @@ import { Icon } from './Icon';
 interface ViolationPanelProps {
   violations: ConstraintViolation[];
   isOpen: boolean;
+  isCustomMode?: boolean;
   onToggle: () => void;
   onViolationClick?: (violation: ConstraintViolation) => void;
 }
 
-export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick }: ViolationPanelProps) => {
+export const ViolationPanel = ({ violations, isOpen, isCustomMode = false, onToggle, onViolationClick }: ViolationPanelProps) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['performance', 'rehearsal']));
 
   if (violations.length === 0) return null;
@@ -141,6 +142,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
                     <div
                       key={idx}
                       className={`text-xs px-2 py-1.5 rounded cursor-pointer transition-colors flex items-start gap-0.5 ${
+                        v.type === 'backup-rehearsal-used' ? 'bg-violet-50 hover:bg-violet-100 text-violet-700' :
                         v.severity === 'high' ? 'bg-rose-50 hover:bg-rose-100 text-rose-700' :
                         v.severity === 'medium' ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' :
                         'bg-sky-50 hover:bg-sky-100 text-sky-700'
@@ -148,7 +150,7 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
                       onClick={() => onViolationClick?.(v)}
                       title="クリックして該当箇所へ移動"
                     >
-                      <Icon name={itemConfig.icon} className="text-sm flex-shrink-0" />{v.message}
+                      <Icon name={v.type === 'backup-rehearsal-used' ? 'more_time' : itemConfig.icon} className="text-sm flex-shrink-0" />{v.message}
                     </div>
                   );
                 })}
@@ -163,42 +165,48 @@ export const ViolationPanel = ({ violations, isOpen, onToggle, onViolationClick 
   return (
     <>
       {/* スライドパネル */}
-      <div
-        className={`fixed left-0 bg-white rounded-r-lg p-4 overflow-y-auto shadow-xl border-r border-t border-b border-gray-200 transition-transform duration-300 ease-in-out z-30 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+      <motion.div
+        initial={false}
+        animate={{ x: isCustomMode || !isOpen ? -360 : 0, opacity: isCustomMode ? 0 : 1 }}
+        transition={{ duration: 0.26, ease: 'easeInOut' }}
+        aria-hidden={isCustomMode}
+        inert={isCustomMode}
+        className="fixed left-0 bg-white rounded-r-lg p-4 overflow-y-auto shadow-xl border-r border-t border-b border-gray-200 z-30"
         style={{
           width: '360px',
           top: '8.5rem',
           height: 'calc(100vh - 8.5rem - 1.5rem)',
+          pointerEvents: isCustomMode ? 'none' : 'auto',
         }}
       >
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 whitespace-nowrap text-gray-900">
           <Icon name={buttonConfig.icon} className={`text-xl ${buttonConfig.text}`} />
-          制約違反 ({uniqueCount}件)
+          確認事項 ({uniqueCount}件)
         </h3>
         <div>
           {renderSection('本番', 'performance', performanceViolations, performanceSeverity)}
           {renderSection('リハーサル', 'rehearsal', rehearsalViolations, rehearsalSeverity)}
         </div>
-      </div>
+      </motion.div>
 
       {/* 取っ手部分 - 最も重大な違反の色・記号に合わせる */}
-      <button
+      <motion.button
+        initial={false}
+        animate={{ x: isCustomMode ? -60 : isOpen ? 360 : 0, opacity: isCustomMode ? 0 : 1 }}
+        transition={{ duration: 0.26, ease: 'easeInOut' }}
         onClick={onToggle}
-        className={`fixed ${buttonConfig.bg} ${buttonConfig.hoverBg} transition-all duration-300 ease-in-out rounded-r-lg shadow-lg border-r-2 border-t-2 border-b-2 ${buttonConfig.border} z-30 ${
-          isOpen ? 'left-[360px]' : 'left-0'
-        }`}
+        disabled={isCustomMode}
+        className={`fixed left-0 ${buttonConfig.bg} ${buttonConfig.hoverBg} rounded-r-lg shadow-lg border-r-2 border-t-2 border-b-2 ${buttonConfig.border} z-30`}
         style={{
           top: '9rem',
         }}
-        title={isOpen ? '制約違反を閉じる' : '制約違反を表示'}
+        title={isOpen ? '確認事項を閉じる' : '確認事項を表示'}
       >
         <div className="px-1.5 py-2 flex flex-col items-center gap-1">
           <Icon name={buttonConfig.icon} className={`text-base ${buttonConfig.text}`} />
           <span className={`text-[10px] font-bold ${buttonConfig.text}`}>{uniqueCount}</span>
         </div>
-      </button>
+      </motion.button>
     </>
   );
 };

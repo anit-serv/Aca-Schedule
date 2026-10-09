@@ -1,20 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
-import type { Band, EventSettings } from '../types';
+import type { EventSettings } from '../types';
 import { bandService } from '../services/firestore';
-import { generateUUID } from '../utils/generateUUID';
+import { importDateColumns, parseBandCsvRows } from '../utils/bandCsvImport';
 import { Icon } from './Icon';
 
 interface BandImportCSVProps {
   eventSettings: EventSettings;
   onImportComplete: () => void;
-}
-
-interface CSVRow {
-  bandName: string;
-  performanceTime: string;
-  performanceCount?: string;
-  members?: string;
 }
 
 export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSVProps) => {
@@ -41,21 +34,13 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
     setSuccess(null);
     setIsImporting(true);
 
-    Papa.parse<CSVRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header: string) => {
-        // 日本語ヘッダーを英語キーに変換
-        const headerMap: { [key: string]: string } = {
-          'バンド名': 'bandName',
-          '演奏時間': 'performanceTime',
-          '出演回数': 'performanceCount',
-          'メンバー': 'members',
-        };
-        return headerMap[header] || header;
-      },
-      complete: async (results: Papa.ParseResult<CSVRow>) => {
+    Papa.parse<string[]>(file, {
+      skipEmptyLines: 'greedy',
+      complete: async (results: Papa.ParseResult<string[]>) => {
         try {
+          if (results.errors.length) {
+            throw new Error(`CSVの解析に失敗しました: ${results.errors[0].message}`);
+          }
           await processCSVData(results.data);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'インポートに失敗しました');
@@ -77,74 +62,8 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
     });
   };
 
-  const processCSVData = async (data: CSVRow[]) => {
-    // バリデーション
-    const errors: string[] = [];
-    const validBands: Band[] = [];
-
-    data.forEach((row, index) => {
-      const rowNumber = index + 2; // ヘッダー行を除くため+2
-
-      // 必須フィールドのチェック
-      if (!row.bandName || row.bandName.trim() === '') {
-        errors.push(`${rowNumber}行目: バンド名が入力されていません`);
-        return;
-      }
-
-      if (!row.performanceTime || row.performanceTime.trim() === '') {
-        errors.push(`${rowNumber}行目: 演奏時間が入力されていません`);
-        return;
-      }
-
-      const performanceDuration = parseInt(row.performanceTime, 10);
-      if (isNaN(performanceDuration) || performanceDuration <= 0) {
-        errors.push(`${rowNumber}行目: 演奏時間は正の数値である必要があります`);
-        return;
-      }
-
-      // オプションフィールドの処理
-      let performanceCount = 1;
-      if (row.performanceCount && row.performanceCount.trim() !== '') {
-        performanceCount = parseInt(row.performanceCount, 10);
-        if (isNaN(performanceCount) || performanceCount <= 0) {
-          errors.push(`${rowNumber}行目: 出演回数は正の数値である必要があります`);
-          return;
-        }
-      }
-
-      // メンバーの処理（セミコロン区切り）
-      let members: string[] = [];
-      if (row.members && row.members.trim() !== '') {
-        members = row.members
-          .split(';')
-          .map((m: string) => m.trim())
-          .filter((m: string) => m !== '');
-      }
-
-      // バンドオブジェクトを作成
-      const band: Band = {
-        id: generateUUID(),
-        name: row.bandName.trim(),
-        performanceDuration,
-        performanceCount,
-        members,
-        availableTimeSlots: [], // インポート後に手動設定
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      validBands.push(band);
-    });
-
-    // エラーがある場合は処理を中止
-    if (errors.length > 0) {
-      throw new Error(`以下のエラーがあります:\n${errors.join('\n')}`);
-    }
-
-    // バンドが1件もない場合
-    if (validBands.length === 0) {
-      throw new Error('インポート可能なバンドが見つかりませんでした');
-    }
+  const processCSVData = async (data: string[][]) => {
+    const validBands = parseBandCsvRows(data, eventSettings);
 
     // Firestoreに一括登録
     try {
@@ -159,7 +78,8 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ['バンド名', '演奏時間', '出演回数', 'メンバー'];
+    const headers = ['バンド名', '出演時間(分)', '出演回数', '衣装', 'メンバー',
+      ...importDateColumns(eventSettings).map(({ date, label }) => `${label}（${date}）`)];
     const csvContent = headers.join(',') + '\n';
     // BOM(Byte Order Mark)を追加してExcelで正しく開けるようにする
     const bom = '\uFEFF';

@@ -1,66 +1,30 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import type { Band } from '../types';
+import { getTimetableSearchSuggestions } from '../utils/timetableSearch';
 import { Icon } from './Icon';
 
 interface TimetableSearchProps {
   bands: Band[];
   searchQuery: string;
+  matchCount: number;
+  matchNumber: number;
   onSearchChange: (query: string) => void;
+  onSelectBand: (bandId: string) => void;
+  onSelectMember: (memberName: string) => void;
+  onNextMatch: () => void;
+  onPreviousMatch: () => void;
 }
 
-export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: TimetableSearchProps) => {
+export const TimetableSearch = ({ bands, searchQuery, matchCount, matchNumber, onSearchChange, onSelectBand, onSelectMember, onNextMatch, onPreviousMatch }: TimetableSearchProps) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 検索候補を生成
-  const suggestions = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const query = searchQuery.toLowerCase();
-    const results: { type: 'band' | 'member'; label: string; bandName?: string }[] = [];
-
-    bands.forEach((band) => {
-      // バンド名マッチ
-      if (band.name.toLowerCase().includes(query)) {
-        results.push({ type: 'band', label: band.name });
-      }
-      // メンバー名マッチ
-      band.members.forEach((member) => {
-        if (member.toLowerCase().includes(query)) {
-          results.push({ type: 'member', label: member, bandName: band.name });
-        }
-      });
-    });
-
-    // 重複除去
-    const seen = new Set<string>();
-    return results.filter((r) => {
-      const key = `${r.type}-${r.label}-${r.bandName || ''}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 8);
-  }, [searchQuery, bands]);
-
-  // Escキーでクリア、Enterでサジェスト非表示
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && searchQuery) {
-        onSearchChange('');
-        setShowSuggestions(false);
-        inputRef.current?.blur();
-      }
-      if (e.key === 'Enter' && showSuggestions) {
-        setShowSuggestions(false);
-        inputRef.current?.blur();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [searchQuery, onSearchChange, showSuggestions]);
+  const suggestions = useMemo(() => getTimetableSearchSuggestions(bands, searchQuery), [bands, searchQuery]);
 
   return (
-    <div className="relative">
-      <div className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-1.5 transition-colors ${
+    <div className="relative w-[256px] flex-none">
+      <div className={`flex items-center gap-1 bg-white border rounded-lg px-2 py-1.5 transition-colors ${
         showSuggestions ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-300'
       }`}>
         {/* 検索アイコン */}
@@ -75,31 +39,44 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
           }}
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              onSearchChange('');
+              setShowSuggestions(false);
+              inputRef.current?.blur();
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              if (e.shiftKey) onPreviousMatch();
+              else onNextMatch();
+              setShowSuggestions(false);
+            }
+          }}
           placeholder="バンド名・メンバー名で検索"
-          className="bg-transparent outline-none text-sm text-gray-900 placeholder-gray-400 w-full sm:w-40"
+          className="min-w-0 w-0 flex-1 bg-transparent outline-none text-sm text-gray-900 placeholder-gray-400"
         />
         {searchQuery && (
-          <button
-            onClick={() => onSearchChange('')}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <Icon name="close" className="text-base" />
-          </button>
+          <>
+            <span className="flex-shrink-0 whitespace-nowrap text-xs tabular-nums text-gray-600" aria-live="polite">{matchNumber} / {matchCount}</span>
+            <span className="h-6 w-px flex-shrink-0 bg-gray-200" aria-hidden="true" />
+            <button type="button" aria-label="前の検索結果" title="前の検索結果 (Shift+Enter)" disabled={matchCount === 0} onMouseDown={e => e.preventDefault()} onClick={() => { onPreviousMatch(); setShowSuggestions(false); }} className="flex-shrink-0 rounded p-0.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40"><Icon name="keyboard_arrow_up" className="text-xl" /></button>
+            <button type="button" aria-label="次の検索結果" title="次の検索結果 (Enter)" disabled={matchCount === 0} onMouseDown={e => e.preventDefault()} onClick={() => { onNextMatch(); setShowSuggestions(false); }} className="flex-shrink-0 rounded p-0.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40"><Icon name="keyboard_arrow_down" className="text-xl" /></button>
+            <button type="button" aria-label="検索を閉じる" onMouseDown={e => e.preventDefault()} onClick={() => { onSearchChange(''); setShowSuggestions(false); inputRef.current?.blur(); }} className="flex-shrink-0 rounded p-0.5 text-gray-600 hover:bg-gray-100"><Icon name="close" className="text-xl" /></button>
+          </>
         )}
       </div>
 
       {/* サジェスト */}
       {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
           {suggestions.map((s, idx) => (
             <button
               key={idx}
               className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition-colors flex items-center gap-2"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onSearchChange(s.label);
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                if (s.type === 'member') onSelectMember(s.label);
+                else onSelectBand(s.bandId);
                 setShowSuggestions(false);
-                inputRef.current?.blur();
               }}
             >
               <span className={`text-xs px-1.5 py-0.5 rounded ${
@@ -110,9 +87,6 @@ export const TimetableSearch = ({ bands, searchQuery, onSearchChange }: Timetabl
                 {s.type === 'band' ? 'バンド' : 'メンバー'}
               </span>
               <span className="text-gray-900">{s.label}</span>
-              {s.bandName && (
-                <span className="text-xs text-gray-400 ml-auto">{s.bandName}</span>
-              )}
             </button>
           ))}
         </div>

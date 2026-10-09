@@ -1,6 +1,8 @@
 import type { SkippedOpInfo, OperationType } from '../types';
 
 const OP_LABELS: Record<OperationType, string> = {
+  'timetable:autoSchedule': '全日程の自動配置',
+  'timetable:resetAll': '全日程の配置リセット',
   'entry:add': 'エントリー追加',
   'entry:delete': 'エントリー削除',
   'entry:reorder': 'エントリー並び替え',
@@ -17,6 +19,9 @@ const OP_LABELS: Record<OperationType, string> = {
   'customColumn:delete': 'カスタム列削除',
   'customColumn:rename': 'カスタム列名変更',
   'customColumn:reorder': 'カスタム列の並び替え',
+  'customColumn:visibility': 'カスタム列の公開設定変更',
+  'customColumn:shared': 'カスタム列の共通設定変更',
+  'customColumn:shift': 'カスタム列のシフト変更',
 };
 
 const REASON_LABELS: Record<SkippedOpInfo['reason'], string> = {

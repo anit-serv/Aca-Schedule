@@ -1,6 +1,8 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { Icon } from './Icon';
+import { copyToClipboard } from '../utils/copyToClipboard';
 import { eventService } from '../services/firestore';
+import { Link } from 'react-router-dom';
 import type { AppUser, EventSettings } from '../types';
 
 interface MobileSharePanelProps {
@@ -26,6 +28,16 @@ export const MobileSharePanel = ({
   setShowSharePanel,
   setShowCollaboratorDetail,
 }: MobileSharePanelProps) => {
+  const [copyError, setCopyError] = useState(false);
+
+  const handleCopy = async () => {
+    const copied = await copyToClipboard(`${window.location.origin}/share/${eventSettings.id}`);
+    setCopyError(!copied);
+    if (!copied) return;
+    setShareUrlCopied(true);
+    setTimeout(() => setShareUrlCopied(false), 2000);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setShowSharePanel(false)}>
       <div
@@ -46,7 +58,7 @@ export const MobileSharePanel = ({
           {currentUser && eventSettings.ownerId === currentUser.uid && (
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-700">閲覧用ページを公開</p>
+                <p className="text-sm text-gray-700">一般公開ページを公開</p>
                 <p className="text-xs text-gray-400 mt-0.5">リンクを知っている人が閲覧できます</p>
               </div>
               <button
@@ -86,17 +98,22 @@ export const MobileSharePanel = ({
                   onClick={(e) => (e.target as HTMLInputElement).select()}
                 />
                 <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/share/${eventSettings.id}`);
-                    setShareUrlCopied(true);
-                    setTimeout(() => setShareUrlCopied(false), 2000);
-                  }}
+                  type="button"
+                  onClick={() => { void handleCopy(); }}
                   className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-500 text-white"
                 >
                   {shareUrlCopied ? <><Icon name="check" className="text-sm align-middle mr-0.5" />コピー済</> : 'コピー'}
                 </button>
               </div>
+              {copyError && <p role="alert" className="mt-1 text-xs text-red-600">コピーできませんでした。URL欄を長押ししてコピーしてください。</p>}
             </div>
+          )}
+
+          {currentUser && eventSettings.ownerId === currentUser.uid && (
+            <Link to={`/events/${eventSettings.id}/stakeholder-settings`} className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-medium text-emerald-800">
+              関係者ページのパスワード設定
+              <Icon name="chevron_right" className="text-lg" />
+            </Link>
           )}
 
           {/* 共同編集者数 */}

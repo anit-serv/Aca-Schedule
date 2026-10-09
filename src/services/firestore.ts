@@ -22,6 +22,7 @@ import {
 import { db } from '../firebase';
 import type { AppUser, Band, EventSettings, Timetable, DailyTimetable } from '../types';
 import { writeRateLimiter, RateLimitError } from '../utils/writeRateLimiter';
+import { selectBestTimetable } from '../utils/timetableSelection';
 
 // ユーザー管理のFirestore操作
 export const userService = {
@@ -72,8 +73,12 @@ const bandToFirestore = (band: Band, eventId: string): Omit<BandFirestore, 'id'>
   name: band.name,
   performanceDuration: band.performanceDuration,
   performanceCount: band.performanceCount,
+  toriPriority: band.toriPriority,
+  costume: band.costume,
+  bandMaster: band.bandMaster,
   members: band.members,
   availableTimeSlots: band.availableTimeSlots,
+  backupRehearsalTimeSlots: band.backupRehearsalTimeSlots ?? [],
   createdAt: Timestamp.fromDate(band.createdAt),
   updatedAt: Timestamp.fromDate(band.updatedAt),
 });
@@ -86,12 +91,26 @@ const firestoreToBand = (id: string, data: DocumentData): Band => {
     name: data.name,
     performanceDuration: data.performanceDuration,
     performanceCount: data.performanceCount,
+    toriPriority: [1, 2, 3].includes(data.toriPriority) ? data.toriPriority : 1,
+    costume: data.costume === true,
+    bandMaster: typeof data.bandMaster === 'string' ? data.bandMaster : '',
     // 配列は必ず新しいインスタンスを作成
     members: Array.isArray(data.members) ? [...data.members] : [],
     availableTimeSlots: Array.isArray(data.availableTimeSlots) 
       ? data.availableTimeSlots.map((slot: { date: string; timeRanges: { startTime: string; endTime: string }[] }) => ({
           date: slot.date,
           timeRanges: Array.isArray(slot.timeRanges) 
+            ? slot.timeRanges.map((range: { startTime: string; endTime: string }) => ({
+                startTime: range.startTime,
+                endTime: range.endTime,
+              }))
+            : [],
+        }))
+      : [],
+    backupRehearsalTimeSlots: Array.isArray(data.backupRehearsalTimeSlots)
+      ? data.backupRehearsalTimeSlots.map((slot: { date: string; timeRanges: { startTime: string; endTime: string }[] }) => ({
+          date: slot.date,
+          timeRanges: Array.isArray(slot.timeRanges)
             ? slot.timeRanges.map((range: { startTime: string; endTime: string }) => ({
                 startTime: range.startTime,
                 endTime: range.endTime,
@@ -180,76 +199,6 @@ export const bandService = {
   },
 };
 
-// Firestore用のEventSettings型
-interface EventSettingsFirestore extends Omit<EventSettings, 'id'> {
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
-// EventSettingsをFirestore形式に変換
-const eventSettingsToFirestore = (settings: EventSettings): Partial<EventSettingsFirestore> & Omit<EventSettingsFirestore, 'rehearsalDates' | 'rehearsalDuration' | 'customEvents'> => {
-  // Firestoreはundefined値を許容しないため、undefinedフィールドは除外する
-  const firestoreData: Partial<EventSettingsFirestore> & Omit<EventSettingsFirestore, 'rehearsalDates' | 'rehearsalDuration' | 'customEvents'> = {
-    name: settings.name,
-    year: settings.year,
-    venue: settings.venue,
-    goal: settings.goal,
-    performanceDates: settings.performanceDates,
-    rehearsalType: settings.rehearsalType,
-    presetDurations: settings.presetDurations,
-    ownerId: settings.ownerId,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  };
-
-  // rehearsalDatesがundefinedでない場合のみ含める
-  if (settings.rehearsalDates !== undefined) {
-    (firestoreData as EventSettingsFirestore).rehearsalDates = settings.rehearsalDates;
-  }
-
-  // rehearsalDurationがundefinedでない場合のみ含める
-  if (settings.rehearsalDuration !== undefined) {
-    (firestoreData as EventSettingsFirestore).rehearsalDuration = settings.rehearsalDuration;
-  }
-
-  // customEventsがundefinedでない場合のみ含める
-  if (settings.customEvents !== undefined) {
-    (firestoreData as EventSettingsFirestore).customEvents = settings.customEvents;
-  }
-
-  // customFieldsがundefinedでない場合のみ含める
-  if (settings.customFields !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (firestoreData as any).customFields = settings.customFields;
-  }
-
-  // isPublicがundefinedでない場合のみ含める
-  if (settings.isPublic !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (firestoreData as any).isPublic = settings.isPublic;
-  }
-
-  // collaboratorEmailsがundefinedでない場合のみ含める
-  if (settings.collaboratorEmails !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (firestoreData as any).collaboratorEmails = settings.collaboratorEmails;
-  }
-
-  // pendingCollaboratorEmailsがundefinedでない場合のみ含める
-  if (settings.pendingCollaboratorEmails !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (firestoreData as any).pendingCollaboratorEmails = settings.pendingCollaboratorEmails;
-  }
-
-  // pendingOwnerEmailがundefinedでない場合のみ含める
-  if (settings.pendingOwnerEmail !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (firestoreData as any).pendingOwnerEmail = settings.pendingOwnerEmail;
-  }
-
-  return firestoreData as EventSettingsFirestore;
-};
-
 // Firestore形式からEventSettingsに変換
 const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings => ({
   id,
@@ -266,29 +215,13 @@ const firestoreToEventSettings = (id: string, data: DocumentData): EventSettings
   ownerId: data.ownerId || '',
   customFields: data.customFields,
   isPublic: data.isPublic || false,
-  collaboratorEmails: data.collaboratorEmails || [],
-  pendingCollaboratorEmails: data.pendingCollaboratorEmails || [],
+  collaboratorEmails: [...new Set<string>(data.collaboratorEmails || [])],
+  pendingCollaboratorEmails: [...new Set<string>(data.pendingCollaboratorEmails || [])],
   pendingOwnerEmail: data.pendingOwnerEmail || undefined,
 });
 
 // イベント設定のFirestore操作
 export const eventService = {
-  // イベント設定を作成
-  async createEvent(settings: Omit<EventSettings, 'id'>): Promise<string> {
-    try {
-      console.log('[eventService.createEvent] 開始:', settings);
-      const eventsRef = collection(db, 'events');
-      const settingsData = eventSettingsToFirestore({ ...settings, id: '' });
-      console.log('[eventService.createEvent] Firestore形式に変換:', settingsData);
-      const docRef = await addDoc(eventsRef, settingsData);
-      console.log('[eventService.createEvent] 成功:', docRef.id);
-      return docRef.id;
-    } catch (error) {
-      console.error('[eventService.createEvent] エラー:', error);
-      throw error;
-    }
-  },
-
   // イベント設定を取得
   async getEvent(eventId: string): Promise<EventSettings | null> {
     try {
@@ -389,185 +322,6 @@ export const eventService = {
       throw error;
     }
   },
-
-  // イベントを削除(関連する全てのデータも削除)
-  async deleteEvent(eventId: string): Promise<void> {
-    try {
-      console.log('[eventService.deleteEvent] 開始:', eventId);
-
-      // イベントに関連する全てのタイムテーブル・バンドのドキュメント参照を取得
-      const timetablesRef = collection(db, 'timetables');
-      const timetablesQuery = query(timetablesRef, where('eventId', '==', eventId));
-      const timetablesSnapshot = await getDocs(timetablesQuery);
-
-      const bandsRef = collection(db, 'bands');
-      const bandsQuery = query(bandsRef, where('eventId', '==', eventId));
-      const bandsSnapshot = await getDocs(bandsQuery);
-
-      const eventRef = doc(db, 'events', eventId);
-
-      // 全削除対象を1つのリストにまとめ、500件ごとにバッチ実行（Firestoreの上限）
-      const allRefs = [
-        ...timetablesSnapshot.docs.map(d => d.ref),
-        ...bandsSnapshot.docs.map(d => d.ref),
-        eventRef,
-      ];
-
-      const BATCH_SIZE = 500;
-      for (let i = 0; i < allRefs.length; i += BATCH_SIZE) {
-        const batch = writeBatch(db);
-        for (const ref of allRefs.slice(i, i + BATCH_SIZE)) {
-          batch.delete(ref);
-        }
-        await batch.commit();
-      }
-
-      console.log(`[eventService.deleteEvent] ${timetablesSnapshot.size}件のタイムテーブル、${bandsSnapshot.size}件のバンド、イベント設定を削除`);
-      console.log('[eventService.deleteEvent] 完了');
-    } catch (error) {
-      console.error('[eventService.deleteEvent] エラー:', error);
-      throw error;
-    }
-  },
-
-  // イベントをコピー（バンドとタイムテーブルも含む）
-  async copyEvent(eventId: string, newOwnerId: string): Promise<string> {
-    try {
-      console.log('[eventService.copyEvent] 開始:', eventId);
-
-      // 元のイベントを取得
-      const originalEvent = await eventService.getEvent(eventId);
-      if (!originalEvent) {
-        throw new Error('コピー元のイベントが見つかりません');
-      }
-
-      // 新しいイベントを作成
-      const newEventData: Omit<EventSettings, 'id'> = {
-        ...originalEvent,
-        name: `${originalEvent.name} (コピー)`,
-        ownerId: newOwnerId,
-        isPublic: false, // コピー時は非公開にリセット
-      };
-      // idを除外
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id: _id, ...eventWithoutId } = newEventData as EventSettings;
-      const newEventId = await eventService.createEvent(eventWithoutId);
-      console.log('[eventService.copyEvent] 新イベント作成:', newEventId);
-
-      // バンドをコピー
-      const bandsRef = collection(db, 'bands');
-      const bandsQuery = query(bandsRef, where('eventId', '==', eventId));
-      const bandsSnapshot = await getDocs(bandsQuery);
-      
-      const bandIdMap = new Map<string, string>(); // old ID -> new ID
-      for (const bandDoc of bandsSnapshot.docs) {
-        const bandData = bandDoc.data();
-        const newBandRef = await addDoc(bandsRef, {
-          ...bandData,
-          eventId: newEventId,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-        });
-        bandIdMap.set(bandDoc.id, newBandRef.id);
-      }
-      console.log(`[eventService.copyEvent] ${bandsSnapshot.size}件のバンドをコピー`);
-
-      // タイムテーブルをコピー
-      const timetablesRef = collection(db, 'timetables');
-      const timetablesQuery = query(timetablesRef, where('eventId', '==', eventId));
-      const timetablesSnapshot = await getDocs(timetablesQuery);
-      
-      // undefinedフィールドを再帰的に除去するヘルパー関数
-      // Timestampなどの特殊オブジェクトはそのまま保持
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const removeUndefined = (obj: any): any => {
-        if (obj === null || obj === undefined) return null;
-        if (Array.isArray(obj)) {
-          return obj.map(removeUndefined);
-        }
-        // Timestampインスタンスはそのまま保持
-        if (obj instanceof Timestamp) {
-          return obj;
-        }
-        if (typeof obj === 'object') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const result: any = {};
-          for (const key of Object.keys(obj)) {
-            const value = obj[key];
-            if (value !== undefined) {
-              result[key] = removeUndefined(value);
-            }
-          }
-          return result;
-        }
-        return obj;
-      };
-      
-      // タイプ（performance/rehearsal）ごとに最もデータが多いタイムテーブルのみをコピー
-      // 重複タイムテーブルの問題を回避
-      const timetablesByType = new Map<string, { doc: DocumentData; dailyCount: number }>();
-      for (const timetableDoc of timetablesSnapshot.docs) {
-        const timetableData = timetableDoc.data();
-        const type = timetableData.type as string;
-        const dailyCount = timetableData.dailyTimetables?.length || 0;
-        
-        const existing = timetablesByType.get(type);
-        if (!existing || dailyCount > existing.dailyCount) {
-          timetablesByType.set(type, { doc: timetableData, dailyCount });
-        }
-      }
-      console.log(`[eventService.copyEvent] タイプ別タイムテーブル: ${Array.from(timetablesByType.entries()).map(([type, data]) => `${type}(${data.dailyCount}件)`).join(', ')}`);
-      
-      for (const [type, { doc: timetableData }] of timetablesByType) {
-        console.log(`[eventService.copyEvent] タイムテーブルコピー中: type=${type}, dailyTimetables=${timetableData.dailyTimetables?.length || 0}件`);
-        
-        // dailyTimetables内のbandIdを新しいbandIdに変換
-        const newDailyTimetables = (timetableData.dailyTimetables || []).map((dt: DailyTimetable) => {
-          // entriesとcoolsの両方を処理
-          const newEntries = (dt.entries || []).map(entry => ({
-            ...entry,
-            bandId: entry.type === 'band' && entry.bandId && bandIdMap.has(entry.bandId)
-              ? bandIdMap.get(entry.bandId)!
-              : entry.bandId,
-          }));
-          
-          const newCools = (dt.cools || []).map((cool) => ({
-            ...cool,
-            entries: (cool.entries || []).map(entry => ({
-              ...entry,
-              bandId: entry.type === 'band' && entry.bandId && bandIdMap.has(entry.bandId)
-                ? bandIdMap.get(entry.bandId)!
-                : entry.bandId,
-            })),
-          }));
-          
-          return {
-            ...dt,
-            entries: newEntries,
-            cools: newCools,
-          };
-        });
-        
-        // undefinedを除去してからFirestoreに書き込み
-        const cleanedData = removeUndefined({
-          ...timetableData,
-          eventId: newEventId,
-          dailyTimetables: newDailyTimetables,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-        });
-        
-        await addDoc(timetablesRef, cleanedData);
-      }
-      console.log(`[eventService.copyEvent] ${timetablesByType.size}件のタイムテーブルをコピー`);
-
-      console.log('[eventService.copyEvent] 完了:', newEventId);
-      return newEventId;
-    } catch (error) {
-      console.error('[eventService.copyEvent] エラー:', error);
-      throw error;
-    }
-  },
 };
 
 // Firestore用のTimetable型
@@ -581,6 +335,7 @@ const timetableToFirestore = (timetable: Timetable): Omit<TimetableFirestore, 'i
   eventId: timetable.eventId,
   type: timetable.type,
   dailyTimetables: timetable.dailyTimetables,
+  rehearsalInitialized: timetable.rehearsalInitialized ?? false,
   createdAt: Timestamp.fromDate(timetable.createdAt),
   updatedAt: Timestamp.fromDate(timetable.updatedAt),
 });
@@ -602,6 +357,7 @@ const firestoreToTimetable = (id: string, data: DocumentData): Timetable => {
     eventId: data.eventId,
     type: data.type,
     dailyTimetables: data.dailyTimetables || [],
+    rehearsalInitialized: data.rehearsalInitialized ?? false,
     createdAt: parseDate(data.createdAt),
     updatedAt: parseDate(data.updatedAt),
   };
@@ -623,16 +379,7 @@ export const timetableService = {
       return null;
     }
     
-    // 複数ある場合はdailyTimetablesが最も多いものを選択
-    let bestDoc = snapshot.docs[0];
-    let bestCount = bestDoc.data().dailyTimetables?.length || 0;
-    for (const doc of snapshot.docs) {
-      const count = doc.data().dailyTimetables?.length || 0;
-      if (count > bestCount) {
-        bestDoc = doc;
-        bestCount = count;
-      }
-    }
+    const bestDoc = selectBestTimetable(snapshot.docs.map(item => ({ data: item.data(), doc: item })))!.doc;
     
     return firestoreToTimetable(bestDoc.id, bestDoc.data());
   },
@@ -662,10 +409,67 @@ export const timetableService = {
     await updateDoc(timetableRef, updateData);
   },
 
+  // クール直前リハの同期では、両方の最新状態を同一トランザクションで読み、
+  // 手動編集されたリハの配置を古いスナップショットで上書きしない。
+  async syncCoolPreRehearsal(
+    performanceId: string,
+    rehearsalId: string,
+    buildUpdates: (performance: Timetable, rehearsal: Timetable) => Partial<Timetable> | null,
+  ): Promise<void> {
+    if (!writeRateLimiter.check('updateTimetable')) throw new RateLimitError();
+    const performanceRef = doc(db, 'timetables', performanceId);
+    const rehearsalRef = doc(db, 'timetables', rehearsalId);
+    await runTransaction(db, async transaction => {
+      const [performanceSnapshot, rehearsalSnapshot] = await Promise.all([
+        transaction.get(performanceRef), transaction.get(rehearsalRef),
+      ]);
+      if (!performanceSnapshot.exists() || !rehearsalSnapshot.exists()) return;
+      const updates = buildUpdates(
+        firestoreToTimetable(performanceSnapshot.id, performanceSnapshot.data()),
+        firestoreToTimetable(rehearsalSnapshot.id, rehearsalSnapshot.data()),
+      );
+      if (updates) transaction.update(rehearsalRef, { ...updates, updatedAt: Timestamp.now() });
+    });
+  },
+
+  // 自動配置した全日程と位置固定のカスタム項目を同時に保存
+  async saveAutoSchedule(timetableId: string, eventId: string, dailyTimetables: DailyTimetable[], customFields?: EventSettings['customFields']): Promise<void> {
+    if (!writeRateLimiter.check('updateTimetable')) throw new RateLimitError();
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'timetables', timetableId), { dailyTimetables, updatedAt: Timestamp.now() });
+    if (customFields) {
+      batch.update(doc(db, 'events', eventId), { customFields, updatedAt: Timestamp.now() });
+    }
+    await batch.commit();
+  },
+
+  async resetAllTimetables(
+    performanceId: string,
+    rehearsalId: string | null,
+    eventId: string,
+    performanceDays: DailyTimetable[] | null,
+    rehearsalDays: DailyTimetable[] | null,
+    customFields?: EventSettings['customFields'],
+  ): Promise<void> {
+    if (!writeRateLimiter.check('updateTimetable')) throw new RateLimitError();
+    const batch = writeBatch(db);
+    if (performanceDays) {
+      batch.update(doc(db, 'timetables', performanceId), { dailyTimetables: performanceDays, updatedAt: Timestamp.now() });
+    }
+    if (rehearsalId && rehearsalDays) {
+      batch.update(doc(db, 'timetables', rehearsalId), { dailyTimetables: rehearsalDays, updatedAt: Timestamp.now() });
+    }
+    if (customFields) {
+      batch.update(doc(db, 'events', eventId), { customFields, updatedAt: Timestamp.now() });
+    }
+    await batch.commit();
+  },
+
   // 日別タイムテーブルを更新（トランザクション使用で競合安全）
   async updateDailyTimetable(
     timetableId: string,
-    dailyTimetable: DailyTimetable
+    dailyTimetable: DailyTimetable,
+    orderedDates?: string[]
   ): Promise<void> {
     if (!writeRateLimiter.check('updateDailyTimetable')) throw new RateLimitError();
     const timetableRef = doc(db, 'timetables', timetableId);
@@ -690,6 +494,21 @@ export const timetableService = {
         newDailyTimetables[existingIndex] = dailyTimetable;
       } else {
         newDailyTimetables.push(dailyTimetable);
+      }
+
+      // Number all cools from the latest document so an edit to one day cannot
+      // restore stale entries from another day.
+      if (orderedDates?.length) {
+        let coolNumber = 1;
+        for (const date of [...orderedDates].sort()) {
+          const index = newDailyTimetables.findIndex((day: DailyTimetable) => day.date === date);
+          if (index < 0 || !newDailyTimetables[index].cools) continue;
+          const day = newDailyTimetables[index] as DailyTimetable;
+          newDailyTimetables[index] = {
+            ...day,
+            cools: day.cools!.map(cool => ({ ...cool, number: coolNumber++ })),
+          };
+        }
       }
       
       transaction.update(timetableRef, {
@@ -738,16 +557,7 @@ export const timetableService = {
           return;
         }
         
-        // 複数ある場合はdailyTimetablesが最も多いものを選択
-        let bestDoc = snapshot.docs[0];
-        let bestCount = bestDoc.data().dailyTimetables?.length || 0;
-        for (const doc of snapshot.docs) {
-          const count = doc.data().dailyTimetables?.length || 0;
-          if (count > bestCount) {
-            bestDoc = doc;
-            bestCount = count;
-          }
-        }
+        const bestDoc = selectBestTimetable(snapshot.docs.map(item => ({ data: item.data(), doc: item })))!.doc;
         
         callback(firestoreToTimetable(bestDoc.id, bestDoc.data()));
       },

@@ -401,6 +401,18 @@ async function runSection3_Bands(idToken, eventId) {
     assert(data.success === true, 'Expected success: true');
   });
 
+  await test('予備出演可能時間の更新 (PATCH) → 200', async () => {
+    const bandId = firstResponseData?.data?.bandId;
+    assert(bandId, 'Expected created bandId');
+    const { response, data } = await callJson(`${bandUrl()}?bandId=${encodeURIComponent(bandId)}`, {
+      method: 'PATCH',
+      headers: patHeaders(pat, { 'x-idempotency-key': uniqueKey() }),
+      body: JSON.stringify({ backupRehearsalTimeSlots: [] }),
+    });
+    assert(response.status === 200, `Expected 200, got ${response.status}: ${JSON.stringify(data.error)}`);
+    assert(data.data?.updated === true, 'Expected updated: true');
+  });
+
   await test('冪等性: 同じキー・同じbody → 200 (replay)', async () => {
     const { response, data } = await callJson(bandUrl(), {
       method: 'POST',
@@ -517,13 +529,13 @@ async function runSection3_Bands(idToken, eventId) {
     assert(data.error?.code === 'INVALID_FIELD', `Expected INVALID_FIELD, got ${data.error?.code}`);
   });
 
-  await test('バリデーション: 無効なtimeFormat (HH:15) → 400 INVALID_FIELD', async () => {
+  await test('バリデーション: 無効なtimeFormat (HH:60) → 400 INVALID_FIELD', async () => {
     const { response, data } = await callJson(bandUrl(), {
       method: 'POST',
       headers: patHeaders(pat, { 'x-idempotency-key': uniqueKey() }),
       body: JSON.stringify(validBandBody(eventId, {
         availableTimeSlots: [
-          { date: '2026-06-01', timeRanges: [{ startTime: '14:15', endTime: '17:00' }] },
+          { date: '2026-06-01', timeRanges: [{ startTime: '14:60', endTime: '17:00' }] },
         ],
       })),
     });

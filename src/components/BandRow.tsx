@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import type { Band } from '../types';
+import { Icon } from './Icon';
 
 interface BandRowProps {
   band: Band;
@@ -175,6 +176,39 @@ export const BandRow = ({
         />
       </td>
 
+      {/* トリ優先度 */}
+      <td className="px-4 py-3">
+        <select
+          aria-label={`${band.name || 'バンド'}のトリ優先度`}
+          value={band.toriPriority ?? 1}
+          onChange={(e) => onUpdate({ toriPriority: Number(e.target.value) as 1 | 2 | 3 })}
+          className="bg-white text-gray-900 px-2 py-2 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
+        >
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </td>
+      <td className="px-4 py-3">
+        <input
+          type="checkbox"
+          aria-label={`${band.name || 'バンド'}の衣装`}
+          checked={band.costume ?? false}
+          onChange={(e) => onUpdate({ costume: e.target.checked })}
+          className="h-4 w-4 accent-emerald-600"
+        />
+      </td>
+      <td className="px-4 py-3">
+        <input
+          type="text"
+          aria-label={`${band.name || 'バンド'}のバンドマスター`}
+          value={band.bandMaster ?? ''}
+          onChange={(e) => onUpdate({ bandMaster: e.target.value })}
+          maxLength={100}
+          className="w-full bg-white text-gray-900 px-3 py-2 rounded border border-gray-300 focus:border-emerald-500 focus:outline-none"
+        />
+      </td>
+
       {/* メンバー */}
       <td className="px-4 py-3">
         <div className="space-y-2">
@@ -299,9 +333,9 @@ export const BandRow = ({
           onClick={onOpenAvailability}
           className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-sm rounded transition-colors whitespace-nowrap"
         >
-          {band.availableTimeSlots.length > 0
-            ? `設定済み (${band.availableTimeSlots.reduce((sum, slot) => sum + slot.timeRanges.length, 0)}範囲)`
-            : '未設定'}
+          {band.availableTimeSlots.length > 0 || (band.backupRehearsalTimeSlots?.length ?? 0) > 0
+            ? `通常 ${band.availableTimeSlots.reduce((sum, slot) => sum + slot.timeRanges.length, 0)}範囲・予備リハ ${(band.backupRehearsalTimeSlots ?? []).reduce((sum, slot) => sum + slot.timeRanges.length, 0)}範囲`
+            : '未設定（出演不可）'}
         </button>
       </td>
 
@@ -309,9 +343,11 @@ export const BandRow = ({
       <td className="px-4 py-3">
         <button
           onClick={onDelete}
-          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors whitespace-nowrap"
+          className="inline-flex h-8 w-8 items-center justify-center rounded text-red-600 transition-colors hover:bg-red-50"
+          aria-label={`${band.name}を削除`}
+          title={`${band.name}を削除`}
         >
-          削除
+          <Icon name="delete" className="text-xl" />
         </button>
       </td>
     </tr>

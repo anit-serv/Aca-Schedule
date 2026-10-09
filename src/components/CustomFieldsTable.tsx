@@ -8,7 +8,10 @@ import {
   isMergedChild,
   mergeCells,
   unmergeCells,
+  updateShiftSlot,
 } from '../utils/customFieldsUtils';
+import { getOverlappingShiftAssignees, getShiftSlotAt, getShiftSlots, type ShiftSlotAction } from '../utils/customShift';
+import { ShiftSlotCell } from './ShiftSlotCell';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 import { Icon } from './Icon';
 
@@ -22,6 +25,7 @@ interface CustomFieldsTableProps {
   onCustomFieldsChange: (customFields: CustomFieldsSettings) => void;
   onUndoRecord?: (meta: CustomFieldsUndoMeta) => void;
   readOnly?: boolean;
+  publicOnly?: boolean;
   searchQuery?: string;
   visibleCoolIds?: string[];
   disablePerformanceBottomSpacer?: boolean;
@@ -50,6 +54,7 @@ export const CustomFieldsTable = ({
   onCustomFieldsChange,
   onUndoRecord,
   readOnly,
+  publicOnly = false,
   searchQuery = '',
   visibleCoolIds,
   disablePerformanceBottomSpacer = false,
@@ -100,8 +105,8 @@ export const CustomFieldsTable = ({
   const customFields = eventSettings.customFields;
   const typeData = getTypeData(customFields, timetableType);
   const columns = useMemo(
-    () => [...typeData.columns].sort((a, b) => a.order - b.order),
-    [typeData.columns]
+    () => typeData.columns.filter(column => !publicOnly || column.isPublic === true).sort((a, b) => a.order - b.order),
+    [typeData.columns, publicOnly]
   );
 
   // エントリー一覧（クール情報付き）
@@ -1150,6 +1155,13 @@ export const CustomFieldsTable = ({
                 bands={bands}
                 searchQuery={searchQuery}
                 bandNumbers={bandNumbers}
+                onShiftAction={(columnId, coolId, count, action) => {
+                  if (isReadOnly || !customFields) return;
+                  const updated = updateShiftSlot(customFields, timetableType, columnId, selectedDate, coolId, count, action);
+                  if (updated === customFields) return;
+                  onUndoRecord?.({ targetId: `column:${columnId}`, opType: 'customColumn:shift', before: customFields, after: updated });
+                  onCustomFieldsChange(updated);
+                }}
               />
             ))}
           </tbody>
@@ -1196,6 +1208,7 @@ interface CoolGroupProps {
   bands: Band[];
   searchQuery: string;
   bandNumbers: Map<string, number>;
+  onShiftAction: (columnId: string, coolId: string, count: number, action: ShiftSlotAction) => void;
 }
 
 const CoolGroup = ({
@@ -1231,6 +1244,7 @@ const CoolGroup = ({
   bands,
   searchQuery,
   bandNumbers,
+  onShiftAction,
 }: CoolGroupProps) => {
   const cellKey = (seq: number, colId: string) => `${seq}:${colId}`;
 
@@ -1275,6 +1289,7 @@ const CoolGroup = ({
         return (
           <tr
             key={entry.entryId}
+            data-entry-id={entry.entryId}
             className={`border-b border-gray-200 hover:bg-gray-50 ${
               isCustomEvent ? 'bg-emerald-100/70' : ''
             } ${searchDimClass}`}
@@ -1301,6 +1316,19 @@ const CoolGroup = ({
 
             {/* カスタム列 */}
             {columns.map((col, colIndex) => {
+              if (col.shift) {
+                const coolId = group.coolId ?? 'flat';
+                const position = group.entries.findIndex(item => item.entryId === entry.entryId);
+                const slots = getShiftSlots(col, selectedDate, coolId, group.entries.length);
+                const match = getShiftSlotAt(slots, position);
+                if (!match || match.start !== position) return null;
+                return <td key={col.id} data-col-id={col.id} data-seq={entry.sequenceNumber} data-shift-slot-id={match.slot.id} rowSpan={match.slot.size} className="relative border-l border-b border-emerald-200 p-0 align-middle">
+                  <ShiftSlotCell column={col} slot={match.slot} slotIndex={match.slotIndex} slots={slots}
+                    entries={group.entries.slice(match.start, match.start + match.slot.size)} bands={bands} readOnly={isReadOnly}
+                    otherAssignments={getOverlappingShiftAssignees(columns, col.id, selectedDate, coolId, group.entries.length, match.start, match.slot.size)}
+                    onAction={action => onShiftAction(col.id, coolId, group.entries.length, action)} />
+                </td>;
+              }
               const merged = isMergedChild(customFields, timetableType, selectedDate, col.id, entry.sequenceNumber);
               if (merged) return null;
 
