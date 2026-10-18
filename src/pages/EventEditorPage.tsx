@@ -13,7 +13,7 @@ import { SkipNotificationDialog } from '../components/SkipNotificationDialog';
 import { CollaboratorDetailModal } from '../components/CollaboratorDetailModal';
 import { timetableService, eventService, collaboratorService } from '../services/firestore';
 import { eventManagementService } from '../services/eventManagement';
-import { autoScheduleJobService, type AutoScheduleJob } from '../services/autoScheduleJob';
+import { autoScheduleJobService, latestAutoScheduleJob, type AutoScheduleJob } from '../services/autoScheduleJob';
 import { timetableToCSV, downloadCSV } from '../utils/timetableExport';
 import { useAuth } from '../hooks/useAuth';
 import { useMobileDetect } from '../hooks/useMobileDetect';
@@ -100,10 +100,11 @@ export const EventEditorPage = () => {
   const [autoScheduleDialogType, setAutoScheduleDialogType] = useState<'performance' | 'rehearsal' | null>(null);
   const [isCheckingAutoSchedule, setIsCheckingAutoSchedule] = useState(true);
   const [isStartingAutoSchedule, setIsStartingAutoSchedule] = useState(false);
-  const [isFinalizingAutoSchedule, setIsFinalizingAutoSchedule] = useState(false);
   const startingAutoScheduleRef = useRef(false);
+  // The server owns timetable writes until its result has reached the live snapshot.
+  const autoScheduleWriteLockRef = useRef(false);
   const handledAutoScheduleRunRef = useRef<string | null>(null);
-  const isAutoScheduling = isStartingAutoSchedule || isFinalizingAutoSchedule
+  const isAutoScheduling = isStartingAutoSchedule
     || autoScheduleJob?.status === 'queued' || autoScheduleJob?.status === 'running';
 
   // 共有パネルの表示状態
@@ -210,6 +211,7 @@ export const EventEditorPage = () => {
     bands,
     lastSavedPerformanceHashRef,
     lastSavedRehearsalHashRef,
+    autoScheduleWriteLockRef,
   });
 
   // Undo/Redo配線
@@ -409,6 +411,7 @@ export const EventEditorPage = () => {
       || isCheckingAutoSchedule || startingAutoScheduleRef.current
       || autoScheduleJob?.status === 'queued' || autoScheduleJob?.status === 'running') return;
     startingAutoScheduleRef.current = true;
+    autoScheduleWriteLockRef.current = true;
     setIsStartingAutoSchedule(true);
     setAutoScheduleMessage(null);
     try {
@@ -420,8 +423,9 @@ export const EventEditorPage = () => {
       };
       sessionStorage.setItem(`autoScheduleUndo:${eventId}`, JSON.stringify({ runId, type, before }));
       const job = await autoScheduleJobService.applyPreview(firebaseUser, eventId, runId);
-      setAutoScheduleJob(job);
+      setAutoScheduleJob(current => latestAutoScheduleJob(current, job));
     } catch (error) {
+      autoScheduleWriteLockRef.current = false;
       sessionStorage.removeItem(`autoScheduleUndo:${eventId}`);
       setAutoScheduleMessage(error instanceof Error ? error.message : '自動配置を開始できませんでした。');
     } finally {
@@ -437,10 +441,14 @@ export const EventEditorPage = () => {
       try {
         const job = await autoScheduleJobService.get(firebaseUser, eventId);
         if (cancelled) return;
+        if (job.runId === handledAutoScheduleRunRef.current
+          && (job.status === 'queued' || job.status === 'running')) return;
         setIsCheckingAutoSchedule(false);
-        setAutoScheduleJob(job);
+        setAutoScheduleJob(current => latestAutoScheduleJob(current, job));
+        if (job.status === 'queued' || job.status === 'running') autoScheduleWriteLockRef.current = true;
         if ((job.status === 'completed' || job.status === 'failed') && job.runId
           && handledAutoScheduleRunRef.current !== job.runId) {
+          autoScheduleWriteLockRef.current = false;
           handledAutoScheduleRunRef.current = job.runId;
           const stored = sessionStorage.getItem(`autoScheduleUndo:${eventId}`);
           sessionStorage.removeItem(`autoScheduleUndo:${eventId}`);
@@ -449,7 +457,6 @@ export const EventEditorPage = () => {
           } else {
             let undoReady = false;
             if (job.placed && stored) {
-              setIsFinalizingAutoSchedule(true);
               try {
                 const pending = JSON.parse(stored) as { runId: string; type: 'performance' | 'rehearsal'; before: BulkTimetableSnapshot };
                 if (pending.runId === job.runId) {
@@ -478,8 +485,6 @@ export const EventEditorPage = () => {
                 }
               } catch (error) {
                 console.error('自動配置の取り消し履歴を記録できませんでした:', error);
-              } finally {
-                if (!cancelled) setIsFinalizingAutoSchedule(false);
               }
             }
             if (stored) {
@@ -494,6 +499,7 @@ export const EventEditorPage = () => {
                   : `${job.type === 'rehearsal' ? 'リハ' : '本番'}に配置が必要なバンドはありません。`);
             }
           }
+          autoScheduleWriteLockRef.current = false;
         }
       } catch (error) {
         if (!cancelled) {

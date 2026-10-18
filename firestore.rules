@@ -119,7 +119,11 @@ service cloud.firestore {
     match /timetables/{timetableId} {
       allow read: if isEventOwnerOrCollaborator(resource.data.eventId);
       allow create: if isEventOwnerOrCollaborator(request.resource.data.eventId);
-      allow update, delete: if isEventOwnerOrCollaborator(resource.data.eventId);
+      // The server writes through the Admin SDK. Prevent stale editor tabs from
+      // immediately replacing a validated automatic placement with recalculated times.
+      allow update, delete: if isEventOwnerOrCollaborator(resource.data.eventId)
+        && (!('autoScheduleProtectedUntil' in resource.data)
+          || request.time >= resource.data.autoScheduleProtectedUntil);
     }
 
   }

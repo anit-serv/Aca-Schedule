@@ -3,6 +3,17 @@ import { expect, it } from 'vitest';
 import type { Band, DailyTimetable, Timetable } from '../types';
 import { useAllViolations, useConstraintCheck } from './useConstraintCheck';
 
+it('flags a cool break shorter than the configured minimum', () => {
+  const day: DailyTimetable = {
+    date: '2026-10-02', startTime: '10:00', minimumCoolBreakMinutes: 15, entries: [], cools: [
+      { id: 'first', number: 1, entries: [{ id: 'a', type: 'band', bandId: 'a', order: 0, startTime: '10:00', endTime: '10:10' }] },
+      { id: 'second', number: 2, entries: [{ id: 'b', type: 'band', bandId: 'b', order: 0, startTime: '10:20', endTime: '10:30' }] },
+    ],
+  };
+  const issues = renderHook(() => useConstraintCheck(day, [], new Map())).result.current;
+  expect(issues.find(issue => issue.type === 'cool-break-short')).toMatchObject({ entryId: 'b', severity: 'medium' });
+});
+
 it('flags band and custom event placements that end after the daily limit', () => {
   const day: DailyTimetable = {
     date: '2026-10-02', startTime: '10:00', endTime: '10:15', entries: [], cools: [{
@@ -17,6 +28,19 @@ it('flags band and custom event placements that end after the daily limit', () =
   const timetable = { id: 't', eventId: 'e', type: 'performance', dailyTimetables: [day], createdAt: new Date(), updatedAt: new Date() } as Timetable;
   const all = renderHook(() => useAllViolations(timetable, null, []));
   expect(all.result.current.filter(item => item.type === 'day-end-exceeded')).toHaveLength(2);
+});
+
+it('flags entries placed in a closed venue interval', () => {
+  const day: DailyTimetable = {
+    date: '2026-10-02', startTime: '10:00', endTime: '11:20',
+    venueTimeRanges: [{ startTime: '10:00', endTime: '10:20' }, { startTime: '11:00', endTime: '11:20' }],
+    entries: [], cools: [{ id: 'cool', number: 1, entries: [
+      { id: 'valid', type: 'custom', order: 0, startTime: '10:00', endTime: '10:10', customEvent: { id: 'a', name: '案内', duration: 10 } },
+      { id: 'invalid', type: 'custom', order: 1, startTime: '10:15', endTime: '10:25', customEvent: { id: 'b', name: '休憩', duration: 10 } },
+    ] }],
+  };
+  const issues = renderHook(() => useConstraintCheck(day, [], new Map())).result.current;
+  expect(issues.filter(issue => issue.type === 'venue-time-exceeded').map(issue => issue.entryId)).toEqual(['invalid']);
 });
 
 it('accepts backup availability for rehearsal while keeping performance restricted to normal availability', () => {

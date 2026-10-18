@@ -1,4 +1,5 @@
 import type { Band, Cool, DailyTimetable, TimetableEntry } from '../types';
+import { DEFAULT_MINIMUM_COOL_BREAK_MINUTES, minutesAsTime, timeInMinutes } from './coolBreak';
 
 // 日付の最初のクールの開始時刻を取得
 export const getFirstCoolStartTime = (dailyTimetable?: DailyTimetable): string | undefined => {
@@ -76,16 +77,19 @@ export const getCoolEndTime = (cool?: Cool): string | undefined => {
   return cool.entries[cool.entries.length - 1].endTime;
 };
 
-export const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: string, bands: Band[], linkedRehearsalCools?: Cool[]): Cool[] => {
+export const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: string, bands: Band[], linkedRehearsalCools?: Cool[], minimumBreak = DEFAULT_MINIMUM_COOL_BREAK_MINUTES): Cool[] => {
   if (!cools || cools.length === 0) return cools;
   let currentTime = dailyStartTime;
   return cools.map((cool, index) => {
+    if (index > 0 && !cool.startTime && cools[index - 1].entries.length > 0) {
+      currentTime = minutesAsTime(timeInMinutes(currentTime) + minimumBreak);
+    }
     if (cool.startTime) currentTime = cool.startTime;
 
     // クール直前リハーサル: 対応するリハ終了時刻を本番開始に反映
     const linkedRehearsalEndTime = getCoolEndTime(linkedRehearsalCools?.[index]);
     if (linkedRehearsalEndTime && !cool.startTime) {
-      currentTime = linkedRehearsalEndTime;
+      currentTime = minutesAsTime(Math.max(timeInMinutes(currentTime), timeInMinutes(linkedRehearsalEndTime)));
     }
 
     const updatedEntries = recalculatePerformanceEntryTimes(cool.entries, currentTime, bands);
@@ -97,18 +101,21 @@ export const recalculatePerformanceCoolTimes = (cools: Cool[], dailyStartTime: s
   });
 };
 
-export const recalculateRehearsalCoolTimes = (cools: Cool[], dailyStartTime: string, rehearsalDuration: number, linkedPerformanceCools?: Cool[]): Cool[] => {
+export const recalculateRehearsalCoolTimes = (cools: Cool[], dailyStartTime: string, rehearsalDuration: number, linkedPerformanceCools?: Cool[], minimumBreak = DEFAULT_MINIMUM_COOL_BREAK_MINUTES): Cool[] => {
   if (!cools || cools.length === 0) return cools;
   let currentTime = dailyStartTime;
 
   return cools.map((cool, index) => {
+    if (index > 0 && !cool.startTime && cools[index - 1].entries.length > 0) {
+      currentTime = minutesAsTime(timeInMinutes(currentTime) + minimumBreak);
+    }
     if (cool.startTime) currentTime = cool.startTime;
 
     // クール直前リハーサル: 前クール本番終了時刻を次クールリハ開始に反映
     if (index > 0) {
       const previousPerformanceEndTime = getCoolEndTime(linkedPerformanceCools?.[index - 1]);
       if (previousPerformanceEndTime) {
-        currentTime = previousPerformanceEndTime;
+        currentTime = minutesAsTime(Math.max(timeInMinutes(currentTime), timeInMinutes(previousPerformanceEndTime)));
       }
     }
 

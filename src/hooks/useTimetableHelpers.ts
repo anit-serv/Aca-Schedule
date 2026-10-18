@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import type { Band, EventSettings, Timetable, TimetableEntry, Cool } from '../types';
+import { minimumCoolBreakMinutes, minutesAsTime, timeInMinutes } from '../utils/coolBreak';
 
 interface UseTimetableHelpersProps {
   bands: Band[];
@@ -215,7 +216,7 @@ export const useTimetableHelpers = ({
   }, [bands, timetableType, eventSettings.rehearsalDuration]);
 
   // クール構造を考慮した時刻再計算
-  const recalculateTimes = useCallback((cools: Cool[], dailyStartTime: string): Cool[] => {
+  const recalculateTimes = useCallback((cools: Cool[], dailyStartTime: string, minimumBreakOverride?: number): Cool[] => {
     if (!cools || cools.length === 0) return cools;
 
     const getCoolEndTime = (cool?: Cool): string | undefined => {
@@ -238,10 +239,15 @@ export const useTimetableHelpers = ({
     const rehearsalDailyTimetable = rehearsalTimetable?.dailyTimetables.find(
       (dt) => dt.date === selectedDate
     );
+    const currentDay = timetable?.dailyTimetables.find(dt => dt.date === selectedDate);
+    const minimumBreak = minimumBreakOverride ?? minimumCoolBreakMinutes(currentDay ?? {});
 
     let currentTime = dailyStartTime;
     
     return cools.map((cool, coolIndex) => {
+      if (coolIndex > 0 && !cool.startTime && cools[coolIndex - 1].entries.length > 0) {
+        currentTime = minutesAsTime(timeInMinutes(currentTime) + minimumBreak);
+      }
       // クールに開始時刻が設定されている場合はそれを使用
       if (cool.startTime) {
         currentTime = cool.startTime;
@@ -253,13 +259,13 @@ export const useTimetableHelpers = ({
           // 対応するクールのリハ終了時刻を本番クール開始時刻として常に優先
           const linkedRehearsalEndTime = getCoolEndTime(rehearsalDailyTimetable?.cools?.[coolIndex]);
           if (linkedRehearsalEndTime && !cool.startTime) {
-            currentTime = linkedRehearsalEndTime;
+            currentTime = minutesAsTime(Math.max(timeInMinutes(currentTime), timeInMinutes(linkedRehearsalEndTime)));
           }
         } else if (timetableType === 'rehearsal' && coolIndex > 0) {
           // あるクールの本番終了時刻を次クールのリハのデフォルト開始時刻にする
           const previousPerformanceEndTime = getLatestCoolEndTimeBefore(coolIndex);
           if (previousPerformanceEndTime) {
-            currentTime = previousPerformanceEndTime;
+            currentTime = minutesAsTime(Math.max(timeInMinutes(currentTime), timeInMinutes(previousPerformanceEndTime)));
           }
         }
       }
@@ -283,6 +289,7 @@ export const useTimetableHelpers = ({
     eventSettings.rehearsalType,
     performanceTimetable,
     rehearsalTimetable,
+    timetable,
     selectedDate,
     timetableType,
   ]);

@@ -1,8 +1,8 @@
 import type { Band, EventSettings, DailyTimetable } from '../types';
 import { ToggleSwitch } from './ToggleSwitch';
 import { TimetableSearch } from './TimetableSearch';
-import { DesktopClockTimePicker } from './DesktopClockTimePicker';
 import { Icon } from './Icon';
+import { minimumCoolBreakMinutes } from '../utils/coolBreak';
 
 interface TimetableContextBarProps {
   timetableType: 'performance' | 'rehearsal';
@@ -16,10 +16,10 @@ interface TimetableContextBarProps {
   unifiedCoolPre?: boolean;
   onTimetableTypeChange: (type: 'performance' | 'rehearsal') => void;
   onDateChange: (date: string) => void;
-  onStartTimeChange: (time: string) => void;
-  onEndTimeChange: (time: string | undefined) => void;
+  onOpenVenueTimeRanges: () => void;
   onCoolCountChange: (count: number) => void;
   onCoolCountInputChange: (value: string) => void;
+  onMinimumCoolBreakChange: (minutes: number) => void;
   onCustomModeChange: (enabled: boolean) => void;
   bands: Band[];
   searchQuery: string;
@@ -44,10 +44,10 @@ export const TimetableContextBar = ({
   unifiedCoolPre = false,
   onTimetableTypeChange,
   onDateChange,
-  onStartTimeChange,
-  onEndTimeChange,
+  onOpenVenueTimeRanges,
   onCoolCountChange,
   onCoolCountInputChange,
+  onMinimumCoolBreakChange,
   onCustomModeChange,
   bands,
   searchQuery,
@@ -123,38 +123,11 @@ export const TimetableContextBar = ({
 
         {/* 右側: 開始時刻、クール数、カスタムモード */}
         <div className="flex flex-none items-center gap-2">
-          {/* 開始時刻 */}
-          <div className={`flex items-center gap-1.5 transition-opacity duration-200 ${isCustomMode ? 'opacity-50' : ''}`}>
-            <label htmlFor="startTime" className="text-sm text-gray-500 whitespace-nowrap">
-              開始時刻:
-            </label>
-            <DesktopClockTimePicker
-              id="startTime"
-              value={currentTimetable.startTime}
-              onChange={(time) => {
-                if (!time) return;
-                onStartTimeChange(time);
-              }}
-              disabled={isCustomMode}
-              inputClassName={`w-[76px] px-1 py-1 bg-white border border-gray-300 rounded text-sm text-center text-gray-900 ${
-                isCustomMode ? 'cursor-not-allowed' : ''
-              }`}
-            />
-          </div>
-
-          {/* 終了時刻 */}
-          <div className={`flex items-center gap-1.5 transition-opacity duration-200 ${isCustomMode ? 'opacity-50' : ''}`}>
-            <label htmlFor="dayEndTime" className="text-sm text-gray-500 whitespace-nowrap">終了時刻:</label>
-            <DesktopClockTimePicker
-              id="dayEndTime"
-              value={currentTimetable.endTime}
-              onChange={onEndTimeChange}
-              allowClear
-              placeholder="未設定"
-              disabled={isReadOnly || isCustomMode}
-              inputClassName="w-[76px] px-1 py-1 bg-white border border-gray-300 rounded text-sm text-center text-gray-900"
-            />
-          </div>
+          <button type="button" onClick={onOpenVenueTimeRanges} disabled={isReadOnly || isCustomMode}
+            title="演奏可能時間を設定" aria-label="演奏可能時間を設定"
+            className="flex items-center justify-center rounded border border-gray-200 p-1.5 text-gray-700 hover:bg-emerald-50 disabled:opacity-50">
+            <Icon name="schedule" className="text-xl" />
+          </button>
 
           {/* クール数 */}
             <div className={`flex items-center gap-1.5 transition-opacity duration-200 ${isCustomMode ? 'opacity-50' : ''}`}>
@@ -180,6 +153,21 @@ export const TimetableContextBar = ({
                 }`}
               />
             </div>
+
+          <div className={`flex items-center gap-1.5 transition-opacity duration-200 ${isCustomMode ? 'opacity-50' : ''}`}>
+            <label htmlFor="minimumCoolBreak" className="text-sm text-gray-500 whitespace-nowrap">クール間休憩:</label>
+            <input
+              id="minimumCoolBreak"
+              type="number"
+              min="0"
+              max="120"
+              value={minimumCoolBreakMinutes(currentTimetable)}
+              onChange={event => onMinimumCoolBreakChange(Number(event.target.value))}
+              disabled={isReadOnly || isCustomMode}
+              className="w-12 rounded border border-gray-300 bg-white px-1 py-1 text-center text-sm text-gray-900 disabled:cursor-not-allowed"
+            />
+            <span className="text-sm text-gray-500">分</span>
+          </div>
 
           {/* 検索 */}
           <TimetableSearch

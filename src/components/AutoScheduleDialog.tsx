@@ -79,6 +79,7 @@ export const AutoScheduleDialog = ({ type, bandCount, onCancel, onPrepare, onRea
         <h2 id="auto-schedule-title" className="text-lg font-bold text-gray-900">{label}の自動配置を実行しますか？</h2>
         {range ? <p className="mt-3 text-sm text-gray-700">出演番号 <strong>{range.startNumber}〜{range.endNumber}</strong> の配置済みバンドだけを並び替えます。</p>
           : <p className="mt-3 text-sm text-gray-700">{label}の全日程で、未配置の出演枠を出演可能時間内に追加します。既存カードの順序とクール、時刻固定カードは維持します。</p>}
+        {!range && <p className="mt-2 text-sm text-amber-700">配置済みの枠は均等化の対象外です。全体を組み直す場合は、先に配置をリセットして「クール開始時刻も再計算する」を選んでください。</p>}
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-700">
           <li>出演可能時間、クール開始時刻、日ごとの終了時刻を守ります。条件を満たせない出演枠は未配置のまま残る場合があります。</li>
           <li>開始すると完了までタイムテーブルとバンド管理を編集できません。</li>

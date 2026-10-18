@@ -10,9 +10,9 @@ import {
 } from '@dnd-kit/core';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, CustomEvent, ConstraintViolation, CustomFieldsSettings, CustomFieldsUndoMeta } from '../../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, Cool, TimetableEntry, CustomEvent, ConstraintViolation, CustomFieldsSettings, CustomFieldsUndoMeta, TimeRange } from '../../types';
 import { calculateBandNumbers } from '../../utils/calculateBandNumbers';
-import { isValidCoolStart, isValidDayEnd, timeMinutes } from '../../utils/dailyTimeBounds';
+import { isValidCoolStart, timeMinutes } from '../../utils/dailyTimeBounds';
 import { normalizeTimeRanges } from '../../utils/availabilityRanges';
 import { generateUUID } from '../../utils/generateUUID';
 import { captureTimetableScroll, restoreTimetableScroll, type TimetableScrollSnapshot } from '../../utils/timetableScrollAnchor';
@@ -28,6 +28,7 @@ import { MobileBottomSheet, type SheetHeight } from './MobileBottomSheet';
 import { MobileBandBank } from './MobileBandBank';
 import { FixedTimeDialog } from '../FixedTimeDialog';
 import { ResetTimetablesDialog } from '../ResetTimetablesDialog';
+import { VenueTimeRangesModal } from '../VenueTimeRangesModal';
 import { eventService } from '../../services/firestore';
 import { RateLimitError } from '../../utils/writeRateLimiter';
 import { Icon } from '../Icon';
@@ -207,6 +208,7 @@ export const MobileTimetableView = ({
   const [customEventName, setCustomEventName] = useState('');
   const [customEventDuration, setCustomEventDuration] = useState('5');
   const [showViolationSheet, setShowViolationSheet] = useState(false);
+  const [showVenueTimeRanges, setShowVenueTimeRanges] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -879,37 +881,27 @@ export const MobileTimetableView = ({
     });
   }, [currentTimetable, updateTimetable, recalculateTimes]);
 
-  // \u958b\u59cb\u6642\u523b\u5909\u66f4
-  const handleStartTimeChange = useCallback((newStartTime: string) => {
-    if (!currentTimetable) return;
-    if (currentTimetable.endTime && timeMinutes(newStartTime) >= timeMinutes(currentTimetable.endTime)) {
-      alert(`開始時刻は終了時刻（${currentTimetable.endTime}）より前に設定してください。`);
-      return;
-    }
-    updateTimetable((dt) => {
-      const baseCools = eventSettings.rehearsalType === 'cool-pre-rehearsal'
-        ? dt.cools.map((cool, index) => index === 0 ? { ...cool, startTime: newStartTime } : cool)
-        : dt.cools;
-      const recalculated = recalculateTimes(baseCools, newStartTime);
-      return { ...dt, startTime: newStartTime, cools: recalculated };
+  const handleVenueTimeRangesSave = useCallback((ranges: TimeRange[]) => {
+    updateTimetable(day => {
+      const startTime = ranges[0]?.startTime ?? day.startTime;
+      const endTime = ranges.at(-1)?.endTime ?? day.endTime;
+      const baseCools = eventSettings.rehearsalType === 'cool-pre-rehearsal' && ranges.length
+        ? day.cools.map((cool, index) => index === 0 ? { ...cool, startTime } : cool)
+        : day.cools;
+      return { ...day, startTime, ...(endTime ? { endTime } : {}), venueTimeRanges: ranges,
+        cools: recalculateTimes(baseCools, startTime) };
     });
-  }, [currentTimetable, updateTimetable, recalculateTimes, eventSettings.rehearsalType]);
+    setShowVenueTimeRanges(false);
+  }, [updateTimetable, recalculateTimes, eventSettings.rehearsalType]);
 
-  const handleEndTimeChange = useCallback((newEndTime: string | undefined) => {
-    if (!currentTimetable) return;
-    if (newEndTime && !isValidDayEnd(currentTimetable, newEndTime)) {
-      alert('終了時刻はその日の開始時刻と、すべてのクール開始時刻より後に設定してください。');
-      return;
-    }
-    updateTimetable(dt => {
-      if (!newEndTime) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { endTime: _removedEndTime, ...withoutEndTime } = dt;
-        return withoutEndTime;
-      }
-      return { ...dt, endTime: newEndTime };
-    });
-  }, [currentTimetable, updateTimetable]);
+  const handleMinimumCoolBreakChange = useCallback((minutes: number) => {
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 120) return;
+    updateTimetable(day => ({
+      ...day,
+      minimumCoolBreakMinutes: minutes,
+      cools: recalculateTimes(day.cools, day.startTime, minutes),
+    }));
+  }, [recalculateTimes, updateTimetable]);
 
   // クール数変更を実行
   const applyCoolCountChange = useCallback((newCount: number, reductionAction: 'move' | 'bank' = 'move') => {
@@ -1148,27 +1140,10 @@ export const MobileTimetableView = ({
         {currentTimetable && (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 min-w-0">
-              <span className="whitespace-nowrap">{'\u958B\u59CB'}:</span>
-              <MobileTimeInput
-                value={currentTimetable.startTime}
-                onChange={(next) => {
-                  if (!next) return;
-                  handleStartTimeChange(next);
-                }}
-                nativeInputClassName="h-9 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 bg-white focus:outline-none focus:border-emerald-400 w-[120px]"
-                fallbackContainerClassName="flex items-center gap-1"
-                fallbackSelectClassName="h-9 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 bg-white focus:outline-none focus:border-emerald-400"
-              />
-              <span className="whitespace-nowrap">終了:</span>
-              <MobileTimeInput
-                value={currentTimetable.endTime}
-                onChange={handleEndTimeChange}
-                allowEmpty
-                clearTitle="終了時刻を削除"
-                nativeInputClassName="h-9 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 bg-white w-[120px]"
-                fallbackContainerClassName="flex items-center gap-1"
-                fallbackSelectClassName="h-9 border border-emerald-200 rounded-md px-2 text-[16px] leading-none text-emerald-700 bg-white"
-              />
+              <button type="button" onClick={() => setShowVenueTimeRanges(true)} disabled={isCustomMode}
+                aria-label="演奏可能時間を設定" title="演奏可能時間を設定" className="flex items-center justify-center rounded-md border border-emerald-200 bg-white p-2 text-emerald-700 disabled:opacity-50">
+                <Icon name="schedule" className="text-lg" />
+              </button>
               {dates.length === 1 && (
                 <span className="text-gray-400">{'\u2022'} {formatDate(selectedDate)}</span>
               )}
@@ -1221,6 +1196,20 @@ export const MobileTimetableView = ({
                     +
                   </button>
                 </div>
+              )}
+              {!isCustomMode && (
+                <label className="flex items-center gap-1 whitespace-nowrap text-xs text-gray-500">
+                  クール間休憩
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={currentTimetable.minimumCoolBreakMinutes ?? 10}
+                    onChange={event => handleMinimumCoolBreakChange(Number(event.target.value))}
+                    className="w-12 rounded border border-gray-200 bg-white px-1 py-1 text-center text-xs text-gray-700"
+                  />
+                  分
+                </label>
               )}
             </div>
           </div>
@@ -1677,6 +1666,7 @@ export const MobileTimetableView = ({
           />
         )}
       </MobileBottomSheet>
+      {showVenueTimeRanges && currentTimetable && <VenueTimeRangesModal key={`${timetableType}-${selectedDate}`} day={currentTimetable} onSave={handleVenueTimeRangesSave} onClose={() => setShowVenueTimeRanges(false)} />}
       {isResetDialogOpen && resetPlan && (
         <ResetTimetablesDialog scope={resetPlan.scope} bandEntries={resetPlan.bandEntries} customEntries={resetPlan.customEntries}
           isResetting={isResetting} onCancel={() => setIsResetDialogOpen(false)} onConfirm={() => { void handleResetAll(); }} />

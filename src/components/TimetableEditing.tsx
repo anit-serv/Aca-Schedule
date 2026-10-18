@@ -6,10 +6,11 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core';
-import type { Band, EventSettings, Timetable, DailyTimetable, TimetableEntry, CustomEvent, CustomFieldsSettings, ConstraintViolation, CustomFieldsUndoMeta } from '../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, TimetableEntry, CustomEvent, CustomFieldsSettings, ConstraintViolation, CustomFieldsUndoMeta, TimeRange } from '../types';
 import { TimetableDragOverlay } from './TimetableDragOverlay';
 import { ViolationPanel } from './ViolationPanel';
 import { TimetableContextBar } from './TimetableContextBar';
+import { VenueTimeRangesModal } from './VenueTimeRangesModal';
 import { matchesTimetableBandSearch } from '../utils/timetableSearch';
 import { TimetableContent } from './TimetableContent';
 import { BandBankDropZone } from './BandBankDropZone';
@@ -28,7 +29,7 @@ import { isDropWithinTimetableScope } from '../utils/timetableDropScope';
 import { canPlaceInCoolPreRehearsal } from '../utils/coolPreRehearsal';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 import { getCustomShiftIssues } from '../utils/customShift';
-import { isValidCoolStart, isValidDayEnd, timeMinutes } from '../utils/dailyTimeBounds';
+import { isValidCoolStart, timeMinutes } from '../utils/dailyTimeBounds';
 import { normalizeTimeRanges } from '../utils/availabilityRanges';
 import { generateUUID } from '../utils/generateUUID';
 import { captureTimetableScroll, restoreTimetableScroll, type TimetableScrollSnapshot } from '../utils/timetableScrollAnchor';
@@ -127,6 +128,7 @@ export const TimetableEditing = ({
     onViewChange?.({ type: timetableType, date: selectedDate });
   }, [timetableType, selectedDate, onViewChange]);
   const [inputCoolCount, setInputCoolCount] = useState<string>('1');
+  const [showVenueTimeRanges, setShowVenueTimeRanges] = useState(false);
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
   const [isCustomMode, setIsCustomMode] = useState(initialCustomMode);
@@ -223,7 +225,7 @@ export const TimetableEditing = ({
   const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bankArrivalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingBankReturnRef = useRef<{ entryId: string; bandId: string | null } | null>(null);
-  const hasSkippedInitialAutoRecalcRef = useRef(false);
+  const lastTimingInputsRef = useRef<{ performance?: string; rehearsal?: string }>({});
 
   useEffect(() => () => {
     if (returnTimerRef.current) clearTimeout(returnTimerRef.current);
@@ -445,14 +447,29 @@ export const TimetableEditing = ({
       performanceTimetable?.dailyTimetables.find(day => day.date === selectedDate), bandId, coolIndex,
     ), [rehearsalCoolStructureLocked, performanceTimetable, selectedDate]);
 
-  // バンドの演奏時間が変更されたら、タイムテーブルの時刻を再計算
-  // または日付が切り替わったときも再計算
+  // Firestore のスナップショット更新で bands や recalculateTimes の参照は変わる。
+  // 時刻に影響する入力値だけを監視し、保存→再計算→保存のループを防ぐ。
+  const timingInputs = useMemo(() => JSON.stringify({
+    // リハの長さはイベント共通。バンドの本番演奏時間を編集してもリハ時刻は動かさない。
+    bands: timetableType === 'performance'
+      ? bands.map(band => [band.id, band.performanceDuration]).sort(([a], [b]) => String(a).localeCompare(String(b)))
+      : [],
+    rehearsalDuration: timetableType === 'rehearsal' ? eventSettings.rehearsalDuration : null,
+  }), [bands, eventSettings.rehearsalDuration, timetableType]);
+
   useEffect(() => {
-    // 初回表示時の自動再計算はスキップし、読み込み直後の時刻チラつきを防ぐ
-    if (!hasSkippedInitialAutoRecalcRef.current) {
-      hasSkippedInitialAutoRecalcRef.current = true;
+    // A server-side auto schedule may intentionally leave availability gaps.
+    // Never retime its snapshot while the job is being applied.
+    if (isAutoScheduling) {
+      lastTimingInputsRef.current[timetableType] = timingInputs;
       return;
     }
+    if (lastTimingInputsRef.current[timetableType] === undefined) {
+      lastTimingInputsRef.current[timetableType] = timingInputs;
+      return;
+    }
+    if (lastTimingInputsRef.current[timetableType] === timingInputs) return;
+    lastTimingInputsRef.current[timetableType] = timingInputs;
 
     if (!currentTimetable || !bands || bands.length === 0) return;
     
@@ -476,48 +493,33 @@ export const TimetableEditing = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bands, selectedDate, currentTimetable.startTime, recalculateTimes]); // bandsの変更、日付の切り替え、開始時刻/デフォルト計算ロジックの変更を監視
+  }, [timingInputs, timetableType, isAutoScheduling]);
 
 
-  // 開始時刻の変更
-  const handleStartTimeChange = (newStartTime: string) => {
-    if (currentTimetable.endTime && timeMinutes(newStartTime) >= timeMinutes(currentTimetable.endTime)) {
-      alert(`開始時刻は終了時刻（${currentTimetable.endTime}）より前に設定してください。`);
-      return;
-    }
-    if (currentTimetable.cools && currentTimetable.cools.length > 0) {
-      const baseCools = eventSettings.rehearsalType === 'cool-pre-rehearsal'
-        ? currentTimetable.cools.map((cool, index) => index === 0 ? { ...cool, startTime: newStartTime } : cool)
-        : currentTimetable.cools;
-      const calculatedCools = recalculateTimes(baseCools, newStartTime);
-      onTimetableChange({
-        ...currentTimetable,
-        startTime: newStartTime,
-        cools: calculatedCools,
-      });
-    } else {
-      const calculatedEntries = calculateTimes(currentTimetable.entries, newStartTime);
-      onTimetableChange({
-        ...currentTimetable,
-        startTime: newStartTime,
-        entries: calculatedEntries,
-      });
-    }
+  const handleVenueTimeRangesSave = (ranges: TimeRange[]) => {
+    const startTime = ranges[0]?.startTime ?? currentTimetable.startTime;
+    const endTime = ranges.at(-1)?.endTime ?? currentTimetable.endTime;
+    const baseCools = eventSettings.rehearsalType === 'cool-pre-rehearsal' && ranges.length
+      ? currentTimetable.cools.map((cool, index) => index === 0 ? { ...cool, startTime } : cool)
+      : currentTimetable.cools;
+    onTimetableChange({
+      ...currentTimetable,
+      startTime,
+      ...(endTime ? { endTime } : {}),
+      venueTimeRanges: ranges,
+      cools: recalculateTimes(baseCools, startTime),
+      entries: currentTimetable.cools.length ? currentTimetable.entries : calculateTimes(currentTimetable.entries, startTime),
+    });
+    setShowVenueTimeRanges(false);
   };
 
-  const handleEndTimeChange = (newEndTime: string | undefined) => {
-    if (newEndTime && !isValidDayEnd(currentTimetable, newEndTime)) {
-      alert('終了時刻はその日の開始時刻と、すべてのクール開始時刻より後に設定してください。');
-      return;
-    }
-    if (!newEndTime) {
-      // Firestore は undefined を保存できないため、未設定時はキーを削除する。
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { endTime: _removedEndTime, ...dayWithoutEndTime } = currentTimetable;
-      onTimetableChange(dayWithoutEndTime);
-      return;
-    }
-    onTimetableChange({ ...currentTimetable, endTime: newEndTime });
+  const handleMinimumCoolBreakChange = (minutes: number) => {
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 120) return;
+    onTimetableChange({
+      ...currentTimetable,
+      minimumCoolBreakMinutes: minutes,
+      cools: recalculateTimes(currentTimetable.cools, currentTimetable.startTime, minutes),
+    });
   };
 
   // 転換時間の変更
@@ -560,10 +562,11 @@ export const TimetableEditing = ({
         // startTimeがundefinedの場合、プロパティ自体を削除
         if (startTime === undefined) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { startTime: _, ...coolWithoutStartTime } = cool;
+          const { startTime: _, autoGeneratedStartTime: _autoGenerated, ...coolWithoutStartTime } = cool;
+          void _autoGenerated;
           return coolWithoutStartTime;
         }
-        return { ...cool, startTime };
+        return { ...cool, startTime, autoGeneratedStartTime: false };
       }
       return cool;
     });
@@ -726,11 +729,18 @@ export const TimetableEditing = ({
     }
   }, [timetableType, isReadOnly, timetable, isAutoScheduling, onAutoScheduleStart]);
 
-  const handleResetAll = async () => {
+  const handleResetAll = async (resetCoolStarts: boolean) => {
     if (!resetPlan || !resetEntryCount || isResetting) return;
     setIsResetting(true);
     try {
-      await onResetAllApply(resetPlan);
+      const plan = resetCoolStarts && performanceTimetable
+        ? timetableType === 'rehearsal' && rehearsalTimetable
+          ? prepareRehearsalReset(performanceTimetable, rehearsalTimetable, eventSettings.customFields, true)
+          : eventSettings.rehearsalType === 'cool-pre-rehearsal'
+            ? prepareTimetablesReset(performanceTimetable, rehearsalTimetable, eventSettings.customFields, true)
+            : preparePerformanceReset(performanceTimetable, eventSettings.customFields, true)
+        : resetPlan;
+      await onResetAllApply(plan);
       setIsResetDialogOpen(false);
       setResetMessage(`${resetPlan.scope === 'rehearsal' ? 'リハ' : resetPlan.scope === 'performance' ? '本番' : '本番と連動リハ'}の${resetEntryCount}枠をリセットしました。元に戻すボタンで取り消せます。`);
     } catch (error) {
@@ -1113,10 +1123,10 @@ export const TimetableEditing = ({
           unifiedCoolPre={unifiedCoolPre}
           onTimetableTypeChange={handleTimetableTypeChange}
           onDateChange={setSelectedDate}
-          onStartTimeChange={handleStartTimeChange}
-          onEndTimeChange={handleEndTimeChange}
+          onOpenVenueTimeRanges={() => setShowVenueTimeRanges(true)}
           onCoolCountChange={handleCoolCountChangeWithConfirm}
           onCoolCountInputChange={setInputCoolCount}
+          onMinimumCoolBreakChange={handleMinimumCoolBreakChange}
           onCustomModeChange={setIsCustomMode}
           bands={bands}
           searchQuery={searchQuery}
@@ -1289,6 +1299,8 @@ export const TimetableEditing = ({
         </div>
         </div>
 
+      {showVenueTimeRanges && <VenueTimeRangesModal key={`${timetableType}-${selectedDate}`} day={currentTimetable} onSave={handleVenueTimeRangesSave} onClose={() => setShowVenueTimeRanges(false)} />}
+
       {/* ドラッグオーバーレイ */}
       {!isCustomMode && (
         <TimetableDragOverlay
@@ -1389,7 +1401,7 @@ export const TimetableEditing = ({
       )}
       {isResetDialogOpen && resetPlan && (
         <ResetTimetablesDialog scope={resetPlan.scope} bandEntries={resetPlan.bandEntries} customEntries={resetPlan.customEntries}
-          isResetting={isResetting} onCancel={() => setIsResetDialogOpen(false)} onConfirm={() => { void handleResetAll(); }} />
+          isResetting={isResetting} onCancel={() => setIsResetDialogOpen(false)} onConfirm={resetCoolStarts => { void handleResetAll(resetCoolStarts); }} />
       )}
       {fixedDialog && (() => {
         const band = bands.find(item => item.id === fixedDialog.bandId);

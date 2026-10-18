@@ -14,6 +14,16 @@ export interface AutoScheduleJob {
   updatedAt?: string | null;
 }
 
+const statusOrder: Record<AutoScheduleJob['status'], number> = {
+  none: 0, preparing: 1, previewing: 2, prepared: 3,
+  queued: 4, running: 5, completed: 6, failed: 6,
+};
+
+/** Ignore an older poll response for the same run after a newer state arrived. */
+export const latestAutoScheduleJob = (current: AutoScheduleJob | null, incoming: AutoScheduleJob): AutoScheduleJob =>
+  current?.runId && current.runId === incoming.runId && statusOrder[current.status] > statusOrder[incoming.status]
+    ? current : incoming;
+
 async function request(user: User, eventId: string, method: 'GET' | 'POST', type: 'performance' | 'rehearsal' = 'performance', range?: AutoScheduleRange, action?: 'prepare' | 'apply-preview', runId?: string): Promise<AutoScheduleJob> {
   const token = await user.getIdToken();
   const response = await fetch(method === 'GET'

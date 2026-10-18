@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, shiftAutoScheduleCustomFields } from './autoScheduleAlgorithm.js';
+import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, findAutoScheduleAvailabilityError, shiftAutoScheduleCustomFields } from './autoScheduleAlgorithm.js';
 import { ApiError } from './errors.js';
 
 const STALE_AFTER_MS = 6 * 60_000;
+// Older editor tabs can retime the server result as soon as the snapshot arrives.
+// Firestore rules block client writes briefly after an automatic placement.
+const AUTO_SCHEDULE_WRITE_PROTECTION_MS = 15_000;
 
 const entryCount = data => (data.dailyTimetables || []).reduce((count, day) => count +
   (day.cools?.length ? day.cools.reduce((total, cool) => total + (cool.entries || []).length, 0) : (day.entries || []).length), 0);
@@ -104,6 +107,10 @@ export async function runAutoScheduleJob(db, eventId, runId) {
           event.rehearsalType === 'cool-pre-rehearsal' ? rehearsal : null);
     const computeMs = Math.round(performance.now() - started - fetchMs);
     if (result.error) throw new ApiError(409, 'NO_COMPLETE_SCHEDULE', result.error);
+    const availabilityError = findAutoScheduleAvailabilityError(
+      result.dailyTimetables, bands, type, event.rehearsalDuration || 0,
+    );
+    if (availabilityError) throw new ApiError(409, 'INVALID_AUTO_SCHEDULE', availabilityError);
     const customFields = result.placed > 0
       ? shiftAutoScheduleCustomFields(source, result.dailyTimetables, event.customFields, type)
       : undefined;
@@ -137,7 +144,10 @@ export async function runAutoScheduleJob(db, eventId, runId) {
         return;
       }
       if (result.placed > 0) {
-        transaction.update(sourceDoc.ref, { dailyTimetables: result.dailyTimetables, updatedAt: now });
+        transaction.update(sourceDoc.ref, {
+          dailyTimetables: result.dailyTimetables, updatedAt: now,
+          autoScheduleProtectedUntil: new Date(now.getTime() + AUTO_SCHEDULE_WRITE_PROTECTION_MS),
+        });
         if (customFields) transaction.update(eventRef, { customFields, updatedAt: now });
       }
       transaction.update(jobRef, {
@@ -192,9 +202,17 @@ export async function applyPreparedAutoScheduleJob(db, eventId, runId, userId, u
       || !bandsUnchanged) {
       throw new ApiError(409, 'PREVIEW_STALE', '計算後にイベントが変更されました。もう一度確認してください。');
     }
+    const availabilityError = findAutoScheduleAvailabilityError(
+      prepared.dailyTimetables, bandQuery.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+      job.type || 'performance', eventSnapshot.data().rehearsalDuration || 0,
+    );
+    if (availabilityError) throw new ApiError(409, 'INVALID_AUTO_SCHEDULE', availabilityError);
     const now = new Date();
     if (job.placed > 0) {
-      transaction.update(timetableRef, { dailyTimetables: prepared.dailyTimetables, updatedAt: now });
+      transaction.update(timetableRef, {
+        dailyTimetables: prepared.dailyTimetables, updatedAt: now,
+        autoScheduleProtectedUntil: new Date(now.getTime() + AUTO_SCHEDULE_WRITE_PROTECTION_MS),
+      });
       if (prepared.customFields) transaction.update(eventRef, { customFields: prepared.customFields, updatedAt: now });
     }
     transaction.update(jobRef, { status: 'completed', prepared: null, updatedAt: now });

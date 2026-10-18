@@ -2,6 +2,7 @@ import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateA
 import { timetableService } from '../services/firestore';
 import { filterCoolPreRehearsalEntries } from '../utils/coolPreRehearsal';
 import { getFirstCoolStartTime, recalculateRehearsalCoolTimes } from '../utils/timetableTimeUtils';
+import { minimumCoolBreakMinutes } from '../utils/coolBreak';
 import type { Band, Cool, DailyTimetable, EventSettings, Timetable } from '../types';
 
 interface UseRehearsalSyncParams {
@@ -74,7 +75,7 @@ export const useRehearsalSync = ({
               ...rehearsalDay,
               startTime: unifiedStartTime,
               cools: recalculateRehearsalCoolTimes(
-                cools, unifiedStartTime, eventSettings.rehearsalDuration || 0, performanceDay.cools,
+                cools, unifiedStartTime, eventSettings.rehearsalDuration || 0, performanceDay.cools, minimumCoolBreakMinutes(rehearsalDay),
               ),
             };
             if (JSON.stringify(rehearsalDay) !== JSON.stringify(updatedDay)) {

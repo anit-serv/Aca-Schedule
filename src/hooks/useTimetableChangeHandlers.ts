@@ -10,6 +10,7 @@ import {
   recalculateRehearsalCoolTimes,
 } from '../utils/timetableTimeUtils';
 import type { Band, EventSettings, Timetable, DailyTimetable } from '../types';
+import { minimumCoolBreakMinutes } from '../utils/coolBreak';
 
 interface UseTimetableChangeHandlersParams {
   performanceTimetable: Timetable | null;
@@ -18,6 +19,7 @@ interface UseTimetableChangeHandlersParams {
   bands: Band[];
   lastSavedPerformanceHashRef: MutableRefObject<string>;
   lastSavedRehearsalHashRef: MutableRefObject<string>;
+  autoScheduleWriteLockRef: MutableRefObject<boolean>;
 }
 
 /**
@@ -30,9 +32,11 @@ export const useTimetableChangeHandlers = ({
   bands,
   lastSavedPerformanceHashRef,
   lastSavedRehearsalHashRef,
+  autoScheduleWriteLockRef,
 }: UseTimetableChangeHandlersParams) => {
   // 日別タイムテーブルの変更を処理（本番用）
   const handlePerformanceTimetableChange = async (updatedDailyTimetable: DailyTimetable) => {
+    if (autoScheduleWriteLockRef.current) return;
     if (!performanceTimetable || !eventSettings) return;
 
     let normalizedDailyTimetable = updatedDailyTimetable;
@@ -50,7 +54,7 @@ export const useTimetableChangeHandlers = ({
       normalizedDailyTimetable = {
         ...normalized,
         cools: normalized.cools && normalized.cools.length > 0
-          ? recalculatePerformanceCoolTimes(normalized.cools, unifiedStartTime, bands, linkedRehearsalTimetable?.cools)
+          ? recalculatePerformanceCoolTimes(normalized.cools, unifiedStartTime, bands, linkedRehearsalTimetable?.cools, minimumCoolBreakMinutes(normalized))
           : normalized.cools,
       };
     }
@@ -124,6 +128,7 @@ export const useTimetableChangeHandlers = ({
         return;
       }
 
+      if (autoScheduleWriteLockRef.current) return;
       await timetableService.updateDailyTimetable(
         performanceTimetable.id,
         normalizedDailyTimetable,
@@ -140,6 +145,7 @@ export const useTimetableChangeHandlers = ({
 
   // 日別タイムテーブルの変更を処理（リハーサル用）
   const handleRehearsalTimetableChange = async (updatedDailyTimetable: DailyTimetable) => {
+    if (autoScheduleWriteLockRef.current) return;
     if (!rehearsalTimetable || !eventSettings) return;
 
     let normalizedDailyTimetable = updatedDailyTimetable;
@@ -154,7 +160,7 @@ export const useTimetableChangeHandlers = ({
       normalizedDailyTimetable = {
         ...normalized,
         cools: normalized.cools && normalized.cools.length > 0
-          ? recalculateRehearsalCoolTimes(normalized.cools, unifiedStartTime, eventSettings.rehearsalDuration || 0, linkedPerformanceDaily?.cools)
+          ? recalculateRehearsalCoolTimes(normalized.cools, unifiedStartTime, eventSettings.rehearsalDuration || 0, linkedPerformanceDaily?.cools, minimumCoolBreakMinutes(normalized))
           : normalized.cools,
       };
     }
@@ -233,6 +239,7 @@ export const useTimetableChangeHandlers = ({
         return;
       }
 
+      if (autoScheduleWriteLockRef.current) return;
       await timetableService.updateDailyTimetable(
         rehearsalTimetable.id,
         normalizedDailyTimetable,
@@ -258,7 +265,7 @@ export const useTimetableChangeHandlers = ({
         const updatedPerformanceDt: DailyTimetable = {
           ...normalizedPerformanceDt,
           ...(normalizedPerformanceDt.cools && normalizedPerformanceDt.cools.length > 0
-            ? { cools: recalculatePerformanceCoolTimes(normalizedPerformanceDt.cools, unifiedStartTime, bands, normalizedDailyTimetable.cools) }
+            ? { cools: recalculatePerformanceCoolTimes(normalizedPerformanceDt.cools, unifiedStartTime, bands, normalizedDailyTimetable.cools, minimumCoolBreakMinutes(normalizedPerformanceDt)) }
             : { entries: recalculatePerformanceEntryTimes(normalizedPerformanceDt.entries || [], unifiedStartTime, bands) }
           ),
         };
@@ -291,7 +298,7 @@ export const useTimetableChangeHandlers = ({
             ...performanceDt,
             startTime: rehearsalEndTime,
             ...(performanceDt.cools && performanceDt.cools.length > 0
-              ? { cools: recalculatePerformanceCoolTimes(performanceDt.cools, rehearsalEndTime, bands) }
+              ? { cools: recalculatePerformanceCoolTimes(performanceDt.cools, rehearsalEndTime, bands, undefined, minimumCoolBreakMinutes(performanceDt)) }
               : { entries: recalculatePerformanceEntryTimes(performanceDt.entries || [], rehearsalEndTime, bands) }
             ),
           };

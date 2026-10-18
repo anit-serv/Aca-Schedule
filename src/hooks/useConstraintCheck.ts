@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import type { Band, DailyTimetable, Timetable, TimetableEntry, ConstraintViolation } from '../types';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 import { checkBandAvailability, findConsecutiveMemberRuns, type EntryWithCool } from '../utils/scheduleChecks';
+import { minimumCoolBreakMinutes } from '../utils/coolBreak';
+import { fitsVenueTime } from '../utils/venueTimeRanges';
 
 /**
  * HH:mm形式の時刻文字列を分単位の数値に変換
@@ -27,6 +29,45 @@ const addDayEndViolations = (
       type: 'day-end-exceeded', severity: 'high', entryId: entry.id, coolId, date: day.date,
       bandId: entry.type === 'band' ? entry.bandId : undefined,
       message: `${prefix}${name} の終了時刻（${entry.endTime}）が当日の終了時刻（${day.endTime}）を超過しています`,
+    });
+  }
+};
+
+const addVenueTimeViolations = (
+  day: DailyTimetable,
+  entries: Array<{ entry: TimetableEntry; coolId?: string }>,
+  bandMap: Map<string, Band>,
+  violations: ConstraintViolation[],
+  prefix = '',
+) => {
+  if (day.venueTimeRanges === undefined) return;
+  for (const { entry, coolId } of entries) {
+    if (!entry.startTime || !entry.endTime || fitsVenueTime(day, timeToMinutes(entry.startTime), timeToMinutes(entry.endTime))) continue;
+    const name = entry.type === 'band' ? bandMap.get(entry.bandId || '')?.name || 'バンド' : entry.customEvent?.name || 'カスタムイベント';
+    violations.push({
+      id: `venue-time-${entry.id}`, type: 'venue-time-exceeded', severity: 'high',
+      entryId: entry.id, coolId, date: day.date, bandId: entry.bandId,
+      message: `${prefix}${name} が会場の演奏可能時間外に配置されています（${entry.startTime} - ${entry.endTime}）`,
+    });
+  }
+};
+
+const addCoolBreakViolations = (day: DailyTimetable, violations: ConstraintViolation[], prefix = '') => {
+  const required = minimumCoolBreakMinutes(day);
+  if (required === 0) return;
+  for (let index = 1; index < day.cools.length; index++) {
+    const previous = day.cools[index - 1];
+    const next = day.cools[index];
+    const last = previous.entries.at(-1);
+    const first = next.entries[0];
+    if (!last?.endTime || !first?.startTime) continue;
+    const actual = timeToMinutes(first.startTime) - timeToMinutes(last.endTime);
+    if (actual >= required) continue;
+    violations.push({
+      id: `cool-break-${last.id}-${first.id}`,
+      type: 'cool-break-short', severity: 'medium', entryId: first.id, coolId: next.id,
+      date: day.date, bandId: first.bandId, relatedEntryIds: [last.id],
+      message: `${prefix}第${previous.number}クールと第${next.number}クールの休憩が${actual}分です（設定: ${required}分）`,
     });
   }
 };
@@ -85,6 +126,8 @@ export const useConstraintCheck = (
     }
 
     addDayEndViolations(dailyTimetable, allEntries, bandMap, violations);
+    addVenueTimeViolations(dailyTimetable, allEntries, bandMap, violations);
+    addCoolBreakViolations(dailyTimetable, violations);
 
     // 1. バンドの利用可能時間帯チェック
     allEntries.forEach(({ entry, coolId }) => {
@@ -286,6 +329,8 @@ function checkDailyTimetable(
   const formattedDate = `${d.getMonth() + 1}/${d.getDate()}`;
 
   addDayEndViolations(dailyTimetable, allEntries, bandMap, violations, `[${typePrefix} ${formattedDate}] `);
+  addVenueTimeViolations(dailyTimetable, allEntries, bandMap, violations, `[${typePrefix} ${formattedDate}] `);
+  addCoolBreakViolations(dailyTimetable, violations, `[${typePrefix} ${formattedDate}] `);
 
   // 1. バンドの利用可能時間帯チェック
   allEntries.forEach(({ entry, coolId }) => {

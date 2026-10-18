@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Band, DailyTimetable, Timetable } from '../types';
-import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, compareAutoScheduleScores, scoreSchedule } from './autoSchedule';
+import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, compareAutoScheduleScores, findAutoScheduleAvailabilityError, minimizeRehearsalBackupUsage, scoreSchedule } from './autoSchedule';
 
 const band = (id: string, options: Partial<Band> = {}): Band => ({
   id, name: id, performanceDuration: 10, performanceCount: 1,
@@ -10,6 +10,41 @@ const band = (id: string, options: Partial<Band> = {}): Band => ({
 });
 
 describe('autoScheduleRehearsal', () => {
+  it('reorders a completed rehearsal to replace backup time with normal time', () => {
+    const date = '2026-10-01';
+    const bands = [
+      band('flexible', { performanceDuration: 4, availableTimeSlots: [{ date, timeRanges: [{ startTime: '10:00', endTime: '10:08' }] }] }),
+      band('backup', { performanceDuration: 4,
+        availableTimeSlots: [{ date, timeRanges: [{ startTime: '10:00', endTime: '10:04' }] }],
+        backupRehearsalTimeSlots: [{ date, timeRanges: [{ startTime: '10:04', endTime: '10:08' }] }],
+      }),
+    ];
+    const original = day(date, [{ id: 'cool', number: 1, entries: [
+      { id: 'flexible-entry', type: 'band', bandId: 'flexible', order: 0, startTime: '10:00', endTime: '10:04' },
+      { id: 'backup-entry', type: 'band', bandId: 'backup', order: 1, startTime: '10:04', endTime: '10:08' },
+    ] }]);
+    const improved = minimizeRehearsalBackupUsage([original], bands, new Set(['flexible-entry', 'backup-entry']));
+    expect(improved[0].cools[0].entries.map(entry => [entry.bandId, entry.startTime])).toEqual([
+      ['backup', '10:00'], ['flexible', '10:04'],
+    ]);
+  });
+  it('rejects a rehearsal in the gap between normal slots, while allowing backup time', () => {
+    const date = '2026-11-13';
+    const candidate = band('bad guy', {
+      availableTimeSlots: [{ date, timeRanges: [
+        { startTime: '09:00', endTime: '15:15' }, { startTime: '16:00', endTime: '18:00' },
+      ] }],
+      backupRehearsalTimeSlots: [],
+    });
+    const source = timetable([day(date, [{ id: 'cool', number: 1, entries: [] }])]);
+    const result = autoScheduleRehearsal(source, [date], [candidate], 4, 'rehearsal-day');
+    expect(result).toMatchObject({ placed: 1, remaining: 0 });
+    expect(findAutoScheduleAvailabilityError(result.dailyTimetables, [candidate], 'rehearsal', 4)).toBeNull();
+    const invalid = [{ ...result.dailyTimetables[0], cools: [{ ...result.dailyTimetables[0].cools[0], entries: [
+      { ...result.dailyTimetables[0].cools[0].entries[0], startTime: '15:56', endTime: '16:00' },
+    ] }] }];
+    expect(findAutoScheduleAvailabilityError(invalid, [candidate], 'rehearsal', 4)).toContain('出演可能時間外');
+  });
   it('uses normal availability first and reserves backup for an otherwise unplaced rehearsal', () => {
     const date = '2026-10-01';
     const source = timetable([day(date, [{ id: 'cool', number: 1, entries: [] }])]);
@@ -85,6 +120,99 @@ const timetable = (days: DailyTimetable[]): Timetable => ({
   createdAt: new Date(), updatedAt: new Date(),
 });
 const score = (days: DailyTimetable[], bands: Band[]) => scoreSchedule(days, new Map(bands.map(item => [item.id, item])));
+
+describe('venue performance windows', () => {
+  it('plans balanced cools on both sides of a venue closure', () => {
+    const date = '2026-10-01';
+    const original = day(date, [1, 2, 3, 4].map(number => ({ id: `cool-${number}`, number, entries: [] })));
+    original.venueTimeRanges = [
+      { startTime: '10:00', endTime: '11:30' },
+      { startTime: '12:00', endTime: '13:30' },
+    ];
+    const performers = Array.from({ length: 24 }, (_, index) => band(`performer-${index}`, {
+      performanceDuration: 5,
+      availableTimeSlots: [{ date, timeRanges: [{ startTime: '10:00', endTime: '13:30' }] }],
+    }));
+    const result = autoSchedulePerformance(timetable([original]), [date], performers);
+    expect(result).toMatchObject({ placed: 24, remaining: 0 });
+    const counts = result.dailyTimetables[0].cools.map(cool => cool.entries.length);
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    expect(result.dailyTimetables[0].cools[2].startTime).toBe('12:00');
+    expect(findAutoScheduleAvailabilityError(result.dailyTimetables, performers, 'performance', 0)).toBeNull();
+  });
+  it('places cards only inside one window and skips a closed interval', () => {
+    const date = '2026-10-01';
+    const source = day(date, [
+      { id: 'morning', number: 1, entries: [] },
+      { id: 'afternoon', number: 2, entries: [] },
+    ]);
+    source.venueTimeRanges = [
+      { startTime: '10:00', endTime: '10:10' },
+      { startTime: '11:00', endTime: '11:20' },
+    ];
+    source.endTime = '11:20';
+    const result = autoSchedulePerformance(timetable([source]), [date], [band('a'), band('b'), band('c'), band('d')]);
+    expect(result).toMatchObject({ placed: 3, remaining: 1 });
+    expect(result.dailyTimetables[0].cools.flatMap(cool => cool.entries).map(entry => [entry.startTime, entry.endTime])).toEqual([
+      ['10:00', '10:10'], ['11:00', '11:10'], ['11:10', '11:20'],
+    ]);
+    expect(result.dailyTimetables[0].cools[1].startTime).toBe('11:00');
+    expect(result.dailyTimetables[0].cools[0].entries.every(entry => entry.endTime! <= '10:10')).toBe(true);
+    expect(result.dailyTimetables[0].cools[1].entries.every(entry => entry.startTime! >= '11:00')).toBe(true);
+  });
+
+  it('requires a cool on each side of a venue closure', () => {
+    const source = day('2026-10-01', [{ id: 'only', number: 1, entries: [] }]);
+    source.venueTimeRanges = [
+      { startTime: '10:00', endTime: '13:10' },
+      { startTime: '14:20', endTime: '18:00' },
+    ];
+    const result = autoSchedulePerformance(timetable([source]), [source.date], [band('a')]);
+    expect(result.error).toContain('クール数');
+  });
+
+  it('reuses a saved cool start in the later venue window after a reset', () => {
+    const source = day('2026-10-01', [
+      { id: 'first', number: 1, startTime: '10:00', entries: [] },
+      { id: 'second', number: 2, startTime: '11:05', entries: [] },
+    ]);
+    source.venueTimeRanges = [
+      { startTime: '10:00', endTime: '10:10' },
+      { startTime: '11:00', endTime: '11:20' },
+    ];
+    const result = autoSchedulePerformance(timetable([source]), [source.date], [band('a'), band('b')]);
+    expect(result).toMatchObject({ placed: 2, remaining: 0 });
+    expect(result.dailyTimetables[0].cools[1].startTime).toBe('11:05');
+    expect(result.dailyTimetables[0].cools[0].entries[0].endTime).toBe('10:10');
+    expect(result.dailyTimetables[0].cools[1].entries[0].startTime).toBe('11:05');
+  });
+
+  it('keeps every cool on one side of a venue closure with several cools', () => {
+    const date = '2026-10-01';
+    const source = day(date, Array.from({ length: 7 }, (_, index) => ({
+      id: `cool-${index + 1}`, number: index + 1, entries: [],
+    })));
+    source.venueTimeRanges = [
+      { startTime: '10:00', endTime: '10:20' },
+      { startTime: '14:20', endTime: '15:00' },
+    ];
+    const result = autoSchedulePerformance(timetable([source]), [date],
+      Array.from({ length: 5 }, (_, index) => band(`band-${index}`, { performanceDuration: 5 })));
+    expect(result).toMatchObject({ placed: 5, remaining: 0 });
+    const cools = result.dailyTimetables[0].cools;
+    expect(cools.some(cool => cool.entries.some(entry => entry.startTime! < '10:20'))).toBe(true);
+    expect(cools.some(cool => cool.entries.some(entry => entry.startTime! >= '14:20'))).toBe(true);
+    expect(cools.every(cool => cool.entries.every(entry => entry.endTime! <= '10:20')
+      || cool.entries.every(entry => entry.startTime! >= '14:20'))).toBe(true);
+  });
+
+  it('does not place cards on a day with no venue window', () => {
+    const source = day('2026-10-01', [{ id: 'cool', number: 1, entries: [] }]);
+    source.venueTimeRanges = [];
+    const result = autoSchedulePerformance(timetable([source]), [source.date], [band('a')]);
+    expect(result).toMatchObject({ placed: 0, remaining: 1 });
+  });
+});
 
 describe('autoScheduleRange', () => {
   it('reorders only numbered bands in the selected range and preserves other cards and times', () => {
@@ -171,7 +299,7 @@ describe('autoSchedulePerformance', () => {
     )).toBeLessThan(0);
   });
 
-  it('minimizes transition time before balancing cool counts', () => {
+  it('balances cool counts before comparing transition time', () => {
     const bands = ['a', 'b', 'c', 'd'].map(id => band(id));
     const balanced = score([day('2026-10-02', [
       { id: 'c1', number: 1, entries: [
@@ -189,9 +317,28 @@ describe('autoSchedulePerformance', () => {
     ])], bands);
     expect(balanced.coolCountDispersion).toBe(8);
     expect(uneven.coolCountDispersion).toBe(16);
-    expect(compareAutoScheduleScores(balanced, uneven)).toBeGreaterThan(0);
+    expect(compareAutoScheduleScores(balanced, uneven)).toBeLessThan(0);
     expect(compareAutoScheduleScores({ ...balanced, transitionMinutes: 0 }, uneven)).toBeLessThan(0);
-    expect(compareAutoScheduleScores({ ...balanced, transitionMinutes: 30 }, uneven)).toBeGreaterThan(0);
+    expect(compareAutoScheduleScores({ ...balanced, transitionMinutes: 30, longTransitionPenalty: 27 ** 2 }, uneven)).toBeLessThan(0);
+  });
+
+  it('sets an inferred cool start a few minutes after the minimum break', () => {
+    const date = '2026-10-02';
+    const original = day(date, [
+      { id: 'c1', number: 1, entries: [
+        { id: 'existing', type: 'band', bandId: 'existing', order: 0, startTime: '10:00', endTime: '10:10' },
+      ] },
+      { id: 'c2', number: 2, entries: [] },
+    ]);
+    const late = band('late', { availableTimeSlots: [{ date, timeRanges: [{ startTime: '10:23', endTime: '10:33' }] }] });
+    const result = autoSchedulePerformance(timetable([original]), [date], [band('existing'), late]);
+    expect(result).toMatchObject({ placed: 1, remaining: 0 });
+    expect(result.dailyTimetables[0].cools.every(cool => Boolean(cool.startTime))).toBe(true);
+    const second = result.dailyTimetables[0].cools[1];
+    if (second.entries.some(entry => entry.bandId === 'late')) {
+      expect(second.startTime).toBe('10:20');
+      expect(second.entries[0].transitionTime).toBe(3);
+    }
   });
 
   it('balances each multi-performance band across performance dates at the same weight as cool balance', () => {
@@ -217,6 +364,20 @@ describe('autoSchedulePerformance', () => {
     expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
   });
 
+  it('balances a full day across cools while keeping every performance in its available time', () => {
+    const date = '2026-10-02';
+    const original = day(date, [1, 2, 3, 4].map(number => ({ id: `c${number}`, number, entries: [] })));
+    const performers = Array.from({ length: 16 }, (_, index) => band(`performer-${index}`, {
+      performanceDuration: 5,
+      availableTimeSlots: [{ date, timeRanges: [{ startTime: '10:00', endTime: '12:00' }] }],
+    }));
+    const result = autoSchedulePerformance(timetable([original]), [date], performers);
+    expect(result).toMatchObject({ placed: 16, remaining: 0 });
+    const counts = result.dailyTimetables[0].cools.map(cool => cool.entries.filter(entry => entry.type === 'band').length);
+    expect(counts).toEqual([4, 4, 4, 4]);
+    expect(findAutoScheduleAvailabilityError(result.dailyTimetables, performers, 'performance', 0)).toBeNull();
+  });
+
   it('places two performances on separate days when both days are available', () => {
     const dates = ['2026-10-02', '2026-10-03'];
     const original = timetable(dates.map(date => day(date, [
@@ -236,7 +397,7 @@ describe('autoSchedulePerformance', () => {
     expect([run(2), run(3), run(4)]).toEqual([12, 48, 156]);
   });
 
-  it('prefers fewer consecutive performances over a slightly more even cool distribution', () => {
+  it('keeps cool counts balanced ahead of ordinary two-performance runs', () => {
     const bands = [band('a', { members: ['shared'] }), band('b', { members: ['shared'] }), band('c'), band('d')];
     const entry = (id: string) => ({ id, type: 'band' as const, bandId: id, order: 0 });
     const consecutive = score([day('2026-10-02', [
@@ -250,14 +411,14 @@ describe('autoSchedulePerformance', () => {
     expect(consecutive.coolCountDispersion).toBeLessThan(separated.coolCountDispersion);
     expect(consecutive.twoRunPenalty).toBe(12);
     expect(separated.twoRunPenalty).toBe(0);
-    expect(compareAutoScheduleScores(separated, consecutive)).toBeLessThan(0);
+    expect(compareAutoScheduleScores(separated, consecutive)).toBeGreaterThan(0);
   });
 
-  it('prefers any shorter transition over any number of ordinary two-performance runs', () => {
+  it('does not trade many consecutive performances for one minute of transition', () => {
     const base = score([day('2026-10-02', [{ id: 'c1', number: 1, entries: [] }])], []);
     const moreRuns = { ...base, twoRunPenalty: 12_000, transitionMinutes: 0 };
     const fewerRuns = { ...base, twoRunPenalty: 0, costumeTwoRunPenalty: 0, transitionMinutes: 1 };
-    expect(compareAutoScheduleScores(moreRuns, fewerRuns)).toBeLessThan(0);
+    expect(compareAutoScheduleScores(moreRuns, fewerRuns)).toBeGreaterThan(0);
   });
 
   it('still prioritizes avoiding costume two-performance runs over transition time', () => {
@@ -412,6 +573,25 @@ describe('autoSchedulePerformance', () => {
     expect(Math.abs(order.indexOf('a') - order.indexOf('b'))).toBe(2);
   });
 
+  it('spreads shared-member performances across balanced cools', () => {
+    const date = '2026-10-02';
+    const original = day(date, Array.from({ length: 3 }, (_, index) => ({
+      id: `cool-${index + 1}`, number: index + 1, entries: [],
+    })));
+    const shared = Array.from({ length: 6 }, (_, index) => band(`shared-${index}`, {
+      members: ['same-person'], costume: index % 2 === 0, performanceDuration: 5,
+    }));
+    const separators = Array.from({ length: 12 }, (_, index) => band(`separator-${index}`, { performanceDuration: 5 }));
+    const bands = [...shared, ...separators];
+    const result = autoSchedulePerformance(timetable([original]), [date], bands);
+    const cools = result.dailyTimetables[0].cools;
+    const score = scoreSchedule(result.dailyTimetables, new Map(bands.map(item => [item.id, item])));
+    expect(result).toMatchObject({ placed: bands.length, remaining: 0 });
+    expect(cools.map(cool => cool.entries.length)).toEqual([6, 6, 6]);
+    expect(score.longRunPenalty).toBe(0);
+    expect(score.costumeTwoRunPenalty).toBe(0);
+  });
+
   it('produces the same placement for identical inputs on repeated runs', () => {
     const dates = ['2026-10-02', '2026-10-03'];
     const original = timetable(dates.map(date => day(date, [
@@ -467,7 +647,7 @@ describe('autoSchedulePerformance', () => {
     ]);
   });
 
-  it('prefers two consecutive performances over adding transition time', () => {
+  it('avoids consecutive performances when a short transition can separate them', () => {
     const original = day('2026-10-02', [{ id: 'c1', number: 1, entries: [
       { id: 'fixed', type: 'band', bandId: 'a', order: 0 },
     ] }]);
@@ -478,8 +658,7 @@ describe('autoSchedulePerformance', () => {
     ]);
     expect(result).toMatchObject({ placed: 2, remaining: 0 });
     const entries = result.dailyTimetables[0].cools[0].entries;
-    expect(Math.abs(entries.findIndex(entry => entry.bandId === 'a') - entries.findIndex(entry => entry.bandId === 'b'))).toBe(1);
-    expect(entries.reduce((total, entry) => total + (entry.transitionTime ?? 0), 0)).toBe(0);
+    expect(Math.abs(entries.findIndex(entry => entry.bandId === 'a') - entries.findIndex(entry => entry.bandId === 'b'))).toBe(2);
   });
 
   it('keeps feasible placements when all performances cannot fit', () => {
@@ -542,4 +721,23 @@ describe('autoSchedulePerformance', () => {
     const result = autoSchedulePerformance(timetable(originalDays), dates, bands);
     expect(result).toMatchObject({ placed: 160, remaining: 0 });
   }, 30_000);
+
+  it('balances 92 bands across six cools without fixed starts and keeps ten-minute breaks', () => {
+    const date = '2026-10-02';
+    const original = day(date, Array.from({ length: 6 }, (_, index) => ({
+      id: `cool-${index + 1}`, number: index + 1, entries: [],
+    })));
+    const bands = Array.from({ length: 92 }, (_, index) => band(`band-${index}`, { performanceDuration: 5 }));
+    const result = autoSchedulePerformance(timetable([original]), [date], bands);
+    const cools = result.dailyTimetables[0].cools;
+    const counts = cools.map(cool => cool.entries.length);
+    expect(result).toMatchObject({ placed: 92, remaining: 0 });
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    for (let index = 1; index < cools.length; index++) {
+      const previousEnd = cools[index - 1].entries.at(-1)!.endTime!;
+      const nextStart = cools[index].entries[0].startTime!;
+      const toMinutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+      expect(toMinutes(nextStart) - toMinutes(previousEnd)).toBeGreaterThanOrEqual(10);
+    }
+  }, 60_000);
 });
