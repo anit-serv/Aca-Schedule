@@ -25,6 +25,10 @@ interface SortableTimetableRowProps {
   renderCustomCell?: (entry: TimetableEntry, column: CustomColumn, index: number) => ReactNode;
   returningToBank?: boolean;
   reserveInsertionSpace?: boolean;
+  externalInsertionGap?: boolean;
+  holdDragRowSpace?: boolean;
+  collapseDragRowSpace?: boolean;
+  suppressInsertionGap?: boolean;
 }
 
 export const SortableTimetableRow = ({
@@ -45,6 +49,10 @@ export const SortableTimetableRow = ({
   renderCustomCell,
   returningToBank = false,
   reserveInsertionSpace = false,
+  externalInsertionGap = false,
+  holdDragRowSpace = false,
+  collapseDragRowSpace = false,
+  suppressInsertionGap = false,
 }: SortableTimetableRowProps) => {
   const dragDisabled = customMode || isReadOnly || Boolean(entry.fixedStartTime);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, active } =
@@ -94,12 +102,20 @@ export const SortableTimetableRow = ({
     }
   };
 
+  const isBandRow = entry.type === 'band' && Boolean(band);
+  const dragRowHeight = 56;
   const style = {
-    // ドラッグ元の行を表のレイアウトから外す。挿入先の空間はドロップターゲット側だけで作る。
+    // 元カードと挿入先を同時に伸縮させ、同じクール内の高さを保つ。
     transform: active?.id.toString().startsWith('entry-') ? undefined : CSS.Transform.toString(transform),
     transition: returningToBank || isDragging ? `${transition ? `${transition}, ` : ''}opacity 180ms ease-out` : transition,
     opacity: returningToBank ? 0 : isDragging ? 0.5 : 1,
-    visibility: isDragging && sourceRectCaptured ? 'collapse' as const : 'visible' as const,
+    // A zero-height child does not reliably collapse its table row. Once the
+    // placeholder moves to another cool, collapse the source <tr> itself.
+    visibility: collapseDragRowSpace
+      ? 'collapse' as const
+      : isDragging && !isBandRow
+        ? (holdDragRowSpace || !sourceRectCaptured ? 'hidden' as const : 'collapse' as const)
+        : 'visible' as const,
   };
 
   // バンド情報をメモ化して、確実に最新の情報を使用
@@ -167,7 +183,7 @@ export const SortableTimetableRow = ({
 
   const violationStyle = getViolationStyle();
   const usesBackupRehearsalTime = violations.some(violation => violation.type === 'backup-rehearsal-used');
-  const useCardGap = reserveInsertionSpace && entry.type === 'band' && Boolean(band);
+  const useCardGap = reserveInsertionSpace && isBandRow && !externalInsertionGap;
   const timetableBackground = isDragging ? 'bg-emerald-100'
     : usesBackupRehearsalTime ? 'bg-violet-100/80'
     : violationStyle.bgColor || (entry.type === 'custom' ? 'bg-emerald-100/70' : '');
@@ -176,29 +192,39 @@ export const SortableTimetableRow = ({
 
   return (
     <>
-      {isDropTarget && !reserveInsertionSpace && (
-        <tr className="h-1">
-          <td colSpan={6} className="p-0">
-            <div className="h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
-          </td>
-        </tr>
-      )}
       <tr
         ref={setNodeRef}
         style={style}
         data-entry-id={entry.id}
         className={`timetable-card-row border-b border-gray-200 ${
-          reserveInsertionSpace && !useCardGap && isDropTarget ? 'insertion-gap-before ' : ''
-        }${reserveInsertionSpace && !useCardGap && isDropTargetAfter ? 'insertion-gap-after ' : ''}${
+          reserveInsertionSpace && !suppressInsertionGap && !useCardGap && !externalInsertionGap && isDropTarget && !isDragging ? 'insertion-gap-before ' : ''
+        }${reserveInsertionSpace && !suppressInsertionGap && !useCardGap && !externalInsertionGap && isDropTargetAfter && !isDragging ? 'insertion-gap-after ' : ''}${
           customMode ? '' : visibleTimetableBackground
         } ${isSearchMatch ? 'ring-2 ring-inset ring-emerald-400' : ''} ${
           searchQuery && !isSearchMatch && entry.type === 'band' ? 'opacity-40' : ''
         }`}
       >
       {entry.type === 'band' && band ? <td colSpan={6} className={`p-0 ${fixedCellBackground}`}>
-        <motion.div initial={false} animate={{ height: useCardGap && isDropTarget ? 56 : 0 }} transition={{ duration: 0.18, ease: 'easeOut' }} className="overflow-hidden bg-emerald-100/60" />
-        <BandCard band={band} mode="timetable" duration={duration} number={bandNumber} startTime={entry.startTime} endTime={entry.endTime} fixedTime={Boolean(entry.fixedStartTime)} onTimeClick={!isReadOnly ? field => onTimeClick?.(entry.id, field) : undefined} transitionTime={entry.transitionTime} onTransitionClick={!customMode && !isReadOnly ? () => setShowTransitionModal(true) : undefined} onRemove={onRemove} isReadOnly={isReadOnly} violations={violations} dragListeners={dragDisabled ? undefined : listeners} dragAttributes={dragDisabled ? undefined : attributes} customMode={customMode} />
-        <motion.div initial={false} animate={{ height: useCardGap && isDropTargetAfter ? 56 : 0 }} transition={{ duration: 0.18, ease: 'easeOut' }} className="overflow-hidden bg-emerald-100/60" />
+        {useCardGap && <motion.div initial={false} animate={{ height: isDropTarget && !isDragging ? dragRowHeight : 0 }} transition={{ duration: 0.18, ease: 'easeOut' }} className="overflow-hidden bg-emerald-100/60" />}
+        <motion.div
+          initial={false}
+          animate={externalInsertionGap ? undefined : { height: isDragging ? (isDropTarget || !sourceRectCaptured ? 'auto' : 0) : 'auto', opacity: isDragging ? 0 : 1 }}
+          transition={externalInsertionGap ? undefined : { duration: 0.18, ease: 'easeOut' }}
+          style={externalInsertionGap ? {
+            height: collapseDragRowSpace ? 0 : isDragging ? (holdDragRowSpace || !sourceRectCaptured ? dragRowHeight : 0) : undefined,
+            opacity: collapseDragRowSpace || isDragging ? 0 : 1,
+            // Table intrinsic sizing must use the animated wrapper height,
+            // not the 56px BandCard hidden inside it.
+            contain: isDragging || collapseDragRowSpace ? 'size' : undefined,
+            // Match the destination gap's 180ms enter/exit so the two cools
+            // resize together when the dragged card crosses their boundary.
+            transition: 'height 180ms ease-in-out, opacity 180ms ease-in-out',
+          } : undefined}
+          className={isDragging || collapseDragRowSpace ? 'overflow-hidden' : 'overflow-visible'}
+        >
+          <BandCard band={band} mode="timetable" duration={duration} number={bandNumber} startTime={entry.startTime} endTime={entry.endTime} fixedTime={Boolean(entry.fixedStartTime)} onTimeClick={!isReadOnly ? field => onTimeClick?.(entry.id, field) : undefined} transitionTime={entry.transitionTime} onTransitionClick={!customMode && !isReadOnly ? () => setShowTransitionModal(true) : undefined} onRemove={onRemove} isReadOnly={isReadOnly} violations={violations} dragListeners={dragDisabled ? undefined : listeners} dragAttributes={dragDisabled ? undefined : attributes} customMode={customMode} />
+        </motion.div>
+        {useCardGap && <motion.div initial={false} animate={{ height: isDropTargetAfter ? dragRowHeight : 0 }} transition={{ duration: 0.18, ease: 'easeOut' }} className="overflow-hidden bg-emerald-100/60" />}
       </td> : <>
       {/* バンド番号列 */}
       <td className={`px-3 py-3 text-sm text-center font-semibold text-gray-600 ${fixedCellBackground}`}>
@@ -269,7 +295,7 @@ export const SortableTimetableRow = ({
                   </span>
                   {/* ツールチップ（fixedポジショニングでスクロールコンテナの外に表示） */}
                   <div 
-                    className="fixed hidden group-hover:block z-50 w-80"
+                    className="fixed z-50 hidden w-80 max-w-[calc(100vw-2rem)] whitespace-normal group-hover:block"
                     style={tooltipStyle}
                   >
                     <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-2xl max-h-96 overflow-y-auto">
@@ -277,7 +303,7 @@ export const SortableTimetableRow = ({
                         確認事項 ({violations.length}件)
                       </div>
                       {violations.map((violation, idx) => (
-                        <div key={idx} className="text-xs text-gray-600 mb-1 break-words">
+                        <div key={idx} className="mb-1 break-words text-xs text-gray-600">
                           • {violation.message}
                         </div>
                       ))}

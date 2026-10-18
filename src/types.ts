@@ -160,6 +160,10 @@ export interface CustomFieldsTypeData {
 export interface CustomFieldsSettings {
   performance: CustomFieldsTypeData;
   rehearsal: CustomFieldsTypeData;
+  /** バンド所属やシフト担当候補とは独立して登録されたメンバー。 */
+  members?: string[];
+  /** 候補者ごとの担当可能時間。キーがない候補者は全時間帯を担当可能とする。 */
+  shiftAvailability?: { [person: string]: AvailableTimeSlot[] };
 }
 
 // 制約違反の種類

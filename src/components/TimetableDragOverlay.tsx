@@ -34,6 +34,7 @@ interface DragCardProps {
 const DragCard = ({ name, duration, isTimetableShape, isEntryCard, isCustom, timetableWidth, sourceWidth, sourceHeight }: DragCardProps) => (
   <motion.div
     id="mobile-drag-overlay-card"
+    data-timetable-drag-preview
     initial={false}
     animate={{
       width: isTimetableShape ? timetableWidth : isEntryCard ? Math.max(300, sourceWidth) : sourceWidth,
@@ -93,6 +94,7 @@ export const TimetableDragOverlay = ({
   const cursorXRef = useRef<number | null>(null);
   const livePointerXRef = useRef(0);
   const previousPosition = useRef<{ bandId: string; locked: boolean; fixedX: number } | null>(null);
+  const dragBoundsRef = useRef<{ content: HTMLElement; viewport: HTMLElement } | null>(null);
   const entryBand = activeEntry?.type === 'band' && activeEntry.bandId
     ? bands.find(band => band.id === activeEntry.bandId)
     : null;
@@ -115,6 +117,7 @@ export const TimetableDragOverlay = ({
     cursorXRef.current = null;
     livePointerXRef.current = 0;
     previousPosition.current = null;
+    dragBoundsRef.current = null;
   }, [draggedBand, horizontalOffset]);
   useEffect(() => () => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -189,7 +192,32 @@ export const TimetableDragOverlay = ({
         }
         previousPosition.current = { bandId: draggedBand.id, locked, fixedX };
         horizontalOffset.set(visualXRef.current - transform.x);
-        // 親は常にカーソルに追従。子の差分だけを横方向にアニメーションする。
+        // Keep a timetable card inside the visible timetable pane vertically.
+        // The pointer can remain at an edge to auto-scroll, while the card stays
+        // in view and cannot accidentally appear over the bank above or below it.
+        if (activeEntry) {
+          if (!dragBoundsRef.current?.content.isConnected || !dragBoundsRef.current.viewport.isConnected) {
+            const content = document.querySelector<HTMLElement>('.timetable-content');
+            const viewport = document.querySelector<HTMLElement>('[data-timetable-scroll-viewport]');
+            dragBoundsRef.current = content && viewport ? { content, viewport } : null;
+          }
+          const { content, viewport } = dragBoundsRef.current ?? {};
+          const baseTop = sourcePosition?.top ?? overlayNodeRect?.top;
+          if (content && viewport && baseTop !== undefined) {
+            const contentRect = content.getBoundingClientRect();
+            const viewportRect = viewport.getBoundingClientRect();
+            const top = Math.max(contentRect.top, viewportRect.top);
+            const bottom = Math.min(contentRect.bottom, viewportRect.bottom);
+            const cardHeight = Math.min(isOverTimetable ? 56 : sourceHeight, bottom - top);
+            if (bottom > top) {
+              return {
+                ...transform,
+                y: Math.min(Math.max(transform.y, top - baseTop), bottom - baseTop - cardHeight),
+              };
+            }
+          }
+        }
+        // The parent follows the pointer horizontally; the child animates the difference.
         return transform;
       }] : undefined}
       dropAnimation={activeEntry || dropSucceeded
@@ -201,7 +229,7 @@ export const TimetableDragOverlay = ({
           }}
     >
       {draggedBand ? (
-        <motion.div style={{ x: horizontalOffset }}>
+        <motion.div data-timetable-drag-preview style={{ x: horizontalOffset }}>
         <BandCard
           band={draggedBand}
           mode={isOverTimetable ? 'timetable' : 'bank'}

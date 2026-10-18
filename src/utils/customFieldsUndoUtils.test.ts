@@ -12,6 +12,15 @@ const makeTimetable = (date: string): Timetable => ({
 });
 
 describe('custom field undo changes', () => {
+  it('restores candidate availability without discarding column data', () => {
+    const before = createEmptyCustomFieldsSettings();
+    const after = structuredClone(before);
+    after.shiftAvailability = { 山田: [{ date: '2026-11-15', timeRanges: [{ startTime: '10:00', endTime: '12:00' }] }] };
+    const changes = getCustomFieldsChanges(before, after);
+    const undone = applyCustomFieldsChanges(after, changes, 'undo');
+    expect(undone.shiftAvailability).toBeUndefined();
+    expect(applyCustomFieldsChanges(undone, changes, 'redo').shiftAvailability).toEqual(after.shiftAvailability);
+  });
   it('keeps an unrelated cell edit when undoing a merge', () => {
     const date = '2026-10-02';
     const before = createEmptyCustomFieldsSettings();

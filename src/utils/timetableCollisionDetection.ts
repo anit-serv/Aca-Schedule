@@ -31,16 +31,26 @@ export const createTimetableCollisionDetection = (): CollisionDetection => {
   };
 
   return (args) => {
+    // A wide timetable drag overlay can intersect the bank while the pointer stays
+    // inside the timetable, especially at the top or bottom during auto-scroll.
+    const bankRect = args.droppableRects.get('band-bank-droppable');
+    const pointer = args.pointerCoordinates;
+    const pointerInBank = Boolean(bankRect && pointer &&
+      pointer.x >= bankRect.left && pointer.x <= bankRect.right &&
+      pointer.y >= bankRect.top && pointer.y <= bankRect.bottom);
+    const withoutAccidentalBank = (collisions: ReturnType<CollisionDetection>) =>
+      pointerInBank ? collisions : collisions.filter(collision => String(collision.id) !== 'band-bank-droppable');
+
     // 1. pointerWithin: ポインタが要素の内側にある場合（最も正確）
-    const pointerCollisions = prioritizeCancelDropzone(filterValid(pointerWithin(args)));
+    const pointerCollisions = prioritizeCancelDropzone(withoutAccidentalBank(filterValid(pointerWithin(args))));
     if (pointerCollisions.length > 0) return pointerCollisions;
 
     // 2. rectIntersection: ドラッグ中の要素と重なるもの（ポインタがずれても検出）
-    const rectCollisions = prioritizeCancelDropzone(filterValid(rectIntersection(args)));
+    const rectCollisions = prioritizeCancelDropzone(withoutAccidentalBank(filterValid(rectIntersection(args))));
     if (rectCollisions.length > 0) return rectCollisions;
 
     // 3. closestCenter: 最も近い要素（フォールバック）
-    const centerCollisions = prioritizeCancelDropzone(filterValid(closestCenter(args)));
+    const centerCollisions = prioritizeCancelDropzone(withoutAccidentalBank(filterValid(closestCenter(args))));
     return centerCollisions;
   };
 };

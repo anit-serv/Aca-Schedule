@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createEventOnServer, deleteEventOnServer } from '../../api/_lib/eventManagement.js';
 
 function fakeDb({ failCommit = false } = {}) {
-  const records = new Map(['events', 'bands', 'timetables', 'viewerPasswords'].map(name => [name, new Map()]));
+  const records = new Map(['events', 'bands', 'timetables', 'viewerPasswords', 'stakeholderProgress', 'autoScheduleJobs'].map(name => [name, new Map()]));
   let nextId = 0;
   const ref = (collection, id) => ({
     collection, id,

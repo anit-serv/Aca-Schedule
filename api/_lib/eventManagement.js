@@ -78,7 +78,7 @@ export async function deleteEventOnServer(db, eventId, userId) {
     db.collection("bands").where("eventId", "==", eventId).get(),
     db.collection("timetables").where("eventId", "==", eventId).get(),
   ]);
-  if (3 + bands.size + timetables.size > MAX_BATCH_WRITES) {
+  if (4 + bands.size + timetables.size > MAX_BATCH_WRITES) {
     throw new ApiError(413, "EVENT_TOO_LARGE", "This event is too large to delete in one operation.");
   }
   const batch = db.batch();
@@ -86,6 +86,7 @@ export async function deleteEventOnServer(db, eventId, userId) {
   for (const doc of timetables.docs) batch.delete(doc.ref);
   batch.delete(db.collection("viewerPasswords").doc(eventId));
   batch.delete(db.collection("stakeholderProgress").doc(eventId));
+  batch.delete(db.collection("autoScheduleJobs").doc(eventId));
   batch.delete(eventRef);
   await batch.commit();
   return { eventId, bandCount: bands.size, timetableCount: timetables.size };

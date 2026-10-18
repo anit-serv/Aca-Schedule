@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { AutoScheduleJob } from '../services/autoScheduleJob';
 import type { AutoScheduleRange } from '../utils/autoSchedule';
 
 interface Props {
   type: 'performance' | 'rehearsal';
   bandCount: number;
   onCancel: () => void;
-  onConfirm: (range?: AutoScheduleRange) => void;
+  onPrepare: (range?: AutoScheduleRange) => Promise<AutoScheduleJob>;
+  onReadPreparation: () => Promise<AutoScheduleJob>;
+  onConfirm: (runId: Promise<string>, range?: AutoScheduleRange) => void;
 }
 
-export const AutoScheduleDialog = ({ type, bandCount, onCancel, onConfirm }: Props) => {
+export const AutoScheduleDialog = ({ type, bandCount, onCancel, onPrepare, onReadPreparation, onConfirm }: Props) => {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [range, setRange] = useState<AutoScheduleRange | null>(null);
   const [startNumber, setStartNumber] = useState(1);
@@ -17,6 +20,38 @@ export const AutoScheduleDialog = ({ type, bandCount, onCancel, onConfirm }: Pro
   const validRange = Number.isSafeInteger(startNumber) && Number.isSafeInteger(endNumber)
     && startNumber >= 1 && endNumber <= bandCount && startNumber < endNumber;
   const label = type === 'performance' ? '本番' : 'リハ';
+  const preparationTaskRef = useRef<Promise<string> | null>(null);
+  const prepareQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const confirmedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Only the request that creates a run is serialized. A changed range cancels its old poll.
+    const startedTask = prepareQueueRef.current.then(() => {
+      if (cancelled) throw new Error('計算条件が変更されました。');
+      return onPrepare(range || undefined);
+    });
+    prepareQueueRef.current = startedTask.then(() => undefined, () => undefined);
+    const task = startedTask.then(async started => {
+      if (!started.runId) throw new Error('計算を開始できませんでした。');
+      while (!cancelled) {
+        const job = await onReadPreparation();
+        if (cancelled) break;
+        if (job.runId !== started.runId) throw new Error('計算条件が更新されました。画面を開き直してください。');
+        if (job.status === 'prepared') return started.runId;
+        if (job.status === 'failed') throw new Error(job.error || '計算に失敗しました。');
+        if (job.status !== 'preparing' && job.status !== 'previewing') {
+          throw new Error('計算結果が利用できません。画面を開き直してください。');
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 1000));
+      }
+      throw new Error('計算がキャンセルされました。');
+    });
+    preparationTaskRef.current = task;
+    // Handle rejections even when the dialog is cancelled before the user starts.
+    void task.catch(() => undefined);
+    return () => { if (!confirmedRef.current) cancelled = true; };
+  }, [onPrepare, onReadPreparation, range]);
 
   return createPortal(
     <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 px-4" role="presentation">
@@ -54,7 +89,10 @@ export const AutoScheduleDialog = ({ type, bandCount, onCancel, onConfirm }: Pro
           <button type="button" disabled={bandCount < 2} onClick={() => setOptionsOpen(true)} className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50">オプション</button>
           <div className="flex gap-2">
             <button type="button" onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700">キャンセル</button>
-            <button type="button" onClick={() => onConfirm(range || undefined)} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white">{range ? '範囲内を並び替える' : '全日程を自動配置'}</button>
+            <button type="button" onClick={() => {
+              confirmedRef.current = true;
+              onConfirm(preparationTaskRef.current || Promise.reject(new Error('計算を開始できませんでした。')), range || undefined);
+            }} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white">{range ? '範囲内を並び替える' : '全日程を自動配置'}</button>
           </div>
         </div>
         {range && <button type="button" onClick={() => setRange(null)} className="mt-3 text-xs text-emerald-700 underline">範囲指定を解除</button>}

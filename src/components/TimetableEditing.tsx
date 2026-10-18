@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -31,6 +31,7 @@ import { getCustomShiftIssues } from '../utils/customShift';
 import { isValidCoolStart, isValidDayEnd, timeMinutes } from '../utils/dailyTimeBounds';
 import { normalizeTimeRanges } from '../utils/availabilityRanges';
 import { generateUUID } from '../utils/generateUUID';
+import { captureTimetableScroll, restoreTimetableScroll, type TimetableScrollSnapshot } from '../utils/timetableScrollAnchor';
 import { preparePerformanceReset, prepareRehearsalReset, prepareTimetablesReset, type ResetTimetablesPlan } from '../utils/resetTimetables';
 import { eventService } from '../services/firestore';
 import { RateLimitError } from '../utils/writeRateLimiter';
@@ -51,6 +52,10 @@ import {
 interface TimetableEditingProps {
   initialView?: { type: 'performance' | 'rehearsal'; date: string } | null;
   onViewChange?: (view: { type: 'performance' | 'rehearsal'; date: string }) => void;
+  initialScrollTop?: number;
+  onScrollTopChange?: (top: number) => void;
+  initialCustomMode?: boolean;
+  onCustomModeChange?: (enabled: boolean) => void;
   bands: Band[];
   eventSettings: EventSettings;
   performanceTimetable: Timetable | null;
@@ -69,6 +74,10 @@ interface TimetableEditingProps {
 export const TimetableEditing = ({
   initialView,
   onViewChange,
+  initialScrollTop = 0,
+  onScrollTopChange,
+  initialCustomMode = false,
+  onCustomModeChange,
   bands,
   eventSettings,
   performanceTimetable,
@@ -86,6 +95,28 @@ export const TimetableEditing = ({
   const [timetableType, setTimetableType] = useState<'performance' | 'rehearsal'>(
     initialView?.type === 'rehearsal' && eventSettings.rehearsalType !== 'none' ? 'rehearsal' : 'performance',
   );
+  const timetableScrollRef = useRef<HTMLDivElement>(null);
+  const initialScrollTopRef = useRef(initialScrollTop);
+  const dropScrollSnapshotRef = useRef<{ outer: number; inner: TimetableScrollSnapshot[] } | null>(null);
+  const [dropScrollRevision, setDropScrollRevision] = useState(0);
+  useLayoutEffect(() => {
+    if (timetableScrollRef.current) timetableScrollRef.current.scrollTop = initialScrollTopRef.current;
+  }, []);
+  useLayoutEffect(() => {
+    const snapshot = dropScrollSnapshotRef.current;
+    const outer = timetableScrollRef.current;
+    if (!snapshot || !outer) return;
+    const restore = () => {
+      outer.scrollTop = snapshot.outer;
+      snapshot.inner.forEach(restoreTimetableScroll);
+    };
+    restore();
+    const frame = requestAnimationFrame(() => {
+      restore();
+      if (dropScrollSnapshotRef.current === snapshot) dropScrollSnapshotRef.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dropScrollRevision]);
   const unifiedCoolPre = eventSettings.rehearsalType === 'cool-pre-rehearsal';
   const [selectedDate, setSelectedDate] = useState(() => {
     const dates = timetableType === 'performance' || unifiedCoolPre || eventSettings.rehearsalType === 'day-start-rehearsal'
@@ -98,7 +129,8 @@ export const TimetableEditing = ({
   const [inputCoolCount, setInputCoolCount] = useState<string>('1');
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   const [isViolationPanelOpen, setIsViolationPanelOpen] = useState(false);
-  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(initialCustomMode);
+  useEffect(() => { onCustomModeChange?.(isCustomMode); }, [isCustomMode, onCustomModeChange]);
   const [searchQuery, setSearchQuery] = useState('');
   const [fixedDialog, setFixedDialog] = useState<{ bandId: string; entryId?: string; coolIndex: number } | null>(null);
   const [searchMatchIndex, setSearchMatchIndex] = useState(-1);
@@ -180,6 +212,8 @@ export const TimetableEditing = ({
   const [returningEntryId, setReturningEntryId] = useState<string | null>(null);
   const [arrivalBandId, setArrivalBandId] = useState<string | null>(null);
   const [dragRowWidth, setDragRowWidth] = useState(900);
+  const [hasMovedEntryDrag, setHasMovedEntryDrag] = useState(false);
+  const entryDragStartPointerYRef = useRef<number | null>(null);
   const [dragRowLeft, setDragRowLeft] = useState(0);
   const [dragSourceSize, setDragSourceSize] = useState({ width: 240, height: 68 });
   const [dragSourcePosition, setDragSourcePosition] = useState<{ left: number; top: number } | null>(null);
@@ -732,6 +766,7 @@ export const TimetableEditing = ({
     overEntryId,
     dropSucceeded,
     handleDragStart,
+    handleDragMove,
     handleDragOver,
     handleDragEnd,
     getActiveItems,
@@ -746,6 +781,7 @@ export const TimetableEditing = ({
     onEntryReorderInCools: handleEntryReorderInCools,
     onEntryReorderFlat: handleEntryReorderFlat,
     canDrop: event => !unifiedCoolPre || isDropWithinTimetableScope(event, timetableType),
+    preferStableEntryTarget: true,
   });
 
   // アクティブアイテム取得
@@ -773,6 +809,10 @@ export const TimetableEditing = ({
   // ドラッグ開始時にエントリーIDを記録するラッパー
   const wrappedHandleDragStart = useCallback((event: DragStartEvent) => {
     const activeId = event.active.id as string;
+    entryDragStartPointerYRef.current = activeId.startsWith('entry-') && 'clientY' in event.activatorEvent
+      ? Number(event.activatorEvent.clientY)
+      : null;
+    setHasMovedEntryDrag(false);
     const pointerDownRect = pointerDownRowRectRef.current?.id === activeId
       ? pointerDownRowRectRef.current : null;
     pointerDownRowRectRef.current = null;
@@ -808,6 +848,16 @@ export const TimetableEditing = ({
       : null;
     handleDragStart(event);
   }, [handleDragStart]);
+
+  useEffect(() => {
+    if (!activeEntry || hasMovedEntryDrag) return;
+    const detectMovement = (event: PointerEvent) => {
+      const startY = entryDragStartPointerYRef.current;
+      if (startY !== null && Math.abs(event.clientY - startY) >= 20) setHasMovedEntryDrag(true);
+    };
+    window.addEventListener('pointermove', detectMovement, true);
+    return () => window.removeEventListener('pointermove', detectMovement, true);
+  }, [activeEntry, hasMovedEntryDrag]);
 
   // カスタムイベント管理
   const handleAddCustomEvent = (customEvent: Omit<CustomEvent, 'id'>) => {
@@ -999,6 +1049,20 @@ export const TimetableEditing = ({
   }, [deleteConfirmDialog, eventSettings.customFields, timetableType, selectedDate, currentTimetable, onEventSettingsChange, handleRemoveEntry, finishBankReturn]);
 
   const handleDragEndWithBankReturn = useCallback((event: DragEndEvent) => {
+    const outer = timetableScrollRef.current;
+    if (outer) {
+      const draggedEntryId = String(event.active.id).startsWith('entry-')
+        ? String(event.active.id).slice('entry-'.length)
+        : undefined;
+      dropScrollSnapshotRef.current = {
+        outer: outer.scrollTop,
+        inner: Array.from(outer.querySelectorAll<HTMLElement>('.timetable-content'))
+          .map(element => captureTimetableScroll(element, draggedEntryId)),
+      };
+      setDropScrollRevision(revision => revision + 1);
+    }
+    entryDragStartPointerYRef.current = null;
+    setHasMovedEntryDrag(false);
     const activeId = String(event.active.id);
     const dropTargetId = String(event.over?.id || '');
     const targetId = dropTargetId === 'band-bank-droppable' ? dropTargetId : overEntryId || dropTargetId;
@@ -1023,9 +1087,11 @@ export const TimetableEditing = ({
       sensors={isCustomMode ? [] : sensors}
       collisionDetection={customCollisionDetection}
       onDragStart={wrappedHandleDragStart}
+      onDragMove={handleDragMove}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEndWithBankReturn}
       autoScroll={{
+        enabled: !activeEntry || hasMovedEntryDrag,
         threshold: {
           x: 0, // 横スクロールは無効
           y: 0.15, // 画面端から15%の範囲でスクロール開始
@@ -1088,7 +1154,7 @@ export const TimetableEditing = ({
           {/* タイムテーブルとバンドバンク/列管理のコンテナ */}
           <div className="flex gap-4 flex-1 min-w-0 ml-9">
             {/* 通常・カスタムの両モードで同じタイムテーブルと行を使用する */}
-            <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4 overflow-y-auto">
+            <div ref={timetableScrollRef} data-timetable-scroll-viewport onScroll={event => onScrollTopChange?.(event.currentTarget.scrollTop)} className="flex-1 min-w-0 min-h-0 flex flex-col gap-4 overflow-y-auto" style={{ overflowAnchor: 'none' }}>
             {(showCombinedView || showInterleavedCoolPreView) && (
               <div className="text-xs font-semibold text-emerald-700">{timetableType === 'performance' ? '本番' : 'リハーサル'}</div>
             )}

@@ -112,7 +112,11 @@ export const CustomFieldsEditor = ({
     () => [...typeData.columns].sort((a, b) => a.order - b.order),
     [typeData.columns]
   );
-  const previousColumnsRef = useRef<{ active: boolean; ids: Set<string> }>({ active: false, ids: new Set() });
+  // Mounting again after a page/date change should show existing columns immediately.
+  const previousColumnsRef = useRef<{ active: boolean; ids: Set<string> }>({
+    active: customMode,
+    ids: new Set(columns.map(column => column.id)),
+  });
   const enteringColumnIds = new Set(
     customMode
       ? columns.filter(column => !previousColumnsRef.current.active || !previousColumnsRef.current.ids.has(column.id)).map(column => column.id)

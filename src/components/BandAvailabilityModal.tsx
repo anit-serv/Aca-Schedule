@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import type { Band, TimeRange, EventSettings, Timetable } from '../types';
+import type { AvailableTimeSlot, Band, TimeRange, EventSettings, Timetable } from '../types';
 import { Icon } from './Icon';
 import { DesktopClockTimePicker } from './DesktopClockTimePicker';
 import { changeTimeRange, normalizeTimeRanges, timeSlotCoverage, timeSlotSegments, timeToMinutes } from '../utils/availabilityRanges';
@@ -11,6 +11,16 @@ interface BandAvailabilityModalProps {
   rehearsalTimetable: Timetable | null;
   onClose: () => void;
   onUpdate: (availableTimeSlots: Band['availableTimeSlots'], backupRehearsalTimeSlots: NonNullable<Band['backupRehearsalTimeSlots']>) => void;
+}
+
+interface MemberAvailabilityModalProps {
+  memberName: string;
+  memberTimeSlots: AvailableTimeSlot[];
+  dateTabs: Array<{ date: string; type: 'performance' | 'rehearsal' }>;
+  performanceTimetable: Timetable | null;
+  rehearsalTimetable: Timetable | null;
+  onClose: () => void;
+  onUpdateMember: (availableTimeSlots: AvailableTimeSlot[]) => void;
 }
 
 // 時間スロット（15分単位）のヘルパー関数
@@ -26,17 +36,17 @@ const generateTimeSlots = (): string[] => {
   return slots;
 };
 
-export const BandAvailabilityModal = ({
-  band,
-  eventSettings,
-  performanceTimetable,
-  rehearsalTimetable,
-  onClose,
-  onUpdate,
-}: BandAvailabilityModalProps) => {
+export const BandAvailabilityModal = (props: BandAvailabilityModalProps | MemberAvailabilityModalProps) => {
+  const { performanceTimetable, rehearsalTimetable, onClose } = props;
+  const memberMode = 'memberName' in props;
   // 本番日とリハーサル日を結合
   const allDates = useMemo(() => {
     const dates: Array<{ date: string; type: 'performance' | 'rehearsal' }> = [];
+    if (memberMode) {
+      return [...new Map(props.dateTabs.map(tab => [`${tab.date}:${tab.type}`, tab])).values()]
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.type === 'performance' ? -1 : 1));
+    }
+    const { eventSettings } = props;
     
     // 本番日を追加
     eventSettings.performanceDates.forEach(date => {
@@ -57,10 +67,10 @@ export const BandAvailabilityModal = ({
     
     // 日付順にソート
     return dates.sort((a, b) => a.date.localeCompare(b.date));
-  }, [eventSettings]);
+  }, [props, memberMode]);
 
-  const [timeSlots, setTimeSlots] = useState(band.availableTimeSlots);
-  const [backupTimeSlots, setBackupTimeSlots] = useState(band.backupRehearsalTimeSlots ?? []);
+  const [timeSlots, setTimeSlots] = useState(memberMode ? props.memberTimeSlots : props.band.availableTimeSlots);
+  const [backupTimeSlots, setBackupTimeSlots] = useState(memberMode ? [] : props.band.backupRehearsalTimeSlots ?? []);
   const [selectedTab, setSelectedTab] = useState(allDates[0] ?? { date: '', type: 'performance' as const });
   const [isBackupMode, setIsBackupMode] = useState(false);
   const selectedDate = selectedTab.date;
@@ -80,7 +90,10 @@ export const BandAvailabilityModal = ({
   
   const allTimeSlots = useMemo(() => generateTimeSlots(), []);
   const dayBounds = useMemo(() => {
-    const days = [performanceTimetable, rehearsalTimetable]
+    const timetables = memberMode
+      ? [selectedTab.type === 'performance' ? performanceTimetable : rehearsalTimetable]
+      : [performanceTimetable, rehearsalTimetable];
+    const days = timetables
       .flatMap(timetable => timetable?.dailyTimetables ?? [])
       .filter(day => day.date === selectedDate);
     if (days.length === 0) return { start: 0, end: 1440, hasStart: false, hasEnd: false };
@@ -92,7 +105,7 @@ export const BandAvailabilityModal = ({
       hasStart: starts.length > 0,
       hasEnd: ends.every(Number.isFinite),
     };
-  }, [performanceTimetable, rehearsalTimetable, selectedDate]);
+  }, [performanceTimetable, rehearsalTimetable, selectedDate, selectedTab.type, memberMode]);
 
   const isSlotAvailable = (time: string) => {
     const start = timeToMinutes(time);
@@ -283,20 +296,21 @@ export const BandAvailabilityModal = ({
   };
 
   const handleSave = () => {
-    onUpdate(timeSlots, backupTimeSlots);
+    if ('memberName' in props) props.onUpdateMember(timeSlots);
+    else props.onUpdate(timeSlots, backupTimeSlots);
   };
 
   const previewRange = getPreviewRange();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center ${memberMode ? 'z-[250]' : 'z-50'}`}>
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-xl font-bold text-gray-900">
-            出演可能時間帯設定: {band.name || '(未設定)'}
+            {memberMode ? '担当可能時間帯設定' : '出演可能時間帯設定'}: {memberMode ? props.memberName : props.band.name || '(未設定)'}
           </h3>
           <p className="text-gray-500 text-sm mt-1">
-            未選択の日は出演不可です。15分単位でなぞり、選択した時間帯は分単位で調整できます。
+            未選択の日は{memberMode ? '担当不可' : '出演不可'}です。15分単位でなぞり、選択した時間帯は分単位で調整できます。
           </p>
         </div>
 
@@ -307,7 +321,7 @@ export const BandAvailabilityModal = ({
               const dateObj = new Date(date);
               const formattedDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
               const hasSelection = timeSlots.some(s => s.date === date && s.timeRanges.length > 0)
-                || (type === 'rehearsal' && backupTimeSlots.some(s => s.date === date && s.timeRanges.length > 0));
+                || (!memberMode && type === 'rehearsal' && backupTimeSlots.some(s => s.date === date && s.timeRanges.length > 0));
               const label = type === 'rehearsal' ? 'リハ' : '本番';
               
               return (
@@ -337,7 +351,7 @@ export const BandAvailabilityModal = ({
             })}
           </div>
 
-          {selectedTab.type === 'rehearsal' && (
+          {!memberMode && selectedTab.type === 'rehearsal' && (
             <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
               <span className="text-sm font-medium text-gray-700">入力する時間帯</span>
               <button
@@ -368,12 +382,12 @@ export const BandAvailabilityModal = ({
                 設定済みの時間: {dayBounds.hasStart ? `${String(Math.floor(dayBounds.start / 60)).padStart(2, '0')}:${String(dayBounds.start % 60).padStart(2, '0')}` : '00:00'}〜{dayBounds.hasEnd ? `${String(Math.floor(dayBounds.end / 60)).padStart(2, '0')}:${String(dayBounds.end % 60).padStart(2, '0')}` : '24:00'}（範囲外は選択不可）
               </p>
             )}
-            <p className="mb-2 text-xs text-gray-500">{selectedTab.type === 'rehearsal' ? '緑が通常、紫がリハーサルの予備時間です。' : '緑が通常の出演可能時間です。'}分単位の範囲は選択された部分だけ色が付きます。</p>
+              <p className="mb-2 text-xs text-gray-500">{memberMode ? '緑が担当可能時間です。' : selectedTab.type === 'rehearsal' ? '緑が通常、紫がリハーサルの予備時間です。' : '緑が通常の出演可能時間です。'}分単位の範囲は選択された部分だけ色が付きます。</p>
             <div ref={timeGridRef} className="grid grid-cols-4 gap-1 select-none sm:grid-cols-8 lg:grid-cols-12">
               {allTimeSlots.slice(0, -1).map((time, index) => {
                 const slotStart = index * 15;
                 const normalSegments = timeSlotSegments(normalRanges, slotStart, slotStart + 15);
-                const backupSegments = selectedTab.type === 'rehearsal' ? timeSlotSegments(backupRanges, slotStart, slotStart + 15) : [];
+                const backupSegments = !memberMode && selectedTab.type === 'rehearsal' ? timeSlotSegments(backupRanges, slotStart, slotStart + 15) : [];
                 const coverage = timeSlotCoverage(activeRanges, slotStart, slotStart + 15);
                 const isSelected = coverage !== 'none';
                 const isDisabled = !isSlotAvailable(time);
@@ -430,7 +444,7 @@ export const BandAvailabilityModal = ({
             {/* 選択された時間範囲の表示 */}
             <div className="mt-4 pt-4 border-t border-gray-300">
               <h4 className="text-sm font-semibold text-gray-600 mb-2">
-                {isBackupMode ? '予備出演可能時間帯:' : '通常出演可能時間帯:'}
+                {memberMode ? '担当可能時間帯:' : isBackupMode ? '予備出演可能時間帯:' : '通常出演可能時間帯:'}
               </h4>
               {activeRanges.length > 0 ? (
                 <div className="flex flex-wrap gap-2">

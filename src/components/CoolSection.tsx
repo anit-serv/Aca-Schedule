@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useDroppable } from '@dnd-kit/core';
+import { useDndContext, useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTimetableRow } from './SortableTimetableRow';
 import { DesktopClockTimePicker } from './DesktopClockTimePicker';
 import type { Cool, Band, ConstraintViolation, CustomColumn, TimetableEntry } from '../types';
 import { Icon } from './Icon';
+import { getDestinationPlaceholderIndex, moveDraggedEntryPlaceholder } from '../utils/dragPlaceholderOrder';
 
 interface CoolSectionProps {
   cool: Cool;
@@ -39,6 +40,23 @@ interface CoolSectionProps {
   renderCustomCell?: (entry: TimetableEntry, column: CustomColumn, index: number) => ReactNode;
   returningEntryId?: string | null;
 }
+
+const InsertionGapRow = ({ height, colSpan, destination = false }: { height: number; colSpan: number; destination?: boolean }) => {
+  if (destination) return (
+    <motion.tr aria-hidden="true" data-drag-placeholder="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+      <td colSpan={colSpan} className="border-0 p-0 leading-none">
+        <motion.div initial={{ height: 0 }} animate={{ height }} exit={{ height: 0 }} transition={{ duration: 0.18, ease: 'easeInOut' }} className="overflow-hidden bg-emerald-100/60" />
+      </td>
+    </motion.tr>
+  );
+  return (
+    <tr aria-hidden="true">
+      <td colSpan={colSpan} className="border-0 p-0 leading-none">
+        <div className="overflow-hidden bg-emerald-100/60" style={{ height, transition: 'height 180ms ease-out' }} />
+      </td>
+    </tr>
+  );
+};
 
 export const CoolSection = ({ 
   cool, 
@@ -76,6 +94,112 @@ export const CoolSection = ({
   const [startTimeInput, setStartTimeInput] = useState(cool.startTime || '');
   const sectionRef = useRef<HTMLDivElement>(null);
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
+  const lastSourceTargetRef = useRef<string | null>(null);
+  const rowLayoutRef = useRef<{ order: string; positions: Map<string, number>; dragging: boolean } | null>(null);
+  const rowAnimationsRef = useRef<{ row: HTMLTableRowElement; animation: Animation }[]>([]);
+  const { active: draggedItem } = useDndContext();
+  // BandCard's timetable shape is 56px. The draggable <tr> can include a
+  // transient insertion gap, so its measured height must not size this gap.
+  const dragRowHeight = 56;
+  const draggedEntryId = String(draggedItem?.id ?? '');
+  const sourceIsInCool = cool.entries.some(entry => `entry-${entry.id}` === draggedEntryId);
+  const targetEntryId = overEntryId?.replace(/-after$/, '');
+  const targetIsInCool = cool.entries.some(entry => `entry-${entry.id}` === targetEntryId)
+    || overEntryId === `cool-header-${coolIndex}`
+    || overEntryId === `cool-column-header-${coolIndex}`
+    || overEntryId === `cool-gap-before-${coolIndex}`
+    || overEntryId === `cool-gap-after-${coolIndex}`
+    || overEntryId === `cool-droppable-${coolIndex}`;
+  const moveSourcePlaceholder = reserveInsertionSpace && sourceIsInCool && targetIsInCool;
+  const showDestinationPlaceholder = reserveInsertionSpace && draggedEntryId.startsWith('entry-')
+    && !sourceIsInCool && targetIsInCool;
+  // Keep the source slot at its last dragged position while it shrinks on a
+  // cross-cool move. Resetting to cool.entries here makes the gap jump back to
+  // the card's original position before its exit animation finishes.
+  const sourcePreviewTarget = reserveInsertionSpace && sourceIsInCool
+    ? (moveSourcePlaceholder ? overEntryId : lastSourceTargetRef.current)
+    : null;
+  useLayoutEffect(() => {
+    if (moveSourcePlaceholder) lastSourceTargetRef.current = overEntryId;
+    else if (!reserveInsertionSpace) lastSourceTargetRef.current = null;
+  }, [moveSourcePlaceholder, overEntryId, reserveInsertionSpace]);
+  const previewEntries = useMemo(() => {
+    return sourcePreviewTarget
+      ? moveDraggedEntryPlaceholder(cool.entries, draggedEntryId, sourcePreviewTarget, coolIndex)
+      : cool.entries;
+  }, [cool.entries, draggedEntryId, sourcePreviewTarget, coolIndex]);
+
+  const destinationPlaceholderIndex = showDestinationPlaceholder
+    ? getDestinationPlaceholderIndex(previewEntries, overEntryId, coolIndex)
+    : -1;
+  const previewOrderIds = previewEntries.map(entry => entry.id);
+  if (destinationPlaceholderIndex >= 0) previewOrderIds.splice(destinationPlaceholderIndex, 0, 'drag-placeholder');
+  const previewOrder = previewOrderIds.join('\u0000');
+  const animatingPlaceholder = moveSourcePlaceholder || showDestinationPlaceholder;
+  useLayoutEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const viewport = section.closest<HTMLElement>('.timetable-content');
+    const viewportTop = viewport?.getBoundingClientRect().top ?? 0;
+    const scrollTop = viewport?.scrollTop ?? 0;
+    const rows = Array.from(section.querySelectorAll<HTMLTableRowElement>('tbody > tr[data-entry-id]'));
+    const rowOffset = (row: HTMLTableRowElement) => {
+      if (!row.dataset.dragAnimating) return 0;
+      const transform = getComputedStyle(row).transform;
+      return transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
+    };
+    const positions = new Map(rows.map(row => [
+      row.dataset.entryId!,
+      row.getBoundingClientRect().top - rowOffset(row) - viewportTop + scrollTop,
+    ]));
+    const previous = rowLayoutRef.current;
+    const changedOrder = previous?.order !== previewOrder;
+    const animateSwap = animatingPlaceholder && previous?.dragging && changedOrder
+      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (changedOrder || !animatingPlaceholder) {
+      const currentOffsets = new Map<HTMLTableRowElement, number>();
+      if (animateSwap) {
+        for (const row of rows) currentOffsets.set(row, rowOffset(row));
+      }
+      rowAnimationsRef.current.forEach(({ row, animation }) => {
+        animation.cancel();
+        delete row.dataset.dragAnimating;
+      });
+      rowAnimationsRef.current = [];
+
+      if (animateSwap) {
+        for (const row of rows) {
+          const id = row.dataset.entryId!;
+          if (`entry-${id}` === draggedEntryId) continue;
+          const before = previous.positions.get(id);
+          const after = positions.get(id);
+          if (before === undefined || after === undefined) continue;
+          const distance = before - after;
+          // A swap moves each neighbouring card by one row. Ignore larger
+          // deltas caused by section layout changes or a different drag.
+          if (Math.abs(distance) < 1 || Math.abs(distance) > 84) continue;
+          const animation = row.animate(
+            [
+              { transform: `translateY(${distance + (currentOffsets.get(row) ?? 0)}px)` },
+              { transform: 'translateY(0)' },
+            ],
+            { duration: 180, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+          );
+          row.dataset.dragAnimating = 'true';
+          animation.onfinish = () => { delete row.dataset.dragAnimating; };
+          rowAnimationsRef.current.push({ row, animation });
+        }
+      }
+    }
+    rowLayoutRef.current = { order: previewOrder, positions, dragging: animatingPlaceholder };
+  }, [previewOrder, animatingPlaceholder, draggedEntryId]);
+
+  useEffect(() => () => rowAnimationsRef.current.forEach(({ row, animation }) => {
+    animation.cancel();
+    delete row.dataset.dragAnimating;
+  }), []);
+
   
   const { setNodeRef } = useDroppable({
     id: `cool-droppable-${coolIndex}`,
@@ -242,9 +366,9 @@ export const CoolSection = ({
   const shouldShowCoolHeader = rehearsalType === 'rehearsal-day' || totalCools > 1;
 
   return (
-    <div ref={sectionRef} data-custom-mode={customMode} className={`relative rounded-lg border border-emerald-100 bg-emerald-50/50 ${(showWarning || showOverlapWarning) ? 'ring-2 ring-red-500' : ''}`}>
+    <div ref={sectionRef} data-cool-index={coolIndex} data-custom-mode={customMode} className={`relative rounded-lg border border-emerald-100 bg-emerald-50/50 ${customMode && customColumns.length > 3 ? 'custom-wide-section' : ''} ${(showWarning || showOverlapWarning) ? 'ring-2 ring-red-500' : ''}`} style={{ ...(customMode && customColumns.length > 3 ? { '--custom-table-width': `calc(var(--custom-fixed-width) + ${customColumns.map(() => 'var(--custom-cell-width)').join(' + ')})` } : {}) } as CSSProperties}>
       {shouldShowCoolHeader && (
-        <div ref={stickyHeaderRef} className="sticky top-0 z-20 shadow-sm">
+        <div ref={stickyHeaderRef} data-cool-heading-index={coolIndex} className="sticky top-0 z-20 shadow-sm">
           {/* クール名ヘッダーの上に表示する線は削除（ドロップ可能だがハイライトなし） */}
           <div ref={setHeaderRef} className="bg-emerald-100 px-4 py-2 flex justify-between items-center">
           <div className="cool-header-left flex items-center gap-4">
@@ -330,8 +454,14 @@ export const CoolSection = ({
         </div>
       )}
       <div ref={setNodeRef} className={cool.entries.length === 0 ? "min-h-[100px]" : ""}>
-        <table className="w-full">
-          <thead ref={setColumnHeaderRef} className="sticky z-10 bg-emerald-100 shadow-sm" style={{ top: shouldShowCoolHeader ? 'var(--cool-sticky-header-height, 48px)' : 0 }}>
+        <table className={`timetable-grid w-full ${customMode && customColumns.length > 3 ? 'custom-wide-table' : ''}`}>
+          {customMode && customColumns.length > 3 && <colgroup>
+            <col className="custom-fixed-number" /><col className="custom-fixed-start" />
+            <col className="custom-collapsed-column" /><col className="custom-collapsed-column" />
+            <col className="custom-fixed-band" /><col className="custom-collapsed-column" />
+            {customColumns.map(column => <col key={column.id} className="custom-scrolling-column" />)}
+          </colgroup>}
+          <thead ref={setColumnHeaderRef} data-cool-column-heading-index={coolIndex} className="sticky z-10 bg-emerald-100 shadow-sm" style={{ top: shouldShowCoolHeader ? 'var(--cool-sticky-header-height, 48px)' : 0 }}>
             <tr>
               <th className="px-3 py-2 text-center text-sm font-semibold text-emerald-800 w-16">#</th>
               <th className="px-4 py-2 text-left text-sm font-semibold text-emerald-800 w-24"><span className="pl-4">開始</span></th>
@@ -350,14 +480,14 @@ export const CoolSection = ({
             {cool.entries.length === 0 ? (
               <>
                 {/* 空のクールの場合のドロップターゲット */}
-                {(overEntryId === `cool-droppable-${coolIndex}` ||
+                {reserveInsertionSpace && (overEntryId === `cool-droppable-${coolIndex}` ||
                   overEntryId === `cool-header-${coolIndex}` ||
                   overEntryId === `cool-column-header-${coolIndex}` ||
                   overEntryId === `cool-gap-before-${coolIndex}` ||
                   overEntryId === `cool-gap-after-${coolIndex}`) && (
-                  <tr className={reserveInsertionSpace ? 'h-14' : 'h-1'}>
+                  <tr className="h-14">
                     <td colSpan={6 + (customMode ? customColumns.length : 0)} className="p-0">
-                      <div className={`${reserveInsertionSpace ? 'h-14 bg-emerald-100/60' : 'h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50'}`}></div>
+                      <div className="h-14 bg-emerald-100/60"></div>
                     </td>
                   </tr>
                 )}
@@ -369,11 +499,13 @@ export const CoolSection = ({
               </>
             ) : (
               <>
-                {cool.entries.map((entry, entryIndex) => {
+                <AnimatePresence initial={false}>
+                {previewEntries.flatMap((entry, entryIndex) => {
                   const band = entry.bandId ? bands.find((b) => b.id === entry.bandId) : null;
                   const entryId = `entry-${entry.id}`;
                   const isDropTarget = overEntryId === entryId;
                   const isDropTargetAfter = overEntryId === `${entryId}-after`;
+                  const usesSeparateGap = reserveInsertionSpace && !moveSourcePlaceholder && !showDestinationPlaceholder && entry.type === 'band' && Boolean(band);
                   
                   // クールヘッダーまたは列ヘッダー、または前のギャップにドロップした場合、最初のエントリーの前をハイライト
                   const isFirstEntryAndHeaderDrop = entryIndex === 0 && (
@@ -383,7 +515,7 @@ export const CoolSection = ({
                   );
                   
                   // 最後のエントリーで、cool-droppableまたはcool-gap-afterが検出された場合、最後のエントリーの後ろをハイライト
-                  const isLastEntryAndCoolEnd = entryIndex === cool.entries.length - 1 && (
+                  const isLastEntryAndCoolEnd = entryIndex === previewEntries.length - 1 && (
                     overEntryId === `cool-droppable-${coolIndex}` ||
                     overEntryId === `cool-gap-after-${coolIndex}`
                   );
@@ -398,15 +530,23 @@ export const CoolSection = ({
                   // このエントリーのバンド番号を取得
                   const bandNumber = bandNumbers.get(entry.id);
                   
-                  return (
+                  return [
+                    ...(destinationPlaceholderIndex === entryIndex
+                      ? [<InsertionGapRow key="destination-placeholder" height={dragRowHeight} colSpan={6 + (customMode ? customColumns.length : 0)} destination />]
+                      : []),
+                    <Fragment key={rowKey}>
+                    {usesSeparateGap && <InsertionGapRow height={(isDropTarget || isFirstEntryAndHeaderDrop) && draggedItem?.id !== entryId ? dragRowHeight : 0} colSpan={6 + (customMode ? customColumns.length : 0)} />}
                     <SortableTimetableRow
-                      key={rowKey}
                       id={entryId}
                       entry={entry}
                       band={band}
                       isDropTarget={isDropTarget || isFirstEntryAndHeaderDrop}
                       isDropTargetAfter={isDropTargetAfter || isLastEntryAndCoolEnd}
                       reserveInsertionSpace={reserveInsertionSpace}
+                      externalInsertionGap={reserveInsertionSpace && entry.type === 'band' && Boolean(band)}
+                      holdDragRowSpace={moveSourcePlaceholder && entryId === draggedEntryId}
+                      collapseDragRowSpace={reserveInsertionSpace && sourceIsInCool && !targetIsInCool && entryId === draggedEntryId}
+                      suppressInsertionGap={moveSourcePlaceholder || showDestinationPlaceholder}
                       onRemove={() => onRemoveEntry(entry.id)}
                       isReadOnly={isReadOnly}
                       onTransitionTimeChange={onTransitionTimeChange}
@@ -419,8 +559,11 @@ export const CoolSection = ({
                       renderCustomCell={renderCustomCell}
                       returningToBank={entry.id === returningEntryId}
                     />
-                  );
+                    {usesSeparateGap && <InsertionGapRow height={isDropTargetAfter || isLastEntryAndCoolEnd ? dragRowHeight : 0} colSpan={6 + (customMode ? customColumns.length : 0)} />}</Fragment>,
+                  ];
                 })}
+                {destinationPlaceholderIndex === previewEntries.length && <InsertionGapRow key="destination-placeholder" height={dragRowHeight} colSpan={6 + (customMode ? customColumns.length : 0)} destination />}
+                </AnimatePresence>
                 {/* クールの最後にドロップできるようにする（エントリーがない場合のみ表示） */}
                 {/* エントリーがある場合は最後のエントリーの-afterとして表示される */}
                 {cool.entries.length === 0 && (overEntryId === `cool-droppable-${coolIndex}` ||

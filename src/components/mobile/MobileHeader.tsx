@@ -31,14 +31,16 @@ export const MobileHeader = ({
   return (
     <header className="bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm border-b border-gray-200 flex-shrink-0">
       <div className="px-3 py-2.5 flex justify-between items-center">
-        {/* 左側: 戻るボタン + タイトル */}
+        {/* 左側: アプリのアイコン + イベント名 */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             onClick={onBack}
-            className="text-gray-400 hover:text-gray-700 transition-colors text-sm flex-shrink-0 p-2 -ml-1"
-            title="マイイベントに戻る"
+            type="button"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
+            title="イベント一覧へ"
+            aria-label="イベント一覧へ"
           >
-            <Icon name="arrow_back" className="text-xl" />
+            <img src="/app-icon.svg" alt="" className="h-8 w-8 object-contain" />
           </button>
           <div className="min-w-0">
             <h1 className="text-[15px] font-bold text-gray-900 truncate">{eventSettings.name}</h1>

@@ -17,7 +17,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(fu
       aria-pressed={visible}
       className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-gray-500 hover:text-gray-700"
     >
-      <Icon name={visible ? 'visibility_off' : 'visibility'} className="text-xl" />
+      <Icon name={visible ? 'visibility' : 'visibility_off'} className="text-xl" />
     </button>
   </div>;
 });

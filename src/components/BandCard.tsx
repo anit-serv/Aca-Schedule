@@ -45,7 +45,7 @@ export const BandCard = ({ band, mode, duration, placedCount, showPlacedCount = 
   const violationIcon = severity === 'high' ? 'block' : severity === 'medium' ? 'warning' : 'info';
   const violationColor = severity === 'high' ? 'text-rose-500' : severity === 'medium' ? 'text-amber-500' : 'text-sky-500';
   const renderViolationTooltip = () => (
-    <div className="absolute bottom-full right-0 z-50 mb-2 hidden w-80 max-w-[80vw] rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-900 shadow-2xl group-hover:block">
+    <div className="absolute bottom-full right-0 z-50 mb-2 hidden w-80 max-w-[80vw] whitespace-normal rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-900 shadow-2xl group-hover:block">
       <div className="mb-2 font-bold">確認事項 ({violations.length}件)</div>
       {violations.map((violation, index) => <div key={index} className="mb-1 break-words text-gray-600">• {violation.message}</div>)}
     </div>
@@ -53,6 +53,7 @@ export const BandCard = ({ band, mode, duration, placedCount, showPlacedCount = 
 
   return <motion.div
     initial={false}
+    data-timetable-band-card={timetable && !preview ? '' : undefined}
     data-custom-mode={customMode}
     animate={preview ? {
       width: timetable ? width : bankWidth ?? sourceWidth,

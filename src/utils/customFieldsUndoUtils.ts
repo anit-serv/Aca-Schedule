@@ -1,10 +1,11 @@
-import type { CustomCellData, CustomColumn, CustomFieldsSettings } from '../types';
+import type { AvailableTimeSlot, CustomCellData, CustomColumn, CustomFieldsSettings } from '../types';
 import { deepEqual } from './deepEqual';
 
 type TimetableType = 'performance' | 'rehearsal';
 type CellStore = 'bySequence' | 'byEntity';
 type Change =
   | { type: TimetableType; kind: 'columns'; before: CustomColumn[]; after: CustomColumn[] }
+  | { kind: 'shiftAvailability'; before?: Record<string, AvailableTimeSlot[]>; after?: Record<string, AvailableTimeSlot[]> }
   | { type: TimetableType; kind: 'cell'; date: string; store: CellStore; row: string; columnId: string; before?: CustomCellData; after?: CustomCellData };
 
 const TYPES: TimetableType[] = ['performance', 'rehearsal'];
@@ -12,6 +13,9 @@ const STORES: CellStore[] = ['bySequence', 'byEntity'];
 
 export const getCustomFieldsChanges = (before: CustomFieldsSettings, after: CustomFieldsSettings): Change[] => {
   const changes: Change[] = [];
+  if (!deepEqual(before.shiftAvailability, after.shiftAvailability)) {
+    changes.push({ kind: 'shiftAvailability', before: before.shiftAvailability, after: after.shiftAvailability });
+  }
   for (const type of TYPES) {
     if (!deepEqual(before[type].columns, after[type].columns)) {
       changes.push({ type, kind: 'columns', before: before[type].columns, after: after[type].columns });
@@ -44,9 +48,9 @@ export const isCustomFieldsChangeConflicted = (
   if (!current) return true;
   return changes.some(change => {
     const expected = direction === 'undo' ? change.after : change.before;
-    const actual = change.kind === 'columns'
-      ? current[change.type].columns
-      : (current[change.type].dailyData[change.date]?.[change.store] as Record<string, Record<string, CustomCellData>> | undefined)?.[change.row]?.[change.columnId];
+    const actual = change.kind === 'shiftAvailability' ? current.shiftAvailability
+      : change.kind === 'columns' ? current[change.type].columns
+        : (current[change.type].dailyData[change.date]?.[change.store] as Record<string, Record<string, CustomCellData>> | undefined)?.[change.row]?.[change.columnId];
     return !deepEqual(actual, expected);
   });
 };
@@ -59,6 +63,11 @@ export const applyCustomFieldsChanges = (
   const result = structuredClone(current);
   for (const change of changes) {
     const value = direction === 'undo' ? change.before : change.after;
+    if (change.kind === 'shiftAvailability') {
+      if (value === undefined) delete result.shiftAvailability;
+      else result.shiftAvailability = structuredClone(value as Record<string, AvailableTimeSlot[]>);
+      continue;
+    }
     if (change.kind === 'columns') {
       result[change.type].columns = structuredClone(value as CustomColumn[]);
       continue;

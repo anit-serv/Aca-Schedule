@@ -118,8 +118,7 @@ export const ShiftSlotCell = ({ column, slot, slotIndex, slots, entries, bands, 
       <div className="mt-2 border-t pt-2 text-xs text-gray-600">
         <p className="mb-1 font-semibold">枠を編集</p>
         {nextSlot && <p className="mb-1 text-gray-500">枠の下端をドラッグして境界を移動できます。</p>}
-        {slotIndex < slots.length - 1 && <div className="flex gap-1"><button type="button" disabled={slot.size <= 1} onClick={() => onAction({ type: 'boundary-up', index: slotIndex })} className="rounded bg-gray-100 px-2 py-1 disabled:opacity-40">境界を上へ</button><button type="button" disabled={slots[slotIndex + 1].size <= 1} onClick={() => onAction({ type: 'boundary-down', index: slotIndex })} className="rounded bg-gray-100 px-2 py-1 disabled:opacity-40">境界を下へ</button></div>}
-        <div className="mt-1 flex gap-1"><button type="button" disabled={slot.size <= 1} onClick={() => { onAction({ type: 'add', index: slotIndex }); setOpen(false); }} className="rounded bg-gray-100 px-2 py-1 disabled:opacity-40">枠を追加</button><button type="button" disabled={slots.length <= 1} onClick={() => { if (confirm('この枠を削除して隣の枠に統合しますか？')) { onAction({ type: 'delete', index: slotIndex }); setOpen(false); } }} className="rounded bg-gray-100 px-2 py-1 disabled:opacity-40">枠を削除</button></div>
+        <div className="mt-1 flex gap-1"><button type="button" disabled={slot.size <= 1} onClick={() => { onAction({ type: 'add', index: slotIndex }); setOpen(false); }} className="rounded bg-gray-100 px-2 py-1 disabled:opacity-40">この枠を分割して下に追加</button><button type="button" disabled={slots.length <= 1} onClick={() => { if (confirm('この枠を削除して隣の枠に統合しますか？')) { onAction({ type: 'delete', index: slotIndex }); setOpen(false); } }} className="rounded bg-gray-100 px-2 py-1 disabled:opacity-40">枠を削除</button></div>
       </div>
       <button type="button" onClick={() => setOpen(false)} className="mt-3 w-full rounded border border-gray-200 py-2 text-sm">閉じる</button>
     </div></div>, document.body)}

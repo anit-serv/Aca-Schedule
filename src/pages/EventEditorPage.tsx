@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { BandManagement } from '../components/BandManagement';
+import { MemberManagement } from '../components/MemberManagement';
 import { TimetableEditing } from '../components/TimetableEditing';
 import { AutoScheduleLock } from '../components/AutoScheduleLock';
 import { AutoScheduleDialog } from '../components/AutoScheduleDialog';
@@ -18,19 +20,20 @@ import { useMobileDetect } from '../hooks/useMobileDetect';
 import { MobileHeader } from '../components/mobile/MobileHeader';
 import { MobileTabBar } from '../components/mobile/MobileTabBar';
 import { type SheetHeight } from '../components/mobile/MobileBottomSheet';
-import { MobileBandManagement } from '../components/mobile/MobileBandManagement';
 import { MobileSharePanel } from '../components/MobileSharePanel';
 import { MobileTimetableView } from '../components/mobile/MobileTimetableView';
-import type { Band, EventSettings, Timetable, DailyTimetable } from '../types';
+import type { Band, EventSettings, Timetable, DailyTimetable, CustomFieldsSettings } from '../types';
 import { useEventEditorData } from '../hooks/useEventEditorData';
 import { useTimetableChangeHandlers } from '../hooks/useTimetableChangeHandlers';
 import { useEditorUndo } from '../hooks/useEditorUndo';
 import { useRehearsalSync } from '../hooks/useRehearsalSync';
 import { copyToClipboard } from '../utils/copyToClipboard';
 import { deepEqual } from '../utils/deepEqual';
+import { createEmptyCustomFieldsSettings } from '../utils/customFieldsUtils';
 import type { ResetTimetablesPlan } from '../utils/resetTimetables';
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 import type { AutoScheduleRange } from '../utils/autoSchedule';
+import { isTransientAuthNetworkError } from '../utils/isTransientAuthNetworkError';
 
 interface BulkTimetableSnapshot {
   performanceDays: DailyTimetable[];
@@ -44,12 +47,16 @@ export const EventEditorPage = () => {
   const { currentUser, firebaseUser } = useAuth();
   const isMobile = useMobileDetect();
   const timetableViewRef = useRef<{ type: 'performance' | 'rehearsal'; date: string } | null>(null);
+  const timetableScrollTopRef = useRef(0);
   const bandScrollPositionRef = useRef({ top: 0, left: 0 });
   const handleTimetableViewChange = useCallback((view: { type: 'performance' | 'rehearsal'; date: string }) => {
     timetableViewRef.current = view;
   }, []);
   const handleBandScroll = useCallback((position: { top: number; left: number }) => {
     bandScrollPositionRef.current = position;
+  }, []);
+  const handleTimetableScroll = useCallback((top: number) => {
+    timetableScrollTopRef.current = top;
   }, []);
   const isMobileByViewport = typeof window !== 'undefined'
     ? window.matchMedia('(max-width: 1023px)').matches
@@ -84,6 +91,8 @@ export const EventEditorPage = () => {
 
   // 設定メニューの表示状態
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [autoScheduleJob, setAutoScheduleJob] = useState<AutoScheduleJob | null>(null);
@@ -226,6 +235,14 @@ export const EventEditorPage = () => {
     handlePerformanceTimetableChange,
     handleRehearsalTimetableChange,
   });
+
+  const handleMemberFieldsChange = useCallback(async (customFields: CustomFieldsSettings) => {
+    if (!eventSettingsRef.current) throw new Error('イベントが読み込まれていません');
+    const before = eventSettingsRef.current.customFields ?? createEmptyCustomFieldsSettings();
+    await eventService.updateEvent(eventSettingsRef.current.id, { customFields });
+    setEventSettings(previous => previous ? { ...previous, customFields } : previous);
+    handleCustomFieldsUndoRecord({ targetId: 'members:shift', opType: 'customColumn:shift', before, after: customFields });
+  }, [eventSettingsRef, setEventSettings, handleCustomFieldsUndoRecord]);
 
   // タイムテーブルと日付を同期する関数
   const syncTimetableWithDates = async (
@@ -377,7 +394,17 @@ export const EventEditorPage = () => {
     setAutoScheduleDialogType(type);
   };
 
-  const executeAutoSchedule = async (type: 'performance' | 'rehearsal', range?: AutoScheduleRange) => {
+  const prepareAutoSchedule = useCallback((range?: AutoScheduleRange) => {
+    if (!eventId || !firebaseUser || !autoScheduleDialogType) return Promise.reject(new Error('自動配置の準備ができていません。'));
+    return autoScheduleJobService.prepare(firebaseUser, eventId, autoScheduleDialogType, range);
+  }, [eventId, firebaseUser, autoScheduleDialogType]);
+
+  const readAutoSchedulePreparation = useCallback(() => {
+    if (!eventId || !firebaseUser) return Promise.reject(new Error('自動配置の準備ができていません。'));
+    return autoScheduleJobService.get(firebaseUser, eventId);
+  }, [eventId, firebaseUser]);
+
+  const executeAutoSchedule = async (type: 'performance' | 'rehearsal', runIdTask: Promise<string>) => {
     if (!eventId || !firebaseUser || !performanceTimetableRef.current || (type === 'rehearsal' && !rehearsalTimetableRef.current)
       || isCheckingAutoSchedule || startingAutoScheduleRef.current
       || autoScheduleJob?.status === 'queued' || autoScheduleJob?.status === 'running') return;
@@ -385,15 +412,17 @@ export const EventEditorPage = () => {
     setIsStartingAutoSchedule(true);
     setAutoScheduleMessage(null);
     try {
+      const runId = await runIdTask;
       const before: BulkTimetableSnapshot = {
         performanceDays: performanceTimetableRef.current.dailyTimetables,
         rehearsalDays: type === 'rehearsal' ? rehearsalTimetableRef.current!.dailyTimetables : null,
         customFields: eventSettingsRef.current?.customFields,
       };
-      const job = await autoScheduleJobService.start(firebaseUser, eventId, type, range);
-      if (job.started) sessionStorage.setItem(`autoScheduleUndo:${eventId}`, JSON.stringify({ runId: job.runId, type, before }));
+      sessionStorage.setItem(`autoScheduleUndo:${eventId}`, JSON.stringify({ runId, type, before }));
+      const job = await autoScheduleJobService.applyPreview(firebaseUser, eventId, runId);
       setAutoScheduleJob(job);
     } catch (error) {
+      sessionStorage.removeItem(`autoScheduleUndo:${eventId}`);
       setAutoScheduleMessage(error instanceof Error ? error.message : '自動配置を開始できませんでした。');
     } finally {
       startingAutoScheduleRef.current = false;
@@ -468,7 +497,12 @@ export const EventEditorPage = () => {
         }
       } catch (error) {
         if (!cancelled) {
-          setAutoScheduleMessage(error instanceof Error ? error.message : '自動配置の状態を確認できませんでした。');
+          if (isTransientAuthNetworkError(error)) {
+            // 次のポーリングで再試行する。一時的な認証通信失敗は配置結果ではない。
+            setAutoScheduleMessage(message => message?.includes('auth/network-request-failed') ? null : message);
+          } else {
+            setAutoScheduleMessage(error instanceof Error ? error.message : '自動配置の状態を確認できませんでした。');
+          }
         }
       }
     };
@@ -607,9 +641,15 @@ export const EventEditorPage = () => {
         />
 
         {/* メインコンテンツ */}
-        <main className="flex-1 overflow-hidden" inert={isCheckingAutoSchedule}>
+        <main className="flex-1 overflow-hidden" inert={isAutoScheduling}>
           {mode === 'band-management' ? (
-            <MobileBandManagement
+            isCustomMode ? <MemberManagement
+              eventSettings={eventSettings}
+              bands={bands}
+              performanceTimetable={performanceTimetable}
+              rehearsalTimetable={rehearsalTimetable}
+              onCustomFieldsChange={handleMemberFieldsChange}
+            /> : <BandManagement
               initialScrollPosition={bandScrollPositionRef.current}
               onScrollPositionChange={handleBandScroll}
               bands={bands}
@@ -618,12 +658,15 @@ export const EventEditorPage = () => {
               rehearsalTimetable={rehearsalTimetable}
               onBandsChange={handleBandsChange}
               onUndoRecord={handleBandUndoRecord}
-              isLoading={isEditorLoading}
             />
           ) : (
             <MobileTimetableView
               initialView={timetableViewRef.current}
               onViewChange={handleTimetableViewChange}
+              initialScrollTop={timetableScrollTopRef.current}
+              onScrollTopChange={handleTimetableScroll}
+              initialCustomMode={isCustomMode}
+              onCustomModeChange={setIsCustomMode}
               bands={bands}
               eventSettings={eventSettings}
               performanceTimetable={performanceTimetable}
@@ -650,12 +693,13 @@ export const EventEditorPage = () => {
         </main>
 
         {/* モバイルタブバー */}
-        <MobileTabBar mode={mode} onModeChange={setMode} />
+        <MobileTabBar mode={mode} onModeChange={setMode} customMode={isCustomMode} />
         {isAutoScheduling && <AutoScheduleLock />}
         {autoScheduleDialogType && <AutoScheduleDialog key={autoScheduleDialogType} type={autoScheduleDialogType}
           bandCount={calculateBandNumbers(autoScheduleDialogType === 'performance' ? performanceTimetable : rehearsalTimetable).size}
           onCancel={() => setAutoScheduleDialogType(null)}
-          onConfirm={range => { const type = autoScheduleDialogType; setAutoScheduleDialogType(null); void executeAutoSchedule(type, range); }} />}
+          onPrepare={prepareAutoSchedule} onReadPreparation={readAutoSchedulePreparation}
+          onConfirm={runId => { const type = autoScheduleDialogType; setAutoScheduleDialogType(null); void executeAutoSchedule(type, runId); }} />}
 
         {/* 共有パネル（モバイル用フルスクリーン） */}
         {showSharePanel && (
@@ -856,10 +900,12 @@ export const EventEditorPage = () => {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/')}
-              className="text-gray-400 hover:text-gray-700 transition-colors text-sm"
-              title="マイイベントに戻る"
+              type="button"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
+              title="イベント一覧へ"
+              aria-label="イベント一覧へ"
             >
-              <Icon name="arrow_back" className="text-sm align-middle mr-1" />戻る
+              <img src="/app-icon.svg" alt="" className="h-8 w-8 object-contain" />
             </button>
             <div>
               <h1 className="text-xl font-bold text-gray-900">{eventSettings.name}</h1>
@@ -869,13 +915,24 @@ export const EventEditorPage = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setMode('band-management')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+              aria-label={isCustomMode ? 'メンバー管理' : 'バンド管理'}
+              className={`inline-flex min-w-[136px] items-center justify-center overflow-hidden whitespace-nowrap px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
                 mode === 'band-management'
                   ? 'bg-emerald-500 text-white' // アクティブなボタンのスタイル
                   : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' // 非アクティブなボタンのスタイル
               }`}
             >
-              バンド管理
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={isCustomMode ? 'member-management' : 'band-management'}
+                  initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: prefersReducedMotion ? 0 : -6 }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: 'easeOut' }}
+                >
+                  {isCustomMode ? 'メンバー管理' : 'バンド管理'}
+                </motion.span>
+              </AnimatePresence>
             </button>
             <button
               onClick={() => setMode('timetable-editing')}
@@ -1262,10 +1319,16 @@ export const EventEditorPage = () => {
       </header>
 
       {/* メインコンテンツ */}
-      <main className="flex-1 overflow-hidden" inert={isCheckingAutoSchedule}>
+      <main className="flex-1 overflow-hidden" inert={isAutoScheduling}>
         <div className="h-full">
           {mode === 'band-management' ? (
-            <BandManagement
+            isCustomMode ? <MemberManagement
+              eventSettings={eventSettings}
+              bands={bands}
+              performanceTimetable={performanceTimetable}
+              rehearsalTimetable={rehearsalTimetable}
+              onCustomFieldsChange={handleMemberFieldsChange}
+            /> : <BandManagement
               initialScrollPosition={bandScrollPositionRef.current}
               onScrollPositionChange={handleBandScroll}
               bands={bands}
@@ -1279,6 +1342,10 @@ export const EventEditorPage = () => {
             <TimetableEditing
               initialView={timetableViewRef.current}
               onViewChange={handleTimetableViewChange}
+              initialScrollTop={timetableScrollTopRef.current}
+              onScrollTopChange={handleTimetableScroll}
+              initialCustomMode={isCustomMode}
+              onCustomModeChange={setIsCustomMode}
               bands={bands}
               eventSettings={eventSettings}
               performanceTimetable={performanceTimetable}
@@ -1303,7 +1370,8 @@ export const EventEditorPage = () => {
       {autoScheduleDialogType && <AutoScheduleDialog key={autoScheduleDialogType} type={autoScheduleDialogType}
         bandCount={calculateBandNumbers(autoScheduleDialogType === 'performance' ? performanceTimetable : rehearsalTimetable).size}
         onCancel={() => setAutoScheduleDialogType(null)}
-        onConfirm={range => { const type = autoScheduleDialogType; setAutoScheduleDialogType(null); void executeAutoSchedule(type, range); }} />}
+        onPrepare={prepareAutoSchedule} onReadPreparation={readAutoSchedulePreparation}
+        onConfirm={runId => { const type = autoScheduleDialogType; setAutoScheduleDialogType(null); void executeAutoSchedule(type, runId); }} />}
 
       {/* イベント設定モーダル */}
       {showSettingsModal && (

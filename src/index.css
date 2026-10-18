@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+.timetable-grid th,
+.timetable-grid td {
+  white-space: nowrap;
+}
+
+.timetable-grid thead th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .mode-optional-cell {
   position: relative;
   box-sizing: border-box;
@@ -74,6 +84,62 @@
 [data-custom-mode="true"] .mode-band-name-label { padding-left: 0; }
 .cool-header-left { transition: gap 260ms ease; }
 [data-custom-mode="true"] .cool-header-left { gap: 0; }
+
+/* Keep the three-column layout's widths when more custom columns are added. */
+.timetable-content { container-type: inline-size; }
+
+@media (min-width: 768px) {
+  .custom-wide-section {
+    --custom-fixed-width: clamp(320px, 35cqw, 400px);
+    --custom-cell-width: max(160px, calc((100cqw - var(--custom-fixed-width)) / 3));
+    width: var(--custom-table-width);
+  }
+  .custom-wide-section > .sticky {
+    left: 0;
+    width: 100cqw;
+  }
+  .custom-wide-table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .custom-wide-table col.custom-fixed-number { width: 64px; }
+  .custom-wide-table col.custom-fixed-start { width: 112px; }
+  .custom-wide-table col.custom-fixed-band { width: calc(var(--custom-fixed-width) - 176px); }
+  .custom-wide-table col.custom-collapsed-column { width: 0; }
+  .custom-wide-table col.custom-scrolling-column { width: var(--custom-cell-width); }
+
+  .custom-wide-table thead th:nth-child(1),
+  .custom-wide-table thead th:nth-child(2),
+  .custom-wide-table thead th:nth-child(5),
+  .custom-wide-table tbody tr[data-entry-id] > td:not([colspan]):nth-child(1),
+  .custom-wide-table tbody tr[data-entry-id] > td:not([colspan]):nth-child(2),
+  .custom-wide-table tbody tr[data-entry-id] > td:not([colspan]):nth-child(5) {
+    position: sticky;
+    z-index: 2;
+    background-color: #ecfdf5;
+  }
+  .custom-wide-table thead th:nth-child(1),
+  .custom-wide-table tbody tr[data-entry-id] > td:not([colspan]):nth-child(1) { left: 0; }
+  .custom-wide-table thead th:nth-child(2),
+  .custom-wide-table tbody tr[data-entry-id] > td:not([colspan]):nth-child(2) { left: 64px; }
+  .custom-wide-table thead th:nth-child(5),
+  .custom-wide-table tbody tr[data-entry-id] > td:not([colspan]):nth-child(5) { left: 176px; }
+  .custom-wide-table thead th:nth-child(1),
+  .custom-wide-table thead th:nth-child(2),
+  .custom-wide-table thead th:nth-child(5) { z-index: 3; background-color: #d1fae5; }
+
+  .custom-wide-table tbody tr[data-entry-id] > td[colspan="6"] {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background-color: #ecfdf5;
+  }
+  .custom-wide-table .band-card-grid {
+    grid-template-columns: 64px 112px 0px 0px minmax(0, 1fr) 0px !important;
+  }
+  .custom-wide-table thead th:nth-child(n+7) > span { width: 100%; }
+}
 
 [data-custom-mode="true"] .mode-cool-control,
 [data-custom-mode="true"] .mode-drag-handle {

@@ -4,6 +4,7 @@ import type { Band, Timetable, CustomFieldsSettings, CustomColumn, CustomColumnB
 import { generateUUID } from '../utils/generateUUID';
 import { Icon } from './Icon';
 import { ShiftSetupDialog } from './ShiftSetupDialog';
+import { ShiftAutoAssignDialog } from './ShiftAutoAssignDialog';
 import { createShift, uniquePeople } from '../utils/customShift';
 import {
   getTypeData,
@@ -55,6 +56,7 @@ export const CustomColumnManager = ({
   const [pendingShare, setPendingShare] = useState<{ columnId: string; counterpartId: string; name: string; addColumn?: { id: string; name: string; bindingType: CustomColumnBindingType } } | null>(null);
   const [menuError, setMenuError] = useState('');
   const [shiftColumnId, setShiftColumnId] = useState<string | null>(null);
+  const [autoAssignOpen, setAutoAssignOpen] = useState(false);
 
   const otherType = timetableType === 'performance' ? 'rehearsal' : 'performance';
 
@@ -282,6 +284,8 @@ export const CustomColumnManager = ({
         <p className="text-xs text-gray-500">
           {timetableType === 'performance' ? '本番用' : 'リハ用'} · {columns.length}列
         </p>
+        {(customFields?.performance.columns.some(column => column.shift) || customFields?.rehearsal.columns.some(column => column.shift)) &&
+          <button type="button" onClick={() => setAutoAssignOpen(true)} className="mt-2 w-full rounded bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">シフトを自動割り振り</button>}
         {menuError && <p role="alert" className="mt-1 text-xs text-red-600">{menuError}</p>}
       </div>
 
@@ -508,11 +512,24 @@ export const CustomColumnManager = ({
       {shiftColumn && <ShiftSetupDialog
         columnName={shiftColumn.name}
         bands={bands}
+        registeredMembers={customFields?.members}
         initial={shiftColumn.shift}
         shared={!!getSharedColumnId(customFields, timetableType, shiftColumn)}
         seedCandidates={getTypeData(customFields, otherType).columns.find(column => column.id === getSharedColumnId(customFields, timetableType, shiftColumn))?.shift?.candidates}
         onCancel={() => setShiftColumnId(null)}
         onSave={saveShift}
+      />}
+      {autoAssignOpen && customFields && <ShiftAutoAssignDialog
+        settings={customFields}
+        performance={timetableType === 'performance' ? timetable : counterpartTimetable}
+        rehearsal={timetableType === 'rehearsal' ? timetable : counterpartTimetable}
+        bands={bands}
+        onCancel={() => setAutoAssignOpen(false)}
+        onApply={updated => {
+          onUndoRecord?.({ targetId: 'shift:auto', opType: 'customColumn:shift', before: customFields, after: updated });
+          onCustomFieldsChange(updated);
+          setAutoAssignOpen(false);
+        }}
       />}
     </div>
   );

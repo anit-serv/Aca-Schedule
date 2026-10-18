@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
@@ -15,6 +15,7 @@ import { calculateBandNumbers } from '../../utils/calculateBandNumbers';
 import { isValidCoolStart, isValidDayEnd, timeMinutes } from '../../utils/dailyTimeBounds';
 import { normalizeTimeRanges } from '../../utils/availabilityRanges';
 import { generateUUID } from '../../utils/generateUUID';
+import { captureTimetableScroll, restoreTimetableScroll, type TimetableScrollSnapshot } from '../../utils/timetableScrollAnchor';
 import { preparePerformanceReset, prepareRehearsalReset, prepareTimetablesReset, type ResetTimetablesPlan } from '../../utils/resetTimetables';
 import { useTimetableHelpers } from '../../hooks/useTimetableHelpers';
 import { useAllViolations } from '../../hooks/useConstraintCheck';
@@ -38,6 +39,10 @@ import { getCustomShiftIssues } from '../../utils/customShift';
 interface MobileTimetableViewProps {
   initialView?: { type: 'performance' | 'rehearsal'; date: string } | null;
   onViewChange?: (view: { type: 'performance' | 'rehearsal'; date: string }) => void;
+  initialScrollTop?: number;
+  onScrollTopChange?: (top: number) => void;
+  initialCustomMode?: boolean;
+  onCustomModeChange?: (enabled: boolean) => void;
   bands: Band[];
   eventSettings: EventSettings;
   performanceTimetable: Timetable | null;
@@ -168,6 +173,10 @@ const MobileTimeInput = ({
 export const MobileTimetableView = ({
   initialView,
   onViewChange,
+  initialScrollTop = 0,
+  onScrollTopChange,
+  initialCustomMode = false,
+  onCustomModeChange,
   bands,
   eventSettings,
   performanceTimetable,
@@ -218,7 +227,8 @@ export const MobileTimetableView = ({
   // \u30ab\u30b9\u30bf\u30e0\u30a4\u30d9\u30f3\u30c8\u30ea\u30b9\u30c8
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(eventSettings.customEvents || []);
   // \u30ab\u30b9\u30bf\u30e0\u30e2\u30fc\u30c9\uff08\u30c6\u30fc\u30d6\u30eb\u8868\u793a\uff09
-  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(initialCustomMode);
+  useEffect(() => { onCustomModeChange?.(isCustomMode); }, [isCustomMode, onCustomModeChange]);
 
   // eventSettings.customEvents\u304c\u5916\u90e8\u304b\u3089\u5909\u66f4\u3055\u308c\u305f\u3089\u30ed\u30fc\u30ab\u30eb\u72b6\u614b\u3092\u540c\u671f
   useEffect(() => {
@@ -400,6 +410,7 @@ export const MobileTimetableView = ({
     onEntryReorderInCools: handleEntryReorderInCools,
     onEntryReorderFlat: handleEntryReorderFlat,
     canDrop: event => !unifiedCoolPre || isDropWithinTimetableScope(event, timetableType),
+    trackPointerY: true,
   });
 
   const {
@@ -408,6 +419,10 @@ export const MobileTimetableView = ({
   } = useDroppable({ id: 'mobile-cancel-dropzone' });
   const sheetHeightBeforeDragRef = useRef<SheetHeight | null>(null);
   const dragSourceRectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const timetableScrollRef = useRef<HTMLDivElement | null>(null);
+  const initialScrollTopRef = useRef(initialScrollTop);
+  const dropScrollSnapshotRef = useRef<TimetableScrollSnapshot | null>(null);
+  const [dropScrollRevision, setDropScrollRevision] = useState(0);
 
   // \u30c9\u30e9\u30c3\u30b0\u958b\u59cb\u6642\u306b\u30dc\u30c8\u30e0\u30b7\u30fc\u30c8\u3092\u6700\u5c0f\u5316
   const handleDragStart = useCallback((event: Parameters<typeof baseDragStart>[0]) => {
@@ -432,6 +447,13 @@ export const MobileTimetableView = ({
 
   // \u30c9\u30e9\u30c3\u30b0\u7d42\u4e86\u6642\u306e\u30e9\u30c3\u30d7
   const handleDragEnd = useCallback((event: Parameters<typeof baseDragEnd>[0]) => {
+    dropScrollSnapshotRef.current = timetableScrollRef.current
+      ? captureTimetableScroll(
+          timetableScrollRef.current,
+          String(event.active.id).startsWith('entry-') ? String(event.active.id).slice('entry-'.length) : undefined,
+        )
+      : null;
+    setDropScrollRevision(revision => revision + 1);
     baseDragEnd(event);
     dragSourceRectRef.current = null;
     const previousHeight = sheetHeightBeforeDragRef.current;
@@ -444,7 +466,19 @@ export const MobileTimetableView = ({
   const isAnyDragging = Boolean(activeBand || activeCustomEvent || activeEntry);
   const isCancelTargetVisible = isDraggingFromBank || Boolean(cancelAbsorbAnimation);
   const isCancelZoneActive = isCancelDropOver || overEntryId === 'mobile-cancel-dropzone' || isPointerOverCancelZone;
-  const timetableScrollRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (timetableScrollRef.current) timetableScrollRef.current.scrollTop = initialScrollTopRef.current;
+  }, []);
+  useLayoutEffect(() => {
+    const snapshot = dropScrollSnapshotRef.current;
+    if (!snapshot) return;
+    restoreTimetableScroll(snapshot);
+    const frame = requestAnimationFrame(() => {
+      restoreTimetableScroll(snapshot);
+      if (dropScrollSnapshotRef.current === snapshot) dropScrollSnapshotRef.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dropScrollRevision]);
   const currentPointerYRef = useRef(0);
   const isDraggingFromBankRef = useRef(false);
 
@@ -1194,7 +1228,7 @@ export const MobileTimetableView = ({
       </div>
 
       {/* \u30bf\u30a4\u30e0\u30c6\u30fc\u30d6\u30eb\u672c\u4f53 */}
-      <div ref={timetableScrollRef} className="flex-1 overflow-y-auto" style={{ paddingBottom: timetableBottomPadding }}>
+      <div ref={timetableScrollRef} onScroll={event => onScrollTopChange?.(event.currentTarget.scrollTop)} className="flex-1 overflow-y-auto" style={{ paddingBottom: timetableBottomPadding, overflowAnchor: 'none' }}>
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -1905,7 +1939,9 @@ const SortableEntry = ({
     transition,
     // ドラッグ表示は DragOverlay が担当する。元の行は薄く重ねて表示しない。
     opacity: isDragging ? 0 : 1,
-    display: isDragging && sourceRectCaptured ? 'none' as const : undefined,
+    // While the original slot is selected, the hidden source card itself reserves that space.
+    visibility: isDragging && isDropBefore ? 'hidden' as const : undefined,
+    display: isDragging && sourceRectCaptured && !isDropBefore ? 'none' as const : undefined,
     zIndex: isDragging ? 50 : undefined,
     position: isDragging ? 'relative' as const : undefined,
   };

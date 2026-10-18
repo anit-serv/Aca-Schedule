@@ -1,6 +1,6 @@
 import { waitUntil } from '@vercel/functions';
 import { authenticateFirebaseUser, ensureEventEditableByUser } from '../../_lib/auth.js';
-import { getAutoScheduleJob, runAutoScheduleJob, shouldResumeAutoScheduleJob, startAutoScheduleJob } from '../../_lib/autoScheduleJob.js';
+import { applyPreparedAutoScheduleJob, getAutoScheduleJob, runAutoScheduleJob, shouldResumeAutoScheduleJob, startAutoScheduleJob } from '../../_lib/autoScheduleJob.js';
 import { ApiError } from '../../_lib/errors.js';
 import { getAdminDb } from '../../_lib/firestoreAdmin.js';
 import { generateRequestId } from '../../_lib/request.js';
@@ -21,6 +21,12 @@ export default async function handler(req, res) {
     await ensureEventEditableByUser({ eventId, userId: auth.userId, userEmail: auth.userEmail, allowedEventIds: null });
     const db = getAdminDb();
     if (req.method === 'POST') {
+      if (body.action === 'apply-preview') {
+        if (typeof body.runId !== 'string' || !body.runId) throw new ApiError(400, 'INVALID_RUN_ID', '計算結果を指定してください。');
+        const job = await applyPreparedAutoScheduleJob(db, eventId, body.runId, auth.userId, auth.userEmail);
+        res.status(200).json({ success: true, requestId, data: job });
+        return;
+      }
       const type = body.type || 'performance';
       if (!['performance', 'rehearsal'].includes(type)) throw new ApiError(400, 'INVALID_TYPE', 'Invalid timetable type.');
       const range = body.range || null;
@@ -28,7 +34,7 @@ export default async function handler(req, res) {
         || range.startNumber < 1 || range.endNumber > 10000 || range.startNumber >= range.endNumber)) {
         throw new ApiError(400, 'INVALID_RANGE', '出演番号の範囲を確認してください。');
       }
-      const job = await startAutoScheduleJob(db, eventId, auth.userId, auth.userEmail, type, range);
+      const job = await startAutoScheduleJob(db, eventId, auth.userId, auth.userEmail, type, range, body.action === 'prepare');
       if (job.started) waitUntil(runAutoScheduleJob(db, eventId, job.runId));
       res.status(202).json({ success: true, requestId, data: job });
       return;

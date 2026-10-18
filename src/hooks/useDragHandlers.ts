@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { DragStartEvent, DragOverEvent, DragEndEvent, DragMoveEvent } from '@dnd-kit/core';
 import type { Band, CustomEvent, DailyTimetable } from '../types';
+import { getAdjacentEntryTarget, getDestinationCoolEntryTarget, getPlaceholderEntryTarget, toTimetableContentRect } from '../utils/dragInsertionTarget';
 
 interface UseDragHandlersParams {
   bands: Band[];
@@ -13,6 +14,8 @@ interface UseDragHandlersParams {
   onEntryReorderInCools: (activeId: string, targetId: string) => void;
   onEntryReorderFlat: (activeId: string, targetId: string) => void;
   canDrop?: (event: DragEndEvent) => boolean;
+  trackPointerY?: boolean;
+  preferStableEntryTarget?: boolean;
 }
 
 export interface CancelAbsorbAnimation {
@@ -48,15 +51,107 @@ export const useDragHandlers = ({
   onEntryReorderInCools,
   onEntryReorderFlat,
   canDrop,
+  trackPointerY = false,
+  preferStableEntryTarget = false,
 }: UseDragHandlersParams) => {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [overEntryId, setOverEntryId] = useState<string | null>(null);
   const [dropSucceeded, setDropSucceeded] = useState(false);
   const [cancelAbsorbAnimation, setCancelAbsorbAnimation] = useState<CancelAbsorbAnimation | null>(null);
   const [isPointerOverCancelZone, setIsPointerOverCancelZone] = useState(false);
-  const [currentMouseX, setCurrentMouseX] = useState<number>(0);
-  const [currentMouseY, setCurrentMouseY] = useState<number>(0);
+  const [currentPointerY, setCurrentPointerY] = useState(0);
+  const pointerRef = useRef<Point>({ x: 0, y: 0 });
+  const publishPointerYRef = useRef(false);
   const latestOverIdRef = useRef<string | null>(null);
+  const entryRectsRef = useRef<{ id: string; element: HTMLTableRowElement }[]>([]);
+  const coolTargetsRef = useRef<{ index: number; section: HTMLElement; rows: { id: string; element: HTMLTableRowElement }[] }[]>([]);
+  const sourceCoolIndexRef = useRef(-1);
+  const entryViewportRef = useRef<HTMLElement | null>(null);
+  const entryPreviewRef = useRef<HTMLElement | null>(null);
+  const entryDragGeometryRef = useRef<{ activeId: string; initial: { top: number; height: number }; translated: { top: number; height: number } } | null>(null);
+
+  const updatePointer = useCallback((x: number, y: number) => {
+    pointerRef.current = { x, y };
+    if (trackPointerY && publishPointerYRef.current) setCurrentPointerY(y);
+  }, [trackPointerY]);
+
+  const publishEntryTarget = (target: string | null) => {
+    if (latestOverIdRef.current === target) return;
+    latestOverIdRef.current = target;
+    setOverEntryId(target);
+  };
+
+  const resolveEntryTarget = (activeId: string, _initial: { top: number; height: number }, translated: { top: number; height: number }) => {
+    const viewport = entryViewportRef.current;
+    if (!entryPreviewRef.current?.isConnected) {
+      entryPreviewRef.current = document.querySelector<HTMLElement>('[data-timetable-drag-preview]');
+    }
+    const previewRect = entryPreviewRef.current?.getBoundingClientRect();
+    const preview = previewRect && previewRect.height > 0 ? previewRect : translated;
+    const previewCenterY = preview.top + preview.height / 2;
+    const pointerY = pointerRef.current.y > 0 ? pointerRef.current.y : previewCenterY;
+    const viewportTop = viewport?.getBoundingClientRect().top ?? 0;
+    const scrollTop = viewport?.scrollTop ?? 0;
+    const contentPreview = toTimetableContentRect(preview, viewportTop, scrollTop);
+    const sections = coolTargetsRef.current;
+    // Between cools, the gap belongs to the following cool. This also keeps
+    // the destination stable while its placeholder changes the section height.
+    const targetCool = sections.find(({ section }) => pointerY < section.getBoundingClientRect().bottom)
+      ?? sections[sections.length - 1];
+    const targetSection = targetCool?.section;
+    const coolIndex = targetCool?.index ?? -1;
+    const currentCool = currentTimetable.cools?.[coolIndex];
+    const liveRows = (targetCool?.rows ?? entryRectsRef.current)
+      .map(({ id, element }) => {
+        const bounds = element.getBoundingClientRect();
+        const transform = element.dataset.dragAnimating ? getComputedStyle(element).transform : 'none';
+        const visualOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
+        return { id, ...toTimetableContentRect({ top: bounds.top - visualOffset, height: bounds.height }, viewportTop, scrollTop) };
+      });
+    if (currentCool) {
+      const lastTarget = latestOverIdRef.current?.replace(/-after$/, '');
+      const enteringFromBelow = sourceCoolIndexRef.current > coolIndex
+        && !liveRows.some(row => row.id === lastTarget);
+      // Sticky headings can overlap the pointer while entering from below.
+      // Nonempty cools use the card and placeholder positions instead.
+      if (enteringFromBelow && liveRows.length) {
+        const lastRow = liveRows.reduce((last, row) => row.top > last.top ? row : last);
+        return `${lastRow.id}-after`;
+      }
+      if (!liveRows.length) return `cool-droppable-${coolIndex}`;
+      const activeRow = liveRows.find(row => row.id === activeId);
+      if (activeRow && activeRow.height > 0) {
+        return getPlaceholderEntryTarget(activeId, latestOverIdRef.current ?? activeId, contentPreview, liveRows);
+      }
+      const destinationPlaceholder = targetSection!.querySelector<HTMLTableRowElement>('tr[data-drag-placeholder]');
+      const placeholderRect = destinationPlaceholder?.getBoundingClientRect();
+      return getDestinationCoolEntryTarget(coolIndex, latestOverIdRef.current, contentPreview, liveRows, {
+        incomingFromBelow: sourceCoolIndexRef.current > coolIndex,
+        placeholder: placeholderRect
+          ? toTimetableContentRect(placeholderRect, viewportTop, scrollTop)
+          : null,
+      });
+    }
+    const activeRow = liveRows.find(row => row.id === activeId);
+    if (activeRow && activeRow.height > 0) {
+      return getPlaceholderEntryTarget(activeId, latestOverIdRef.current ?? activeId, contentPreview, liveRows);
+    }
+    return getAdjacentEntryTarget(activeId, latestOverIdRef.current ?? activeId, contentPreview, liveRows);
+  };
+
+  useEffect(() => {
+    if (!activeDragId?.startsWith('entry-')) return;
+    const viewport = entryViewportRef.current;
+    if (!viewport) return;
+    const updateOnScroll = () => {
+      const geometry = entryDragGeometryRef.current;
+      if (!geometry) return;
+      const target = resolveEntryTarget(geometry.activeId, geometry.initial, geometry.translated);
+      publishEntryTarget(target);
+    };
+    viewport.addEventListener('scroll', updateOnScroll, { passive: true });
+    return () => viewport.removeEventListener('scroll', updateOnScroll);
+  }, [activeDragId]);
 
   const isPointerInCancelZone = (x: number, y: number): boolean => {
     if (x <= 0 || y <= 0 || typeof document === 'undefined') return false;
@@ -86,8 +181,8 @@ export const useDragHandlers = ({
     const endX = iconRect ? iconRect.left + iconRect.width / 2 : window.innerWidth / 2;
     const endY = iconRect ? iconRect.top + iconRect.height / 2 : window.innerHeight - 80;
 
-    const startX = startPoint?.x ?? (currentMouseX > 0 ? currentMouseX : window.innerWidth / 2);
-    const startY = startPoint?.y ?? (currentMouseY > 0 ? currentMouseY : window.innerHeight / 2);
+    const startX = startPoint?.x ?? (pointerRef.current.x > 0 ? pointerRef.current.x : window.innerWidth / 2);
+    const startY = startPoint?.y ?? (pointerRef.current.y > 0 ? pointerRef.current.y : window.innerHeight / 2);
 
     setCancelAbsorbAnimation({
       id: Date.now(),
@@ -104,10 +199,10 @@ export const useDragHandlers = ({
     setDropSucceeded(true);
   };
 
-  // バンドバンクからのドラッグの場合のみポインタ位置をトラッキング
+  // ポインタ座標は ref に保持し、描画に必要なモバイルのバンクドラッグ中だけ state を更新する。
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent | MouseEvent | TouchEvent) => {
-      if (activeDragId && (activeDragId.startsWith('band-') || activeDragId.startsWith('custom-'))) {
+      if (activeDragId) {
         let x = 0;
         let y = 0;
         if ('clientY' in e) {
@@ -117,27 +212,64 @@ export const useDragHandlers = ({
           x = e.touches[0].clientX;
           y = e.touches[0].clientY;
         }
-        setCurrentMouseX(x);
-        setCurrentMouseY(y);
-        setIsPointerOverCancelZone(isPointerInCancelZone(x, y));
+        updatePointer(x, y);
+        if (!activeDragId.startsWith('entry-')) setIsPointerOverCancelZone(isPointerInCancelZone(x, y));
       }
     };
 
     if (activeDragId) {
       window.addEventListener('pointermove', handlePointerMove);
-      window.addEventListener('mousemove', handlePointerMove as (e: MouseEvent) => void);
       window.addEventListener('touchmove', handlePointerMove as (e: TouchEvent) => void);
       return () => {
         window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('mousemove', handlePointerMove as (e: MouseEvent) => void);
         window.removeEventListener('touchmove', handlePointerMove as (e: TouchEvent) => void);
       };
     }
-  }, [activeDragId]);
+  }, [activeDragId, updatePointer]);
 
   // ドラッグ開始
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveDragId(event.active.id as string);
+    const activeId = String(event.active.id);
+    publishPointerYRef.current = !activeId.startsWith('entry-');
+    const sourceRow = activeId.startsWith('entry-')
+      ? Array.from(document.querySelectorAll<HTMLTableRowElement>('tr[data-entry-id]'))
+          .find(row => `entry-${row.dataset.entryId}` === activeId)
+      : undefined;
+    entryViewportRef.current = sourceRow?.closest<HTMLElement>('.timetable-content')
+      ?? document.querySelector<HTMLElement>('.timetable-content')
+      ?? document.querySelector<HTMLElement>('[data-timetable-scroll-viewport]');
+    entryPreviewRef.current = null;
+    const viewport = entryViewportRef.current;
+    const viewportTop = viewport?.getBoundingClientRect().top ?? 0;
+    const scrollTop = viewport?.scrollTop ?? 0;
+    const toContentRect = (rect: DOMRect) => toTimetableContentRect(rect, viewportTop, scrollTop);
+    const sourceRect = sourceRow ? toContentRect(sourceRow.getBoundingClientRect()) : null;
+    entryDragGeometryRef.current = activeId.startsWith('entry-') && event.active.rect.current.initial && sourceRect
+      ? { activeId, initial: sourceRect, translated: event.active.rect.current.initial }
+      : null;
+    const validEntryIds = new Set([
+      ...(currentTimetable.cools?.flatMap(cool => cool.entries) || []),
+      ...(currentTimetable.entries || []),
+    ].map(entry => entry.id));
+    entryRectsRef.current = activeId.startsWith('entry-')
+      ? Array.from((viewport ?? document).querySelectorAll<HTMLTableRowElement>('tr[data-entry-id]'))
+          .filter(row => validEntryIds.has(row.dataset.entryId || '') && row.getBoundingClientRect().height > 0)
+          .map(row => ({ id: `entry-${row.dataset.entryId}`, element: row }))
+      : [];
+    sourceCoolIndexRef.current = activeId.startsWith('entry-')
+      ? currentTimetable.cools?.findIndex(cool => cool.entries.some(entry => `entry-${entry.id}` === activeId)) ?? -1
+      : -1;
+    coolTargetsRef.current = activeId.startsWith('entry-') && viewport && currentTimetable.cools
+      ? Array.from(viewport.querySelectorAll<HTMLElement>('[data-cool-index]')).map(section => ({
+          index: Number(section.dataset.coolIndex),
+          section,
+          rows: entryRectsRef.current.filter(({ element }) => element.closest('[data-cool-index]') === section),
+        }))
+      : [];
+    setActiveDragId(activeId);
+    // Keep the original slot open until the dragged card passes a neighbour's midpoint.
+    latestOverIdRef.current = activeId.startsWith('entry-') ? activeId : null;
+    setOverEntryId(latestOverIdRef.current);
     setDropSucceeded(false);
     setCancelAbsorbAnimation(null);
     setIsPointerOverCancelZone(false);
@@ -154,30 +286,45 @@ export const useDragHandlers = ({
     const translatedRect = active.rect.current.translated;
     if (!translatedRect) return;
 
+    if (activeId.startsWith('entry-') && active.rect.current.initial) {
+      const initial = entryDragGeometryRef.current?.initial ?? active.rect.current.initial;
+      entryDragGeometryRef.current = { activeId, initial, translated: translatedRect };
+      const bank = latestOverIdRef.current === 'band-bank-droppable'
+        ? document.querySelector<HTMLElement>('[data-band-bank-kind]')?.getBoundingClientRect()
+        : null;
+      const pointer = pointerRef.current;
+      const stillInBank = bank && pointer.x >= bank.left && pointer.x <= bank.right && pointer.y >= bank.top && pointer.y <= bank.bottom;
+      if (!stillInBank) publishEntryTarget(resolveEntryTarget(activeId, initial, translatedRect));
+    }
+
     const centerX = translatedRect.left + translatedRect.width / 2;
     const centerY = translatedRect.top + translatedRect.height / 2;
-    setCurrentMouseX(centerX);
-    setCurrentMouseY(centerY);
-    setIsPointerOverCancelZone(isPointerInCancelZone(centerX, centerY));
+    if (!pointerRef.current.x) updatePointer(centerX, centerY);
+    if (!activeId.startsWith('entry-')) setIsPointerOverCancelZone(isPointerInCancelZone(pointerRef.current.x, pointerRef.current.y));
   };
 
   const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
     const activeId = active.id as string;
-    let pointerX = currentMouseX;
-    let pointerY = currentMouseY;
+    let pointerX = pointerRef.current.x;
+    let pointerY = pointerRef.current.y;
 
     // touch環境でpointer/touchイベント座標が取れない場合に備えて、
     // dnd-kitが持つ現在のドラッグ矩形から中心座標を補完する
     const translatedRect = active.rect.current.translated;
     if (translatedRect) {
+      if (activeId.startsWith('entry-') && active.rect.current.initial) {
+        const initial = entryDragGeometryRef.current?.initial ?? active.rect.current.initial;
+        entryDragGeometryRef.current = { activeId, initial, translated: translatedRect };
+      }
       const centerX = translatedRect.left + translatedRect.width / 2;
       const centerY = translatedRect.top + translatedRect.height / 2;
-      pointerX = centerX;
-      pointerY = centerY;
-      setCurrentMouseX(centerX);
-      setCurrentMouseY(centerY);
-      setIsPointerOverCancelZone(isPointerInCancelZone(centerX, centerY));
+      if (!pointerX) {
+        pointerX = centerX;
+        pointerY = centerY;
+        updatePointer(centerX, centerY);
+      }
+      if (!activeId.startsWith('entry-')) setIsPointerOverCancelZone(isPointerInCancelZone(pointerX, pointerY));
     }
 
     // overが不安定なモバイル向けフォールバック: 座標がキャンセルゾーン内なら最優先でキャンセル扱い
@@ -185,6 +332,19 @@ export const useDragHandlers = ({
       latestOverIdRef.current = 'mobile-cancel-dropzone';
       setOverEntryId('mobile-cancel-dropzone');
       setIsPointerOverCancelZone(true);
+      return;
+    }
+
+    if (preferStableEntryTarget && activeId.startsWith('entry-')) {
+      const overId = String(over?.id ?? '');
+      if (overId === 'band-bank-droppable') {
+        publishEntryTarget(overId);
+      } else if (overId.startsWith('cool-')) {
+        const coolIndex = Number(overId.match(/(\d+)$/)?.[1]);
+        if (currentTimetable.cools?.[coolIndex]?.entries.length === 0) publishEntryTarget(`cool-droppable-${coolIndex}`);
+      }
+      // handleDragMove and the scroll listener own all nonempty insertion targets.
+      // A transient null/heading collision must not erase the visible gap.
       return;
     }
     
@@ -195,6 +355,13 @@ export const useDragHandlers = ({
       if (overId.startsWith('entry-')) {
         setIsPointerOverCancelZone(false);
         const overRect = over.rect;
+
+        if (activeId.startsWith('entry-') && translatedRect && active.rect.current.initial) {
+          const nextOverId = resolveEntryTarget(activeId, entryDragGeometryRef.current?.initial ?? active.rect.current.initial, translatedRect);
+          latestOverIdRef.current = nextOverId;
+          setOverEntryId(nextOverId);
+          return;
+        }
         
         // バンドバンクからのドラッグ、またはタイムテーブル内での並び替え：マウス位置で判定
         if (activeId.startsWith('band-') || activeId.startsWith('custom-') || activeId.startsWith('entry-')) {
@@ -272,6 +439,18 @@ export const useDragHandlers = ({
         setIsPointerOverCancelZone(false);
       }
     } else {
+      // 自動スクロールで droppable が一時的に消えても、表の横幅内では
+      // スクロール量を反映した位置を使う。縦端の外へ素早く動かしても空間を保つ。
+      if (activeId.startsWith('entry-') && translatedRect && active.rect.current.initial) {
+        const bounds = entryViewportRef.current?.getBoundingClientRect();
+        const centerX = translatedRect.left + translatedRect.width / 2;
+        if (bounds && centerX >= bounds.left && centerX <= bounds.right) {
+          const target = resolveEntryTarget(activeId, entryDragGeometryRef.current?.initial ?? active.rect.current.initial, translatedRect);
+          latestOverIdRef.current = target;
+          setOverEntryId(target);
+          return;
+        }
+      }
       latestOverIdRef.current = null;
       setOverEntryId(null);
       setIsPointerOverCancelZone(false);
@@ -299,13 +478,21 @@ export const useDragHandlers = ({
     // モバイルではタッチ離脱時にoverがnullになることがあるため、
     // overEntryIdをフォールバックとして使用する
     const savedOverEntryId = latestOverIdRef.current || overEntryId;
+    const endPointer = pointerRef.current;
     
     setActiveDragId(null);
     setOverEntryId(null);
     setIsPointerOverCancelZone(false);
-    setCurrentMouseX(0);
-    setCurrentMouseY(0);
+    updatePointer(0, 0);
+    publishPointerYRef.current = false;
+    if (trackPointerY) setCurrentPointerY(0);
     latestOverIdRef.current = null;
+    entryRectsRef.current = [];
+    coolTargetsRef.current = [];
+    sourceCoolIndexRef.current = -1;
+    entryViewportRef.current = null;
+    entryPreviewRef.current = null;
+    entryDragGeometryRef.current = null;
 
     const activeId = active.id as string;
     // 詰められたドラッグ元の行へ dnd-kit が戻すアニメーションを行うと、
@@ -317,8 +504,8 @@ export const useDragHandlers = ({
     // バンドバンクからタイムテーブルへの追加
     if (activeId.startsWith('band-')) {
       if (!over && !savedOverEntryId) {
-        if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
-          triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+        if (isPointerInCancelZone(endPointer.x, endPointer.y)) {
+          triggerCancelAbsorbAnimation(activeId, dragCenter ?? endPointer, dragSize);
           return;
         }
         return;
@@ -328,12 +515,12 @@ export const useDragHandlers = ({
       const overId = savedOverEntryId || (over!.id as string);
 
       if (overId === 'mobile-cancel-dropzone') {
-        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+        triggerCancelAbsorbAnimation(activeId, dragCenter ?? endPointer, dragSize);
         return;
       }
 
-      if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
-        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+      if (isPointerInCancelZone(endPointer.x, endPointer.y)) {
+        triggerCancelAbsorbAnimation(activeId, dragCenter ?? endPointer, dragSize);
         return;
       }
       
@@ -400,8 +587,8 @@ export const useDragHandlers = ({
     // カスタムイベントをタイムテーブルへ追加
     if (activeId.startsWith('custom-')) {
       if (!over && !savedOverEntryId) {
-        if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
-          triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+        if (isPointerInCancelZone(endPointer.x, endPointer.y)) {
+          triggerCancelAbsorbAnimation(activeId, dragCenter ?? endPointer, dragSize);
           return;
         }
         return;
@@ -411,12 +598,12 @@ export const useDragHandlers = ({
       const overId = savedOverEntryId || (over!.id as string);
 
       if (overId === 'mobile-cancel-dropzone') {
-        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+        triggerCancelAbsorbAnimation(activeId, dragCenter ?? endPointer, dragSize);
         return;
       }
 
-      if (isPointerInCancelZone(currentMouseX, currentMouseY)) {
-        triggerCancelAbsorbAnimation(activeId, dragCenter, dragSize);
+      if (isPointerInCancelZone(endPointer.x, endPointer.y)) {
+        triggerCancelAbsorbAnimation(activeId, dragCenter ?? endPointer, dragSize);
         return;
       }
       
@@ -525,7 +712,7 @@ export const useDragHandlers = ({
     activeDragId,
     overEntryId,
     isPointerOverCancelZone,
-    currentPointerY: currentMouseY,
+    currentPointerY,
     dropSucceeded,
     cancelAbsorbAnimation,
     clearCancelAbsorbAnimation: () => setCancelAbsorbAnimation(null),

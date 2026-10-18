@@ -59,7 +59,7 @@ export const TimetableContent = ({
   returningEntryId = null,
 }: TimetableContentProps) => {
   return (
-    <div className="flex-1 bg-white rounded-lg px-6 overflow-y-auto min-w-0 shadow" data-custom-mode={customMode}>
+    <div className="timetable-content flex-1 bg-white rounded-lg px-6 overflow-x-auto overflow-y-auto min-w-0 shadow" data-custom-mode={customMode} style={{ overflowAnchor: 'none' }}>
       <div>
         {currentTimetable.cools && currentTimetable.cools.length > 0 ? (
           <div>

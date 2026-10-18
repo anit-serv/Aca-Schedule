@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { editShiftSlots, fitShiftSlots, getCustomShiftIssues, getOverlappingShiftAssignees, getShiftSlotAt, makeShiftSlots, uniquePeople } from './customShift';
+import { defaultShiftAvailability, editShiftSlots, fitShiftSlots, getCustomShiftIssues, getOverlappingShiftAssignees, getShiftSlotAt, makeShiftSlots, uniquePeople } from './customShift';
 import type { Band, Timetable } from '../types';
 import { addColumn, createEmptyCustomFieldsSettings, normalizeShiftPositionBindings, setCellValue, setColumnShared, setColumnShift, synchronizeSharedColumnShifts, updateShiftSlot } from './customFieldsUtils';
 
 describe('custom shift slots', () => {
+  it('initializes candidate availability within scheduled daily bounds', () => {
+    const performance = { dailyTimetables: [{ date: '2026-11-15', startTime: '10:00', endTime: '17:00' }] } as Timetable;
+    const rehearsal = { dailyTimetables: [{ date: '2026-11-15', startTime: '08:00', endTime: '09:00' }] } as Timetable;
+    expect(defaultShiftAvailability(['2026-11-15'], performance, rehearsal)).toEqual([
+      { date: '2026-11-15', timeRanges: [{ startTime: '08:00', endTime: '17:00' }] },
+    ]);
+  });
   it('forces position binding when shift mode starts and keeps existing entity cell values', () => {
     let settings = addColumn(undefined, 'performance', { id: 'staff', name: '担当', bindingType: 'entity' });
     const timetable = { id: 't', eventId: 'e', type: 'performance', createdAt: new Date(), updatedAt: new Date(), dailyTimetables: [{

@@ -60,7 +60,7 @@ export const TimetableDropZone = ({
 
   return (
     <div ref={setNodeRef} className="flex-1 bg-emerald-50/50 rounded-lg min-h-[400px] border border-emerald-100">
-      <table className="w-full">
+      <table className="timetable-grid w-full">
         <thead className="sticky top-0 z-10 bg-emerald-100 shadow-sm">
           <tr>
             <th className="px-3 py-3 text-center text-sm font-semibold text-emerald-800 w-16">#</th>
@@ -76,10 +76,10 @@ export const TimetableDropZone = ({
           {entries.length === 0 ? (
             <>
               {/* 空のタイムテーブルの場合のドロップターゲット */}
-              {overEntryId === 'timetable-droppable' && (
-                <tr className={reserveInsertionSpace ? 'h-14' : 'h-1'}>
+              {reserveInsertionSpace && overEntryId === 'timetable-droppable' && (
+                <tr className="h-14">
                   <td colSpan={6 + (customMode ? customColumns.length : 0)} className="p-0">
-                    <div className={reserveInsertionSpace ? 'h-14 bg-emerald-100/60' : 'h-1 bg-emerald-500 shadow-lg shadow-emerald-500/50'}></div>
+                    <div className="h-14 bg-emerald-100/60"></div>
                   </td>
                 </tr>
               )}

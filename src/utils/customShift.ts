@@ -1,10 +1,23 @@
-import type { Band, ConstraintViolation, CustomColumn, CustomColumnShift, CustomFieldsSettings, ShiftSlot, Timetable, TimetableEntry } from '../types';
+import type { AvailableTimeSlot, Band, ConstraintViolation, CustomColumn, CustomColumnShift, CustomFieldsSettings, ShiftSlot, Timetable, TimetableEntry } from '../types';
 import { generateUUID } from './generateUUID';
 
 export const normalizePersonName = (name: string) => name.trim();
 
 export const uniquePeople = (names: string[]) =>
   [...new Set(names.map(normalizePersonName).filter(Boolean))];
+
+/** 担当可能時間を初めて指定するときは、各日のタイムテーブル開始・終了を初期範囲にする。 */
+export const defaultShiftAvailability = (
+  dates: string[], performance: Timetable | null, rehearsal: Timetable | null,
+): AvailableTimeSlot[] => dates.map(date => {
+  const days = [performance, rehearsal].flatMap(timetable => timetable?.dailyTimetables ?? [])
+    .filter(day => day.date === date);
+  const starts = days.map(day => day.startTime).filter(time => /^\d{2}:\d{2}$/.test(time));
+  const startTime = starts.length ? starts.sort()[0] : '00:00';
+  const endTime = days.length && days.every(day => day.endTime && /^\d{2}:\d{2}$/.test(day.endTime))
+    ? days.map(day => day.endTime!).sort().at(-1)! : '24:00';
+  return { date, timeRanges: startTime < endTime ? [{ startTime, endTime }] : [] };
+});
 
 export const makeShiftSlots = (count: number, split: CustomColumnShift['split']): ShiftSlot[] => {
   if (count < 1) return [];

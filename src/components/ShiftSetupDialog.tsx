@@ -5,6 +5,7 @@ import { uniquePeople } from '../utils/customShift';
 interface Props {
   columnName: string;
   bands: Band[];
+  registeredMembers?: string[];
   initial?: CustomColumnShift;
   shared?: boolean;
   seedCandidates?: string[];
@@ -12,13 +13,13 @@ interface Props {
   onSave: (candidates: string[], split: CustomColumnShift['split']) => void;
 }
 
-export const ShiftSetupDialog = ({ columnName, bands, initial, shared = false, seedCandidates = [], onCancel, onSave }: Props) => {
+export const ShiftSetupDialog = ({ columnName, bands, registeredMembers = [], initial, shared = false, seedCandidates = [], onCancel, onSave }: Props) => {
   const [candidates, setCandidates] = useState(initial?.candidates ?? seedCandidates);
   const [person, setPerson] = useState('');
   const [memberQuery, setMemberQuery] = useState('');
   const [mode, setMode] = useState<CustomColumnShift['split']['mode']>(initial?.split.mode ?? 'per-cool');
   const [value, setValue] = useState(initial?.split.value ?? 2);
-  const members = useMemo(() => uniquePeople(bands.flatMap(band => band.members)).sort((a, b) => a.localeCompare(b, 'ja')), [bands]);
+  const members = useMemo(() => uniquePeople([...registeredMembers, ...bands.flatMap(band => band.members)]).sort((a, b) => a.localeCompare(b, 'ja')), [bands, registeredMembers]);
   const filteredMembers = useMemo(() => members.filter(member => member.toLocaleLowerCase().includes(memberQuery.trim().toLocaleLowerCase())), [members, memberQuery]);
   const toggleMember = (member: string, checked: boolean) => {
     setCandidates(previous => checked
@@ -38,7 +39,7 @@ export const ShiftSetupDialog = ({ columnName, bands, initial, shared = false, s
       {shared && <p className="mt-1 text-xs text-emerald-700">共通列のシフトモード・担当候補・枠数設定は本番とリハの両方に反映されます。枠の境界と担当者はそれぞれ編集できます。</p>}
       <h4 className="mt-4 text-sm font-medium text-gray-700">担当候補をメンバーから選択</h4>
       <input type="search" value={memberQuery} onChange={event => setMemberQuery(event.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="メンバー名を検索" aria-label="メンバー名を検索" />
-      <div role="group" aria-label="バンドメンバー" className="mt-2 max-h-44 overflow-y-auto rounded border border-gray-200 p-2">
+      <div role="group" aria-label="メンバー" className="mt-2 max-h-44 overflow-y-auto rounded border border-gray-200 p-2">
         {filteredMembers.length ? filteredMembers.map(member => <label key={member} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-emerald-50">
           <input type="checkbox" checked={candidates.includes(member)} onChange={event => toggleMember(member, event.target.checked)} />
           <span>{member}</span>

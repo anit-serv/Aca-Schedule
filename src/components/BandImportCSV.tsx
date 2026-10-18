@@ -97,7 +97,7 @@ export const BandImportCSV = ({ eventSettings, onImportComplete }: BandImportCSV
 
   return (
     <>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <label
           htmlFor="csv-import"
           className={`px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium transition-colors cursor-pointer text-sm ${

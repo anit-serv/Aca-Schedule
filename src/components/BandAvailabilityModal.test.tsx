@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { Band, EventSettings, Timetable } from '../types';
 import { BandAvailabilityModal } from './BandAvailabilityModal';
+
+afterEach(cleanup);
 
 it('grays out time outside the day, shows precise coverage, and closes a removed range editor', () => {
   const date = '2026-11-15';
@@ -72,4 +74,25 @@ it('rehearsal backup mode paints purple over normal time and the normal mode can
     [{ date, timeRanges: [{ startTime: '10:15', endTime: '10:30' }] }],
     [{ date, timeRanges: [{ startTime: '10:00', endTime: '10:15' }] }],
   );
+});
+
+it('uses performance and rehearsal labels and each timetable’s time bounds for a member', () => {
+  const date = '2026-11-15';
+  const makeTimetable = (type: 'performance' | 'rehearsal', startTime: string, endTime: string) => ({
+    id: type, eventId: 'event', type, createdAt: new Date(), updatedAt: new Date(),
+    dailyTimetables: [{ date, startTime, endTime, entries: [], cools: [] }],
+  }) as Timetable;
+  render(<BandAvailabilityModal memberName="山田" memberTimeSlots={[]} dateTabs={[
+    { date, type: 'performance' }, { date, type: 'rehearsal' },
+  ]} performanceTimetable={makeTimetable('performance', '10:00', '12:00')}
+    rehearsalTimetable={makeTimetable('rehearsal', '08:00', '09:00')}
+    onClose={() => {}} onUpdateMember={() => {}} />);
+  expect(screen.getByText('本番')).toBeTruthy();
+  expect(screen.getByText('リハ')).toBeTruthy();
+  expect(screen.getByRole('button', { name: '09:45〜10:00 選択不可' }).hasAttribute('disabled')).toBe(true);
+  fireEvent.click(screen.getByText('リハ'));
+  expect(screen.queryByRole('switch', { name: '予備出演可能時間の入力モード' })).toBeNull();
+  expect(screen.queryByText('予備出演可能時間（紫）')).toBeNull();
+  expect(screen.getByRole('button', { name: '08:00〜08:15 未選択' }).hasAttribute('disabled')).toBe(false);
+  expect(screen.getByRole('button', { name: '09:00〜09:15 選択不可' }).hasAttribute('disabled')).toBe(true);
 });
