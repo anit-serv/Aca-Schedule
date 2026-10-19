@@ -3,6 +3,48 @@ import { expect, it } from 'vitest';
 import type { Band, DailyTimetable, Timetable } from '../types';
 import { useAllViolations, useConstraintCheck } from './useConstraintCheck';
 
+it('shows one blue priority-2 notice and one yellow priority-3 notice only when no performance meets the priority', () => {
+  const makeBand = (id: string, toriPriority: 2 | 3): Band => ({
+    id, name: id, performanceDuration: 10, performanceCount: 2, toriPriority,
+    costume: false, bandMaster: '', members: [], availableTimeSlots: [],
+    createdAt: new Date(), updatedAt: new Date(),
+  });
+  const bands = [makeBand('p2', 2), makeBand('p3', 3)];
+  const makeEntry = (id: string, bandId: string, order: number) => ({
+    id, type: 'band' as const, bandId, order, startTime: '10:00', endTime: '10:10',
+  });
+  const table: Timetable = {
+    id: 't', eventId: 'e', type: 'performance', createdAt: new Date(), updatedAt: new Date(),
+    dailyTimetables: [
+      { date: '2026-10-02', startTime: '10:00', entries: [], cools: [{
+        id: 'first', number: 1, entries: [makeEntry('p2a', 'p2', 0), makeEntry('p3a', 'p3', 1)],
+      }] },
+      { date: '2026-10-03', startTime: '10:00', entries: [], cools: [{
+        id: 'before-final', number: 1, entries: [makeEntry('p3b', 'p3', 0), makeEntry('p2b', 'p2', 1)],
+      }, { id: 'final', number: 2, entries: [] }] },
+    ],
+  };
+  const notices = () => renderHook(() => useAllViolations(table, null, bands)).result.current
+    .filter(item => item.type === 'tori-priority-unmet');
+  expect(notices()).toMatchObject([{ bandId: 'p3', severity: 'medium' }]);
+  table.dailyTimetables[1].cools[0].entries.push(makeEntry('other', 'other', 2));
+  expect(notices()).toMatchObject([
+    { bandId: 'p2', severity: 'low' }, { bandId: 'p3', severity: 'medium' },
+  ]);
+  table.dailyTimetables[1].cools[0].entries.pop();
+  table.dailyTimetables[1].cools[0].entries.push({
+    id: 'custom', type: 'custom', order: 2, customEvent: { id: 'custom', name: '休憩', duration: 5 },
+  });
+  expect(notices()).toMatchObject([{ bandId: 'p3', severity: 'medium' }]);
+  table.dailyTimetables[1].cools[1].entries.push(makeEntry('p3c', 'p3', 0));
+  expect(notices()).toHaveLength(0);
+  table.dailyTimetables[1].cools[0].entries = [makeEntry('p3b', 'p3', 0)];
+  table.dailyTimetables[1].cools[1].entries = [makeEntry('p3c', 'p3', 0), makeEntry('p2c', 'p2', 1)];
+  expect(notices()).toMatchObject([{ bandId: 'p2', severity: 'low' }]);
+  expect(renderHook(() => useAllViolations(null, { ...table, type: 'rehearsal' }, bands)).result.current
+    .some(item => item.type === 'tori-priority-unmet')).toBe(false);
+});
+
 it('flags a cool break shorter than the configured minimum', () => {
   const day: DailyTimetable = {
     date: '2026-10-02', startTime: '10:00', minimumCoolBreakMinutes: 15, entries: [], cools: [

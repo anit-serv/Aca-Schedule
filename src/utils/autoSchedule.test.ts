@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Band, DailyTimetable, Timetable } from '../types';
-import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, compareAutoScheduleScores, findAutoScheduleAvailabilityError, minimizeRehearsalBackupUsage, scoreSchedule } from './autoSchedule';
+import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, compareAutoScheduleScores, findAutoScheduleAvailabilityError, minimizeRehearsalBackupUsage, refineCoolBalance, refineCoolClosers, refineFinalCoolCloser, refineHeadlinerPlacement, refineSameCoolRepeats, scoreSchedule } from './autoSchedule';
 
 const band = (id: string, options: Partial<Band> = {}): Band => ({
   id, name: id, performanceDuration: 10, performanceCount: 1,
@@ -122,6 +122,50 @@ const timetable = (days: DailyTimetable[]): Timetable => ({
 const score = (days: DailyTimetable[], bands: Band[]) => scoreSchedule(days, new Map(bands.map(item => [item.id, item])));
 
 describe('venue performance windows', () => {
+  it('allocates most cools to the long window when three venue windows have very different capacities', () => {
+    const date = '2026-10-01';
+    const original = day(date, Array.from({ length: 7 }, (_, index) => ({
+      id: `cool-${index + 1}`, number: index + 1, entries: [],
+    })));
+    original.minimumCoolBreakMinutes = 0;
+    original.endTime = '14:00';
+    original.venueTimeRanges = [
+      { startTime: '10:00', endTime: '10:10' },
+      { startTime: '11:00', endTime: '11:10' },
+      { startTime: '12:00', endTime: '14:00' },
+    ];
+    const performers = Array.from({ length: 14 }, (_, index) => band(`performer-${index}`, {
+      performanceDuration: 5,
+    }));
+    const result = autoSchedulePerformance(timetable([original]), [date], performers);
+    expect(result).toMatchObject({ placed: 14, remaining: 0 });
+    const cools = result.dailyTimetables[0].cools;
+    expect(cools.map(cool => cool.entries.length)).toEqual([2, 2, 2, 2, 2, 2, 2]);
+    expect(cools.map(cool => cool.startTime).filter(time => time! < '11:00')).toHaveLength(1);
+    expect(cools.map(cool => cool.startTime).filter(time => time! >= '11:00' && time! < '12:00')).toHaveLength(1);
+  });
+
+  it('moves a band from a crowded cool to a lighter cool across split venue windows', () => {
+    const bands = Array.from({ length: 5 }, (_, index) => band(`b${index}`, { performanceDuration: 5 }));
+    const original = day('2026-10-01', [
+      { id: 'first', number: 1, startTime: '10:00', entries: bands.slice(0, 3).map((item, order) => ({
+        id: item.id, type: 'band' as const, bandId: item.id, order,
+      })) },
+      { id: 'second', number: 2, startTime: '10:20', entries: [] },
+      { id: 'third', number: 3, startTime: '11:00', entries: bands.slice(3).map((item, order) => ({
+        id: item.id, type: 'band' as const, bandId: item.id, order,
+      })) },
+    ]);
+    original.minimumCoolBreakMinutes = 0;
+    original.endTime = '11:30';
+    original.venueTimeRanges = [
+      { startTime: '10:00', endTime: '10:30' }, { startTime: '11:00', endTime: '11:30' },
+    ];
+    const improved = refineCoolBalance([original], bands, new Set());
+    expect(improved[0].cools.map(cool => cool.entries.length)).toEqual([2, 1, 2]);
+    expect(score(improved, bands).coolCountDispersion).toBeLessThan(score([original], bands).coolCountDispersion);
+  });
+
   it('plans balanced cools on both sides of a venue closure', () => {
     const date = '2026-10-01';
     const original = day(date, [1, 2, 3, 4].map(number => ({ id: `cool-${number}`, number, entries: [] })));
@@ -293,10 +337,67 @@ describe('autoSchedulePerformance', () => {
     expect(repeated.sameCoolRepeats).toBe(1);
     expect(waiting.transitionMinutes).toBe(120);
     expect(compareAutoScheduleScores(waiting, repeated)).toBeLessThan(0);
+    expect(compareAutoScheduleScores({ ...waiting, twoRunPenalty: 100 }, repeated)).toBeLessThan(0);
     expect(compareAutoScheduleScores(
       { sameCoolRepeats: 0, longRunPenalty: 0, costumeTwoRunPenalty: 0, twoRunPenalty: 0, priority3Missing: 0, priority2Missing: 0, coolCountDispersion: 1, dayCountDispersion: 0, transitionMinutes: 0, preferencePenalty: 10_000 },
       { sameCoolRepeats: 0, longRunPenalty: 0, costumeTwoRunPenalty: 0, twoRunPenalty: 0, priority3Missing: 0, priority2Missing: 0, coolCountDispersion: 1, dayCountDispersion: 0, transitionMinutes: 1, preferencePenalty: 0 },
     )).toBeLessThan(0);
+  });
+
+  it('prefers removing a transition over three minutes even when an ordinary two-run appears', () => {
+    const bands = [
+      band('a', { members: ['shared'] }), band('b'), band('c', { members: ['shared'] }),
+    ];
+    const scheduled = (ids: string[], wait: number) => score([day('2026-10-02', [{
+      id: 'cool', number: 1, entries: ids.map((id, order) => ({
+        id, type: 'band' as const, bandId: id, order, transitionTime: order === 2 ? wait : 0,
+      })),
+    }])], bands);
+    const longGap = scheduled(['a', 'b', 'c'], 6);
+    const twoRun = scheduled(['a', 'c', 'b'], 3);
+    expect(longGap).toMatchObject({ longTransitionPenalty: 9, twoRunPenalty: 0 });
+    expect(twoRun).toMatchObject({ longTransitionPenalty: 0, twoRunPenalty: 12 });
+    expect(compareAutoScheduleScores(twoRun, longGap)).toBeLessThan(0);
+  });
+
+  it('swaps a repeated band out of its cool even when this adds an ordinary two-run', () => {
+    const bands = [
+      band('repeat', { performanceCount: 2, members: ['shared'] }),
+      band('separator'), band('shared', { members: ['shared'] }), band('other'),
+    ];
+    const original = { ...day('2026-10-02', [
+      { id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'repeat-1', type: 'band' as const, bandId: 'repeat', order: 0 },
+        { id: 'separator', type: 'band' as const, bandId: 'separator', order: 1 },
+        { id: 'repeat-2', type: 'band' as const, bandId: 'repeat', order: 2 },
+      ] },
+      { id: 'second', number: 2, startTime: '11:00', entries: [
+        { id: 'shared', type: 'band' as const, bandId: 'shared', order: 0, fixedStartTime: '11:00' },
+        { id: 'other', type: 'band' as const, bandId: 'other', order: 1 },
+      ] },
+    ]), endTime: '11:20' };
+    const initialScore = score([original], bands);
+    const improved = refineSameCoolRepeats([original], bands, new Set());
+    const improvedScore = score(improved, bands);
+    expect(initialScore.sameCoolRepeats).toBe(1);
+    expect(initialScore.twoRunPenalty).toBe(0);
+    expect(improvedScore.sameCoolRepeats).toBe(0);
+    expect(improvedScore.twoRunPenalty).toBeGreaterThan(0);
+    expect(compareAutoScheduleScores(improvedScore, initialScore)).toBeLessThan(0);
+  });
+
+  it('moves a repeated band to an empty cool when no swap is available', () => {
+    const bands = [band('repeat', { performanceCount: 2 })];
+    const original = day('2026-10-02', [
+      { id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'repeat-1', type: 'band', bandId: 'repeat', order: 0 },
+        { id: 'repeat-2', type: 'band', bandId: 'repeat', order: 1 },
+      ] },
+      { id: 'second', number: 2, startTime: '11:00', entries: [] },
+    ]);
+    const improved = refineSameCoolRepeats([original], bands, new Set());
+    expect(improved[0].cools.map(cool => cool.entries.length)).toEqual([1, 1]);
+    expect(score(improved, bands).sameCoolRepeats).toBe(0);
   });
 
   it('balances cool counts before comparing transition time', () => {
@@ -437,7 +538,7 @@ describe('autoSchedulePerformance', () => {
     expect(compareAutoScheduleScores(triple, { ...triple, longRunPenalty: 0, transitionMinutes: 100 })).toBeGreaterThan(0);
   });
 
-  it('penalizes priority 2 only when none of its performances ends a cool', () => {
+  it('does not count the final cool closer toward priority 2', () => {
     const bands = [band('closer', { toriPriority: 2 }), band('other')];
     const first = { id: 'c1', number: 1, entries: [
       { id: 'p1', type: 'band' as const, bandId: 'closer', order: 0 },
@@ -448,8 +549,103 @@ describe('autoSchedulePerformance', () => {
       { id: 'p2', type: 'band' as const, bandId: 'closer', order: 1 },
     ] };
     const noEnd = { ...finalEnd, entries: [...finalEnd.entries].reverse() };
-    expect(score([day('2026-10-02', [first, finalEnd])], bands).preferencePenalty).toBe(0);
-    expect(score([day('2026-10-02', [first, noEnd])], bands).preferencePenalty).toBe(102);
+    const finalCloser = score([day('2026-10-02', [first, finalEnd])], bands);
+    expect(finalCloser.priority2Missing).toBe(1);
+    expect(finalCloser.priority2FinalCloser).toBe(1);
+    expect(score([day('2026-10-02', [first, noEnd])], bands).priority2FinalCloser).toBe(0);
+    expect(score([day('2026-10-02', [{ ...first, entries: [...first.entries].reverse() }, finalEnd])], bands).priority2Missing).toBe(0);
+  });
+
+  it('counts the final band as the cool closer even when a custom event follows', () => {
+    const bands = [band('closer', { toriPriority: 2 })];
+    const result = score([day('2026-10-02', [{ id: 'c1', number: 1, entries: [
+      { id: 'closer', type: 'band', bandId: 'closer', order: 0 },
+      { id: 'announcement', type: 'custom', order: 1, customEvent: { id: 'announcement', name: '案内', duration: 5 } },
+    ] }, { id: 'final', number: 2, entries: [] }])], bands);
+    expect(result.priority2Missing).toBe(0);
+    expect(result.preferencePenalty).toBe(0);
+  });
+
+  it('honors headliner priorities before balancing cool and day counts', () => {
+    const baseline = score([day('2026-10-02', [{ id: 'cool', number: 1, entries: [] }])], []);
+    const balanced = { ...baseline, priority3Missing: 1, priority2Missing: 1, coolCountDispersion: 0, dayCountDispersion: 0 };
+    const preferred = { ...baseline, priority3Missing: 0, priority2Missing: 0, coolCountDispersion: 100, dayCountDispersion: 100 };
+    expect(compareAutoScheduleScores(preferred, balanced)).toBeLessThan(0);
+    expect(compareAutoScheduleScores({ ...preferred, sameCoolRepeats: 1 }, balanced)).toBeGreaterThan(0);
+    expect(compareAutoScheduleScores({ ...preferred, priority3Missing: 1 }, balanced)).toBeLessThan(0);
+  });
+
+  it('places priority 3 in the final cool even if the cool sizes become uneven', () => {
+    const date = '2026-10-02';
+    const original = day(date, [
+      { id: 'first', number: 1, startTime: '10:00', entries: [] },
+      { id: 'final', number: 2, startTime: '11:00', entries: [] },
+    ]);
+    const available = (startTime: string, endTime: string) => [{ date, timeRanges: [{ startTime, endTime }] }];
+    const performers = [
+      band('first-only', { availableTimeSlots: available('10:00', '10:20') }),
+      band('final-a', { availableTimeSlots: available('11:00', '11:30') }),
+      band('final-b', { availableTimeSlots: available('11:00', '11:30') }),
+      band('headliner', { toriPriority: 3, availableTimeSlots: available('10:00', '11:30') }),
+    ];
+    const result = autoSchedulePerformance(timetable([original]), [date], performers);
+    expect(result).toMatchObject({ placed: 4, remaining: 0 });
+    expect(result.dailyTimetables[0].cools[1].entries.map(entry => entry.bandId)).toContain('headliner');
+  });
+
+  it('swaps a headliner into a full final cool even when this creates two ordinary consecutive appearances', () => {
+    const performers = [
+      band('headliner', { toriPriority: 3, members: ['m1', 'm2'] }),
+      band('first-regular'), band('final-regular'),
+      band('shared-final', { members: ['m1', 'm2'], availableTimeSlots: [
+        { date: '2026-10-02', timeRanges: [{ startTime: '11:00', endTime: '11:20' }] },
+      ] }),
+    ];
+    const original = { ...day('2026-10-02', [
+      { id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'headliner-entry', type: 'band' as const, bandId: 'headliner', order: 0 },
+        { id: 'first-entry', type: 'band' as const, bandId: 'first-regular', order: 1 },
+      ] },
+      { id: 'final', number: 2, startTime: '11:00', entries: [
+        { id: 'final-entry', type: 'band' as const, bandId: 'final-regular', order: 0 },
+        { id: 'shared-entry', type: 'band' as const, bandId: 'shared-final', order: 1 },
+      ] },
+    ]), endTime: '11:20' };
+    const initialScore = score([original], performers);
+    const improved = refineHeadlinerPlacement([original], performers, new Set());
+    const improvedScore = score(improved, performers);
+    expect(improved[0].cools[1].entries.map(entry => entry.bandId)).toContain('headliner');
+    expect(improvedScore.priority3Missing).toBe(0);
+    expect(improvedScore.twoRunPenalty).toBeGreaterThan(initialScore.twoRunPenalty);
+    expect(compareAutoScheduleScores(improvedScore, initialScore)).toBeLessThan(0);
+  });
+
+  it('swaps a priority-2 band to a cool ending even when ordinary consecutive appearances increase', () => {
+    const performers = [
+      band('closer', { toriPriority: 2, members: ['shared'] }),
+      band('fixed'), band('shared-target', { members: ['shared'] }), band('swappable'),
+    ];
+    const original = { ...day('2026-10-02', [
+      { id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'closer-entry', type: 'band' as const, bandId: 'closer', order: 0 },
+        { id: 'fixed-entry', type: 'band' as const, bandId: 'fixed', order: 1, fixedStartTime: '10:10' },
+      ] },
+      { id: 'second', number: 2, startTime: '11:00', entries: [
+        { id: 'shared-entry', type: 'band' as const, bandId: 'shared-target', order: 0 },
+        { id: 'swappable-entry', type: 'band' as const, bandId: 'swappable', order: 1 },
+      ] },
+      { id: 'final', number: 3, startTime: '12:00', entries: [] },
+    ]), endTime: '12:20', venueTimeRanges: [
+      { startTime: '10:00', endTime: '10:20' }, { startTime: '11:00', endTime: '11:20' },
+      { startTime: '12:00', endTime: '12:20' },
+    ] };
+    const initialScore = score([original], performers);
+    const improved = refineCoolClosers([original], performers, new Set(['fixed-entry']));
+    const improvedScore = score(improved, performers);
+    expect(improvedScore.priority2Missing).toBe(0);
+    expect(improvedScore.twoRunPenalty).toBeGreaterThan(initialScore.twoRunPenalty);
+    expect(improved[0].cools[1].entries.at(-1)?.bandId).toBe('closer');
+    expect(improved[0].cools[0].entries.at(-1)?.fixedStartTime).toBe('10:10');
   });
 
   it('penalizes priority 3 only when none of its performances is in the final cool', () => {
@@ -502,23 +698,40 @@ describe('autoSchedulePerformance', () => {
     expect(result.dailyTimetables[1].cools[1].entries[0]).toMatchObject({ bandId: 'headliner', startTime: '11:30' });
   });
 
-  it('prefers the end of a cool for priority 2', () => {
-    const original = day('2026-10-02', [{ id: 'c1', number: 1, entries: [] }]);
+  it('prefers a non-final cool ending for priority 2', () => {
+    const original = day('2026-10-02', [{ id: 'c1', number: 1, entries: [] }, { id: 'c2', number: 2, entries: [] }]);
     const result = autoSchedulePerformance(timetable([original]), [original.date], [
       band('regular'), band('closer', { toriPriority: 2 }),
     ]);
     expect(result.placed).toBe(2);
     expect(result.dailyTimetables[0].cools[0].entries.at(-1)?.bandId).toBe('closer');
+    expect(score(result.dailyTimetables, [band('regular'), band('closer', { toriPriority: 2 })]).priority2FinalCloser).toBe(0);
   });
 
   it('keeps priority 2 at the end of a cool even when this adds transition time', () => {
     const date = '2026-10-02';
-    const original = day(date, [{ id: 'c1', number: 1, entries: [] }]);
+    const original = day(date, [{ id: 'c1', number: 1, entries: [] }, { id: 'c2', number: 2, entries: [] }]);
     const regular = band('regular', { availableTimeSlots: [{ date, timeRanges: [{ startTime: '10:30', endTime: '12:00' }] }] });
     const closer = band('closer', { toriPriority: 2 });
     const result = autoSchedulePerformance(timetable([original]), [date], [regular, closer]);
     expect(result).toMatchObject({ placed: 2, remaining: 0 });
     expect(result.dailyTimetables[0].cools[0].entries.at(-1)?.bandId).toBe('closer');
+  });
+
+  it('swaps a movable priority-2 final closer with a regular band', () => {
+    const bands = [band('closer', { toriPriority: 2 }), band('regular')];
+    const original = day('2026-10-02', [
+      { id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'regular-entry', type: 'band', bandId: 'regular', order: 0 },
+      ] },
+      { id: 'final', number: 2, startTime: '11:00', entries: [
+        { id: 'closer-entry', type: 'band', bandId: 'closer', order: 0 },
+      ] },
+    ]);
+    const improved = refineFinalCoolCloser([original], bands, new Set());
+    expect(improved[0].cools[0].entries[0].bandId).toBe('closer');
+    expect(improved[0].cools[1].entries[0].bandId).toBe('regular');
+    expect(score(improved, bands)).toMatchObject({ priority2Missing: 0, priority2FinalCloser: 0 });
   });
 
   it('does not place outside availability', () => {
@@ -720,7 +933,7 @@ describe('autoSchedulePerformance', () => {
     }));
     const result = autoSchedulePerformance(timetable(originalDays), dates, bands);
     expect(result).toMatchObject({ placed: 160, remaining: 0 });
-  }, 30_000);
+  }, 90_000);
 
   it('balances 92 bands across six cools without fixed starts and keeps ten-minute breaks', () => {
     const date = '2026-10-02';

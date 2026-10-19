@@ -321,11 +321,18 @@ export const MobileTimetableView = ({
     if (timetable && (timetableType === 'performance' || eventSettings.rehearsalType !== 'cool-pre-rehearsal') && !isAutoScheduling) void onAutoScheduleStart(timetableType);
   }, [timetable, timetableType, eventSettings.rehearsalType, isAutoScheduling, onAutoScheduleStart]);
 
-  const handleResetAll = async () => {
+  const handleResetAll = async (resetCoolStarts: boolean) => {
     if (!resetPlan || !resetEntryCount || isResetting) return;
     setIsResetting(true);
     try {
-      await onResetAllApply(resetPlan);
+      const plan = resetCoolStarts && performanceTimetable
+        ? timetableType === 'rehearsal' && rehearsalTimetable
+          ? prepareRehearsalReset(performanceTimetable, rehearsalTimetable, eventSettings.customFields, true)
+          : eventSettings.rehearsalType === 'cool-pre-rehearsal'
+            ? prepareTimetablesReset(performanceTimetable, rehearsalTimetable, eventSettings.customFields, true)
+            : preparePerformanceReset(performanceTimetable, eventSettings.customFields, true)
+        : resetPlan;
+      await onResetAllApply(plan);
       setIsResetDialogOpen(false);
       setResetMessage(`${resetPlan.scope === 'rehearsal' ? 'リハ' : resetPlan.scope === 'performance' ? '本番' : '本番と連動リハ'}の${resetEntryCount}枠をリセットしました。元に戻すボタンで取り消せます。`);
     } catch (error) {
@@ -1669,7 +1676,7 @@ export const MobileTimetableView = ({
       {showVenueTimeRanges && currentTimetable && <VenueTimeRangesModal key={`${timetableType}-${selectedDate}`} day={currentTimetable} onSave={handleVenueTimeRangesSave} onClose={() => setShowVenueTimeRanges(false)} />}
       {isResetDialogOpen && resetPlan && (
         <ResetTimetablesDialog scope={resetPlan.scope} bandEntries={resetPlan.bandEntries} customEntries={resetPlan.customEntries}
-          isResetting={isResetting} onCancel={() => setIsResetDialogOpen(false)} onConfirm={() => { void handleResetAll(); }} />
+          isResetting={isResetting} onCancel={() => setIsResetDialogOpen(false)} onConfirm={resetCoolStarts => { void handleResetAll(resetCoolStarts); }} />
       )}
       {fixedDialog && currentTimetable && (() => {
         const band = bands.find(item => item.id === fixedDialog.bandId);

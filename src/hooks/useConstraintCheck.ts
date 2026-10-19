@@ -94,6 +94,41 @@ const addConsecutivePerformanceNotices = (
   });
 };
 
+const addToriPriorityNotices = (
+  timetable: Timetable, bandMap: Map<string, Band>, violations: ConstraintViolation[],
+) => {
+  const days = [...timetable.dailyTimetables].sort((a, b) => a.date.localeCompare(b.date));
+  const lastDay = days.at(-1);
+  const lastCoolId = lastDay?.cools.at(-1)?.id;
+  const performances = new Map<string, Array<{ entry: TimetableEntry; coolId: string; date: string; isCoolCloser: boolean; isFinalCool: boolean }>>();
+  days.forEach(day => day.cools.forEach(cool => {
+    const lastBand = [...cool.entries].reverse().find(entry => entry.type === 'band');
+    cool.entries.forEach(entry => {
+      if (entry.type !== 'band' || !entry.bandId || !bandMap.has(entry.bandId)) return;
+      const items = performances.get(entry.bandId) ?? [];
+      items.push({ entry, coolId: cool.id, date: day.date,
+        isCoolCloser: entry.id === lastBand?.id && !(day.date === lastDay?.date && cool.id === lastCoolId),
+        isFinalCool: day.date === lastDay?.date && cool.id === lastCoolId });
+      performances.set(entry.bandId, items);
+    });
+  }));
+  performances.forEach((items, bandId) => {
+    const band = bandMap.get(bandId)!;
+    const priority = band.toriPriority ?? 1;
+    if (priority === 1 || items.some(item => priority === 2 ? item.isCoolCloser : item.isFinalCool)) return;
+    const first = items[0];
+    violations.push({
+      id: `tori-priority-${bandId}`, type: 'tori-priority-unmet',
+      severity: priority === 3 ? 'medium' : 'low',
+      entryId: first.entry.id, coolId: first.coolId, date: first.date, bandId,
+      relatedEntryIds: items.slice(1).map(item => item.entry.id),
+      message: priority === 3
+        ? `[本番] ${band.name} はトリ優先度3ですが、最終日の最後のクールに出演していません`
+        : `[本番] ${band.name} はトリ優先度2ですが、最終クール以外のクールの最後に出演していません`,
+    });
+  });
+};
+
 /**
  * 制約チェックを行うカスタムフック
  */
@@ -293,6 +328,7 @@ export const useAllViolations = (
 
     checkTimetable(performanceTimetable, '本番');
     checkTimetable(rehearsalTimetable, 'リハ');
+    if (performanceTimetable) addToriPriorityNotices(performanceTimetable, bandMap, violations);
 
     return violations;
   }, [performanceTimetable, rehearsalTimetable, bands]);

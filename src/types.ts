@@ -175,6 +175,7 @@ export type ViolationType =
   | 'backup-rehearsal-used' // リハーサルの予備出演可能時間を使用
   | 'duplicate-in-cool'      // 同一クール内での重複
   | 'consecutive-performance' // 連続出演
+  | 'tori-priority-unmet'      // トリ優先度の希望を満たしていない
   | 'cool-time-exceeded'      // 次のクール開始時刻を超過
   | 'cool-break-short'        // クール間の休憩が設定値未満
   | 'day-end-exceeded'        // 当日の終了時刻を超過
