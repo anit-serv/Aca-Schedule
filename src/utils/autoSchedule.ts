@@ -220,8 +220,8 @@ export const compareAutoScheduleScores = (a: AutoScheduleScore, b: AutoScheduleS
   || a.longRunPenalty - b.longRunPenalty
   || a.costumeTwoRunPenalty - b.costumeTwoRunPenalty
   || a.priority2Missing - b.priority2Missing
-  || a.coolCountDispersion - b.coolCountDispersion
   || a.dayCountDispersion - b.dayCountDispersion
+  || a.coolCountDispersion - b.coolCountDispersion
   || (a.longTransitionPenalty ?? 0) - (b.longTransitionPenalty ?? 0)
   || softScheduleCost(a) - softScheduleCost(b)
   || a.transitionMinutes - b.transitionMinutes
@@ -636,6 +636,77 @@ export const refineSameCoolRepeats = (
     if (next === best) break;
     best = next;
     bestScore = nextScore;
+  }
+  return best;
+};
+
+/** Spread repeated performances across dates when a legal move or swap improves the schedule. */
+export const refineDayBalance = (
+  initialDays: DailyTimetable[], bands: Band[], fixedEntryIds: Set<string>, linkedByDate = new Map<string, Cool[]>(),
+): DailyTimetable[] => {
+  if (initialDays.length < 2) return initialDays;
+  const bandMap = new Map(bands.map(band => [band.id, band]));
+  let best = initialDays;
+  let bestScore = scoreSchedule(best, bandMap);
+  for (const band of bands) {
+    if (band.performanceCount < 2) continue;
+    const counts = best.map(day => entriesOf(day).filter(entry => entry.bandId === band.id).length);
+    const sourceDayIndex = counts.indexOf(Math.max(...counts));
+    if (counts[sourceDayIndex] < 2) continue;
+    let next = best;
+    let nextScore = bestScore;
+    let attempts = 0;
+    for (const sourceCool of best[sourceDayIndex].cools) {
+      for (const source of sourceCool.entries) {
+        if (source.bandId !== band.id || fixedEntryIds.has(source.id) || source.fixedStartTime) continue;
+        const removed = retimeDay({ ...best[sourceDayIndex], cools: best[sourceDayIndex].cools.map(cool =>
+          cool.id === sourceCool.id ? { ...cool, entries: cool.entries.filter(entry => entry.id !== source.id) } : cool),
+        }, bandMap, linkedByDate.get(best[sourceDayIndex].date));
+        if (!removed || !validTimes(removed, bandMap, linkedByDate.get(removed.date))) continue;
+        for (let targetDayIndex = 0; targetDayIndex < best.length && attempts < 400; targetDayIndex++) {
+          if (counts[sourceDayIndex] - counts[targetDayIndex] < 2) continue;
+          const targetDay = best[targetDayIndex];
+          for (let coolIndex = 0; coolIndex < targetDay.cools.length && attempts < 400; coolIndex++) {
+            for (let position = 0; position <= targetDay.cools[coolIndex].entries.length && attempts < 400; position++) {
+              attempts++;
+              const inserted = addAt(targetDay, band, coolIndex, position, bandMap,
+                linkedByDate.get(targetDay.date), source.id);
+              if (!inserted) continue;
+              const candidate = best.map((day, index) => index === sourceDayIndex ? removed
+                : index === targetDayIndex ? inserted : day);
+              const score = scoreSchedule(candidate, bandMap);
+              if (compareAutoScheduleScores(score, nextScore) < 0) { next = candidate; nextScore = score; }
+            }
+          }
+        }
+        if (next !== best) break;
+        // Moving may be impossible in a full target day. Exchange two movable
+        // performances to preserve the total duration on both dates.
+        for (let targetDayIndex = 0; targetDayIndex < best.length && attempts < 400; targetDayIndex++) {
+          if (counts[sourceDayIndex] - counts[targetDayIndex] < 2) continue;
+          for (const targetCool of best[targetDayIndex].cools) {
+            for (const target of targetCool.entries) {
+              if (!target.bandId || fixedEntryIds.has(target.id) || target.fixedStartTime || attempts >= 400) continue;
+              attempts++;
+              const swapped = best.map((day, index) => index === sourceDayIndex || index === targetDayIndex
+                ? { ...day, cools: day.cools.map(cool => ({ ...cool, entries: cool.entries.map(entry =>
+                  entry.id === source.id ? target : entry.id === target.id ? source : entry) })) } : day);
+              let valid = true;
+              for (const index of [sourceDayIndex, targetDayIndex]) {
+                const retimed = retimeDay(swapped[index], bandMap, linkedByDate.get(swapped[index].date));
+                if (!retimed || !validTimes(retimed, bandMap, linkedByDate.get(retimed.date))) { valid = false; break; }
+                swapped[index] = retimed;
+              }
+              if (!valid) continue;
+              const score = scoreSchedule(swapped, bandMap);
+              if (compareAutoScheduleScores(score, nextScore) < 0) { next = swapped; nextScore = score; }
+            }
+          }
+        }
+      }
+      if (next !== best) break;
+    }
+    if (next !== best) { best = next; bestScore = nextScore; }
   }
   return best;
 };
@@ -1183,6 +1254,7 @@ export const autoSchedulePerformance = (
   bestDays = refineCoolClosers(bestDays, bands, originalIds, linkedByDate);
   bestDays = refineFinalCoolCloser(bestDays, bands, originalIds, linkedByDate);
   bestDays = refineSameCoolRepeats(bestDays, bands, originalIds, linkedByDate);
+  bestDays = refineDayBalance(bestDays, bands, originalIds, linkedByDate);
   bestDays = refineCoolBalance(bestDays, bands, originalIds, linkedByDate);
   const updated = new Map(bestPlaced > 0 ? bestDays.map(day => [day.date,
     materializeStarts ? materializeCoolStarts(day, linkedByDate.get(day.date)) : day] as const) : []);

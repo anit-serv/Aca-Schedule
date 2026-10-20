@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Band, DailyTimetable, Timetable } from '../types';
-import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, compareAutoScheduleScores, findAutoScheduleAvailabilityError, minimizeRehearsalBackupUsage, refineCoolBalance, refineCoolClosers, refineFinalCoolCloser, refineHeadlinerPlacement, refineSameCoolRepeats, scoreSchedule } from './autoSchedule';
+import { autoSchedulePerformance, autoScheduleRange, autoScheduleRehearsal, compareAutoScheduleScores, findAutoScheduleAvailabilityError, minimizeRehearsalBackupUsage, refineCoolBalance, refineCoolClosers, refineDayBalance, refineFinalCoolCloser, refineHeadlinerPlacement, refineSameCoolRepeats, scoreSchedule } from './autoSchedule';
 
 const band = (id: string, options: Partial<Band> = {}): Band => ({
   id, name: id, performanceDuration: 10, performanceCount: 1,
@@ -591,6 +591,31 @@ describe('autoSchedulePerformance', () => {
     const result = autoSchedulePerformance(timetable([original]), [date], performers);
     expect(result).toMatchObject({ placed: 4, remaining: 0 });
     expect(result.dailyTimetables[0].cools[1].entries.map(entry => entry.bandId)).toContain('headliner');
+  });
+
+  it('spreads two performances across both available performance dates', () => {
+    const dates = ['2026-10-01', '2026-10-02'];
+    const repeated = band('repeated', { performanceCount: 2 });
+    const result = autoSchedulePerformance(timetable(dates.map(date => day(date, [
+      { id: `cool-${date}`, number: 1, startTime: '10:00', entries: [] },
+    ]))), dates, [repeated]);
+    expect(result).toMatchObject({ placed: 2, remaining: 0 });
+    expect(result.dailyTimetables.map(item => item.cools[0].entries.filter(entry => entry.bandId === repeated.id).length))
+      .toEqual([1, 1]);
+  });
+
+  it('repairs two same-day performances when the other date has room', () => {
+    const repeated = band('repeated', { performanceCount: 2 });
+    const initial = [
+      day('2026-10-01', [{ id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'a', type: 'band' as const, bandId: repeated.id, order: 0 },
+        { id: 'b', type: 'band' as const, bandId: repeated.id, order: 1 },
+      ] }]),
+      day('2026-10-02', [{ id: 'second', number: 1, startTime: '10:00', entries: [] }]),
+    ];
+    const improved = refineDayBalance(initial, [repeated], new Set());
+    expect(improved.map(item => item.cools[0].entries.filter(entry => entry.bandId === repeated.id).length))
+      .toEqual([1, 1]);
   });
 
   it('moves all four eligible priority-3 bands into the final cool', () => {
