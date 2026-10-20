@@ -173,10 +173,11 @@ export const TimetableEditing = ({
       if (!row && attempts++ < 15) { timer = setTimeout(findRow, 50); return; }
       if (row) {
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        row.classList.remove('violation-highlight');
-        void row.offsetWidth;
-        row.classList.add('violation-highlight');
-        row.addEventListener('animationend', () => row.classList.remove('violation-highlight'), { once: true });
+        const highlight = row.closest('[data-custom-mode="true"]') ? row.querySelector(':scope > td[colspan="6"]') ?? row : row;
+        highlight.classList.remove('search-highlight');
+        void (highlight as HTMLElement).offsetWidth;
+        highlight.classList.add('search-highlight');
+        highlight.addEventListener('animationend', () => highlight.classList.remove('search-highlight'), { once: true });
       }
       setSearchTarget(null);
     };

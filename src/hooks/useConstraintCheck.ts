@@ -3,7 +3,7 @@ import type { Band, DailyTimetable, Timetable, TimetableEntry, ConstraintViolati
 import { calculateBandNumbers } from '../utils/calculateBandNumbers';
 import { checkBandAvailability, findConsecutiveMemberRuns, type EntryWithCool } from '../utils/scheduleChecks';
 import { minimumCoolBreakMinutes } from '../utils/coolBreak';
-import { fitsVenueTime } from '../utils/venueTimeRanges';
+import { fitsVenueTime, venueTimeRanges } from '../utils/venueTimeRanges';
 
 /**
  * HH:mm形式の時刻文字列を分単位の数値に変換
@@ -99,7 +99,23 @@ const addToriPriorityNotices = (
 ) => {
   const days = [...timetable.dailyTimetables].sort((a, b) => a.date.localeCompare(b.date));
   const lastDay = days.at(-1);
-  const lastCoolId = lastDay?.cools.at(-1)?.id;
+  const lastCool = lastDay?.cools.at(-1);
+  const lastCoolId = lastCool?.id;
+  const finalCoolStart = lastDay && lastCool
+    ? timeToMinutes(lastCool.startTime ?? lastCool.entries[0]?.startTime
+      ?? lastDay.cools.at(-2)?.entries.at(-1)?.endTime ?? lastDay.startTime)
+    : 0;
+  const canPerformInFinalCool = (band: Band): boolean => {
+    if (!lastDay) return false;
+    const availability = band.availableTimeSlots.find(slot => slot.date === lastDay.date);
+    if (!availability) return false;
+    const dayEnd = timeToMinutes(lastDay.endTime ?? '24:00');
+    return availability.timeRanges.some(range => venueTimeRanges(lastDay).some(venue => {
+      const start = Math.max(finalCoolStart, timeToMinutes(range.startTime), timeToMinutes(venue.startTime));
+      const end = Math.min(dayEnd, timeToMinutes(range.endTime), timeToMinutes(venue.endTime));
+      return end - start >= band.performanceDuration;
+    }));
+  };
   const performances = new Map<string, Array<{ entry: TimetableEntry; coolId: string; date: string; isCoolCloser: boolean; isFinalCool: boolean }>>();
   days.forEach(day => day.cools.forEach(cool => {
     const lastBand = [...cool.entries].reverse().find(entry => entry.type === 'band');
@@ -119,11 +135,13 @@ const addToriPriorityNotices = (
     const first = items[0];
     violations.push({
       id: `tori-priority-${bandId}`, type: 'tori-priority-unmet',
-      severity: priority === 3 ? 'medium' : 'low',
+      severity: priority === 3 && canPerformInFinalCool(band) ? 'medium' : 'low',
       entryId: first.entry.id, coolId: first.coolId, date: first.date, bandId,
       relatedEntryIds: items.slice(1).map(item => item.entry.id),
       message: priority === 3
-        ? `[本番] ${band.name} はトリ優先度3ですが、最終日の最後のクールに出演していません`
+        ? canPerformInFinalCool(band)
+          ? `[本番] ${band.name} はトリ優先度3ですが、最終日の最後のクールに出演していません`
+          : `[本番] ${band.name} はトリ優先度3ですが、最終日の最後のクールが出演可能時間外です`
         : `[本番] ${band.name} はトリ優先度2ですが、最終クール以外のクールの最後に出演していません`,
     });
   });

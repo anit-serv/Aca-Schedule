@@ -187,7 +187,7 @@ export const SortableTimetableRow = ({
   const timetableBackground = isDragging ? 'bg-emerald-100'
     : usesBackupRehearsalTime ? 'bg-violet-100/80'
     : violationStyle.bgColor || (entry.type === 'custom' ? 'bg-emerald-100/70' : '');
-  const visibleTimetableBackground = `${timetableBackground} ${isSearchMatch ? 'bg-emerald-50' : ''}`;
+  const visibleTimetableBackground = `${timetableBackground} ${isSearchMatch && !usesBackupRehearsalTime && !violationStyle.bgColor ? 'bg-emerald-50' : ''}`;
   const fixedCellBackground = customMode ? visibleTimetableBackground : '';
 
   return (
@@ -200,11 +200,11 @@ export const SortableTimetableRow = ({
           reserveInsertionSpace && !suppressInsertionGap && !useCardGap && !externalInsertionGap && isDropTarget && !isDragging ? 'insertion-gap-before ' : ''
         }${reserveInsertionSpace && !suppressInsertionGap && !useCardGap && !externalInsertionGap && isDropTargetAfter && !isDragging ? 'insertion-gap-after ' : ''}${
           customMode ? '' : visibleTimetableBackground
-        } ${isSearchMatch ? 'ring-2 ring-inset ring-emerald-400' : ''} ${
+        } ${isSearchMatch && !customMode ? 'ring-2 ring-inset ring-emerald-400' : ''} ${
           searchQuery && !isSearchMatch && entry.type === 'band' ? 'opacity-40' : ''
         }`}
       >
-      {entry.type === 'band' && band ? <td colSpan={6} className={`p-0 ${fixedCellBackground}`}>
+      {entry.type === 'band' && band ? <td colSpan={6} className={`p-0 ${fixedCellBackground} ${customMode && isSearchMatch ? 'ring-2 ring-inset ring-emerald-400' : ''}`}>
         {useCardGap && <motion.div initial={false} animate={{ height: isDropTarget && !isDragging ? dragRowHeight : 0 }} transition={{ duration: 0.18, ease: 'easeOut' }} className="overflow-hidden bg-emerald-100/60" />}
         <motion.div
           initial={false}

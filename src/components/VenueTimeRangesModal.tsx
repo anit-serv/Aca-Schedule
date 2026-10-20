@@ -86,7 +86,7 @@ export const VenueTimeRangesModal = ({ day, onSave, onClose }: Props) => {
             const selected = timeSlotCoverage(preview, start, start + 15) !== 'none';
             return <button key={index} type="button" data-venue-slot={index} aria-pressed={selected} aria-label={`${label(start)}〜${label(start + 15)}`}
               onPointerDown={event => { event.preventDefault(); pointerRef.current = { x: event.clientX, y: event.clientY }; setDrag({ start: index, end: index, mode: timeSlotCoverage(ranges, start, start + 15) === 'none' ? 'add' : 'remove' }); }}
-              className={`relative h-10 overflow-hidden rounded-sm border-l-2 text-xs font-medium ${index % 4 === 0 ? 'border-l-gray-500' : 'border-l-transparent'} bg-gray-200 text-gray-700`}>
+              className={`relative h-10 overflow-hidden rounded-sm border-l-2 pl-2 text-left text-xs font-medium tabular-nums ${index % 4 === 0 ? 'border-l-gray-500' : 'border-l-transparent'} bg-gray-200 text-gray-700`}>
               {timeSlotSegments(preview, start, start + 15).map((segment, segmentIndex) => <span key={segmentIndex} aria-hidden="true" className="absolute inset-y-0 bg-emerald-500" style={{ left: `${segment.leftPercent}%`, width: `${segment.widthPercent}%` }} />)}
               <span className={`relative ${timeSlotCoverage(preview, start, start + 15) === 'full' ? 'text-white' : ''}`}>{label(start)}</span>
             </button>;

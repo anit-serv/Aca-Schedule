@@ -6,7 +6,9 @@ import { useAllViolations, useConstraintCheck } from './useConstraintCheck';
 it('shows one blue priority-2 notice and one yellow priority-3 notice only when no performance meets the priority', () => {
   const makeBand = (id: string, toriPriority: 2 | 3): Band => ({
     id, name: id, performanceDuration: 10, performanceCount: 2, toriPriority,
-    costume: false, bandMaster: '', members: [], availableTimeSlots: [],
+    costume: false, bandMaster: '', members: [], availableTimeSlots: [
+      { date: '2026-10-03', timeRanges: [{ startTime: '10:00', endTime: '11:00' }] },
+    ],
     createdAt: new Date(), updatedAt: new Date(),
   });
   const bands = [makeBand('p2', 2), makeBand('p3', 3)];
@@ -21,7 +23,7 @@ it('shows one blue priority-2 notice and one yellow priority-3 notice only when 
       }] },
       { date: '2026-10-03', startTime: '10:00', entries: [], cools: [{
         id: 'before-final', number: 1, entries: [makeEntry('p3b', 'p3', 0), makeEntry('p2b', 'p2', 1)],
-      }, { id: 'final', number: 2, entries: [] }] },
+      }, { id: 'final', number: 2, startTime: '10:30', entries: [] }] },
     ],
   };
   const notices = () => renderHook(() => useAllViolations(table, null, bands)).result.current
@@ -43,6 +45,28 @@ it('shows one blue priority-2 notice and one yellow priority-3 notice only when 
   expect(notices()).toMatchObject([{ bandId: 'p2', severity: 'low' }]);
   expect(renderHook(() => useAllViolations(null, { ...table, type: 'rehearsal' }, bands)).result.current
     .some(item => item.type === 'tori-priority-unmet')).toBe(false);
+});
+
+it('shows a blue notice when the final cool is outside a priority-3 band’s availability', () => {
+  const band: Band = {
+    id: 'headliner', name: 'headliner', performanceDuration: 10, performanceCount: 1,
+    toriPriority: 3, costume: false, bandMaster: '', members: [],
+    availableTimeSlots: [{ date: '2026-10-03', timeRanges: [{ startTime: '10:00', endTime: '10:20' }] }],
+    createdAt: new Date(), updatedAt: new Date(),
+  };
+  const table: Timetable = {
+    id: 't', eventId: 'e', type: 'performance', createdAt: new Date(), updatedAt: new Date(),
+    dailyTimetables: [{ date: '2026-10-03', startTime: '10:00', entries: [], cools: [
+      { id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'headliner-entry', type: 'band', bandId: band.id, order: 0, startTime: '10:00', endTime: '10:10' },
+      ] },
+      { id: 'final', number: 2, startTime: '10:30', entries: [] },
+    ] }],
+  };
+  const notice = renderHook(() => useAllViolations(table, null, [band])).result.current
+    .find(item => item.type === 'tori-priority-unmet');
+  expect(notice).toMatchObject({ severity: 'low', bandId: band.id });
+  expect(notice?.message).toContain('最終日の最後のクールが出演可能時間外');
 });
 
 it('flags a cool break shorter than the configured minimum', () => {

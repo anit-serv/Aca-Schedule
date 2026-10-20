@@ -414,7 +414,7 @@ export const BandAvailabilityModal = (props: BandAvailabilityModalProps | Member
                         toggleSingleSlot(time);
                       }
                     }}
-                    className={`relative h-10 overflow-hidden rounded-sm border-l-2 text-xs font-medium transition-colors ${index % 4 === 0 ? 'border-l-gray-500' : 'border-l-transparent'} ${bgColor}`}
+                    className={`relative h-10 overflow-hidden rounded-sm border-l-2 pl-2 text-left text-xs font-medium tabular-nums transition-colors ${index % 4 === 0 ? 'border-l-gray-500' : 'border-l-transparent'} ${bgColor}`}
                     aria-label={`${time}〜${allTimeSlots[index + 1]} ${isDisabled ? '選択不可' : coverage === 'partial' ? '一部選択済み' : isSelected ? '選択済み' : '未選択'}`}
                     aria-pressed={isSelected}
                     title={`${time}〜${allTimeSlots[index + 1]}`}

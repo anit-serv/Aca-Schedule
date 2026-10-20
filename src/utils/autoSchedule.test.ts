@@ -571,8 +571,8 @@ describe('autoSchedulePerformance', () => {
     const balanced = { ...baseline, priority3Missing: 1, priority2Missing: 1, coolCountDispersion: 0, dayCountDispersion: 0 };
     const preferred = { ...baseline, priority3Missing: 0, priority2Missing: 0, coolCountDispersion: 100, dayCountDispersion: 100 };
     expect(compareAutoScheduleScores(preferred, balanced)).toBeLessThan(0);
-    expect(compareAutoScheduleScores({ ...preferred, sameCoolRepeats: 1 }, balanced)).toBeGreaterThan(0);
-    expect(compareAutoScheduleScores({ ...preferred, priority3Missing: 1 }, balanced)).toBeLessThan(0);
+    expect(compareAutoScheduleScores({ ...preferred, sameCoolRepeats: 1 }, balanced)).toBeLessThan(0);
+    expect(compareAutoScheduleScores({ ...preferred, priority3Missing: 1 }, { ...balanced, priority3Missing: 0 })).toBeGreaterThan(0);
   });
 
   it('places priority 3 in the final cool even if the cool sizes become uneven', () => {
@@ -591,6 +591,24 @@ describe('autoSchedulePerformance', () => {
     const result = autoSchedulePerformance(timetable([original]), [date], performers);
     expect(result).toMatchObject({ placed: 4, remaining: 0 });
     expect(result.dailyTimetables[0].cools[1].entries.map(entry => entry.bandId)).toContain('headliner');
+  });
+
+  it('moves all four eligible priority-3 bands into the final cool', () => {
+    const date = '2026-10-02';
+    const performers = Array.from({ length: 4 }, (_, index) => band(`headliner-${index}`, {
+      toriPriority: 3,
+      availableTimeSlots: [{ date, timeRanges: [{ startTime: '10:00', endTime: '12:00' }] }],
+    }));
+    const initial = { ...day(date, [
+      { id: 'first', number: 1, startTime: '10:00', entries: performers.map((performer, order) => ({
+        id: `entry-${order}`, type: 'band' as const, bandId: performer.id, order,
+      })) },
+      { id: 'final', number: 2, startTime: '11:00', entries: [] },
+    ]), endTime: '12:00' };
+    const improved = refineHeadlinerPlacement([initial], performers, new Set());
+    expect(improved[0].cools[1].entries.map(entry => entry.bandId).sort())
+      .toEqual(performers.map(performer => performer.id).sort());
+    expect(score(improved, performers).priority3Missing).toBe(0);
   });
 
   it('swaps a headliner into a full final cool even when this creates two ordinary consecutive appearances', () => {
@@ -618,6 +636,31 @@ describe('autoSchedulePerformance', () => {
     expect(improvedScore.priority3Missing).toBe(0);
     expect(improvedScore.twoRunPenalty).toBeGreaterThan(initialScore.twoRunPenalty);
     expect(compareAutoScheduleScores(improvedScore, initialScore)).toBeLessThan(0);
+  });
+
+  it('rotates three cards to fit a headliner into a full final cool without repeating a band in one cool', () => {
+    const performers = [
+      band('headliner', { toriPriority: 3 }),
+      band('a', { performanceCount: 2 }), band('b', { performanceCount: 2 }), band('buffer'),
+    ];
+    const original = { ...day('2026-10-02', [
+      { id: 'first', number: 1, startTime: '10:00', entries: [
+        { id: 'headliner-entry', type: 'band' as const, bandId: 'headliner', order: 0 },
+        { id: 'a-first', type: 'band' as const, bandId: 'a', order: 1 },
+        { id: 'b-first', type: 'band' as const, bandId: 'b', order: 2 },
+      ] },
+      { id: 'middle', number: 2, startTime: '10:40', entries: [
+        { id: 'buffer-entry', type: 'band' as const, bandId: 'buffer', order: 0 },
+      ] },
+      { id: 'final', number: 3, startTime: '11:00', entries: [
+        { id: 'a-final', type: 'band' as const, bandId: 'a', order: 0 },
+        { id: 'b-final', type: 'band' as const, bandId: 'b', order: 1 },
+      ] },
+    ]), endTime: '11:20' };
+    const improved = refineHeadlinerPlacement([original], performers, new Set());
+    expect(improved[0].cools[2].entries.map(entry => entry.bandId)).toContain('headliner');
+    expect(score(improved, performers)).toMatchObject({ priority3Missing: 0, sameCoolRepeats: 0 });
+    expect(improved[0].cools.map(cool => cool.entries.length)).toEqual([3, 1, 2]);
   });
 
   it('swaps a priority-2 band to a cool ending even when ordinary consecutive appearances increase', () => {

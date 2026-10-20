@@ -214,11 +214,11 @@ const seededRandom = (key: string): (() => number) => {
 };
 
 export const compareAutoScheduleScores = (a: AutoScheduleScore, b: AutoScheduleScore): number =>
-  (a.priority2FinalCloser ?? 0) - (b.priority2FinalCloser ?? 0)
+  a.priority3Missing - b.priority3Missing
+  || (a.priority2FinalCloser ?? 0) - (b.priority2FinalCloser ?? 0)
   || a.sameCoolRepeats - b.sameCoolRepeats
   || a.longRunPenalty - b.longRunPenalty
   || a.costumeTwoRunPenalty - b.costumeTwoRunPenalty
-  || a.priority3Missing - b.priority3Missing
   || a.priority2Missing - b.priority2Missing
   || a.coolCountDispersion - b.coolCountDispersion
   || a.dayCountDispersion - b.dayCountDispersion
@@ -325,8 +325,9 @@ export const refineHeadlinerPlacement = (
   const finalCoolIndex = initialDays[finalDayIndex].cools.length - 1;
   let best = initialDays;
   let bestScore = scoreSchedule(best, bandMap);
-  let attempts = 0;
-  for (let pass = 0; pass < 3 && bestScore.priority3Missing && attempts < 3000; pass++) {
+  const maxPasses = bands.filter(band => band.toriPriority === 3).length;
+  for (let pass = 0; pass < maxPasses && bestScore.priority3Missing; pass++) {
+    let attempts = 0;
     const current = best;
     let next = current;
     let nextScore = bestScore;
@@ -378,6 +379,56 @@ export const refineHeadlinerPlacement = (
             if (compareAutoScheduleScores(score, nextScore) < 0) {
               next = swapped;
               nextScore = score;
+            }
+          }
+        }
+      }
+    }
+    // A direct swap can duplicate the displaced band in the source cool.
+    // Rotate three movable cards so the final cool gains the headliner without
+    // increasing same-cool repeats or changing cool sizes.
+    if (bestScore.priority3Missing
+      && (next === current || nextScore.sameCoolRepeats > bestScore.sameCoolRepeats)) {
+      let cycleAttempts = 0;
+      const finalEntries = current[finalDayIndex].cools[finalCoolIndex].entries;
+      for (let dayIndex = 0; dayIndex < current.length && cycleAttempts < 6000; dayIndex++) {
+        for (let coolIndex = 0; coolIndex < current[dayIndex].cools.length && cycleAttempts < 6000; coolIndex++) {
+          if (dayIndex === finalDayIndex && coolIndex === finalCoolIndex) continue;
+          for (const source of current[dayIndex].cools[coolIndex].entries) {
+            const band = source.bandId ? bandMap.get(source.bandId) : undefined;
+            if (band?.toriPriority !== 3 || finalBandIds.has(band.id)
+              || fixedEntryIds.has(source.id) || source.fixedStartTime) continue;
+            for (const target of finalEntries) {
+              if (!target.bandId || fixedEntryIds.has(target.id) || target.fixedStartTime) continue;
+              for (let bufferDayIndex = 0; bufferDayIndex < current.length && cycleAttempts < 6000; bufferDayIndex++) {
+                for (const bufferCool of current[bufferDayIndex].cools) {
+                  for (const buffer of bufferCool.entries) {
+                    if (cycleAttempts >= 6000) break;
+                    if (!buffer.bandId || buffer.id === source.id || buffer.id === target.id
+                      || fixedEntryIds.has(buffer.id) || buffer.fixedStartTime) continue;
+                    cycleAttempts++;
+                    const rotated = current.map((day, index) =>
+                      index === dayIndex || index === finalDayIndex || index === bufferDayIndex
+                        ? { ...day, cools: day.cools.map(cool => ({ ...cool, entries: cool.entries.map(entry =>
+                          entry.id === source.id ? buffer : entry.id === target.id ? source
+                            : entry.id === buffer.id ? target : entry) })) } : day);
+                    let valid = true;
+                    for (const index of new Set([dayIndex, finalDayIndex, bufferDayIndex])) {
+                      const retimed = retimeDay(rotated[index], bandMap, linkedByDate.get(rotated[index].date));
+                      if (!retimed || !validTimes(retimed, bandMap, linkedByDate.get(rotated[index].date))) {
+                        valid = false; break;
+                      }
+                      rotated[index] = retimed;
+                    }
+                    if (!valid) continue;
+                    const score = scoreSchedule(rotated, bandMap);
+                    if (compareAutoScheduleScores(score, nextScore) < 0) {
+                      next = rotated;
+                      nextScore = score;
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -919,8 +970,16 @@ export const autoSchedulePerformance = (
     let current = prepared as DailyTimetable[];
     const pending = [...missing]
       .map(target => ({ target, flexibility: availabilityFlexibility(target.band, target.date ? [target.date] : dates), tie: random() }))
-      .sort((a, b) => a.flexibility - b.flexibility
-        || (b.target.band.toriPriority ?? 1) - (a.target.band.toriPriority ?? 1) || a.tie - b.tie)
+      .sort((a, b) => {
+        // Reserve a final-cool slot for a headliner in the first seed. Other
+        // seeds keep the availability-first order to protect placement count.
+        if (pass === 0) {
+          const headlinerOrder = Number(b.target.band.toriPriority === 3) - Number(a.target.band.toriPriority === 3);
+          if (headlinerOrder) return headlinerOrder;
+        }
+        return a.flexibility - b.flexibility
+          || (b.target.band.toriPriority ?? 1) - (a.target.band.toriPriority ?? 1) || a.tie - b.tie;
+      })
       .map(item => item.target);
     let placed = 0;
     while (pending.length > 0) {
