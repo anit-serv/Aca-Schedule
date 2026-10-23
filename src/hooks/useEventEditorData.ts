@@ -44,6 +44,21 @@ export const useEventEditorData = (eventId: string | undefined) => {
   const lastSavedRehearsalHashRef = useRef<string>('');
   const performanceLoadedEventIdRef = useRef<string | null>(null);
   const rehearsalLoadedEventIdRef = useRef<string | null>(null);
+  const initialLoadPendingRef = useRef('');
+  initialLoadPendingRef.current = !eventSettings ? 'イベント設定'
+    : !bandsLoaded ? 'バンド情報'
+    : !performanceTimetableLoaded ? '本番タイムテーブル'
+    : eventSettings.rehearsalType !== 'none' && !rehearsalTimetableLoaded ? 'リハーサルタイムテーブル'
+      : '';
+
+  // A stalled Firestore listener must not leave the editor on its spinner forever.
+  useEffect(() => {
+    if (!eventId) return;
+    const timer = window.setTimeout(() => {
+      if (initialLoadPendingRef.current) setError(current => current ?? `timeout:${initialLoadPendingRef.current}`);
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [eventId]);
 
   useEffect(() => {
     setHasCompletedInitialTimetableSync(false);
@@ -90,7 +105,7 @@ export const useEventEditorData = (eventId: string | undefined) => {
         } else if (errorCode === 'resource-exhausted') {
           setError('quota-exceeded');
         } else {
-          setError('unknown');
+          setError('event-error');
         }
         setIsLoading(false);
       }
@@ -126,6 +141,8 @@ export const useEventEditorData = (eventId: string | undefined) => {
         } else if (errorCode === 'resource-exhausted') {
           setError('quota-exceeded');
           setBandsLoaded(true);
+        } else {
+          setError('bands-error');
         }
       }
     );
@@ -259,6 +276,8 @@ export const useEventEditorData = (eventId: string | undefined) => {
         } else if (errorCode === 'resource-exhausted') {
           setError('quota-exceeded');
           setPerformanceTimetableLoaded(true);
+        } else {
+          setError('performance-error');
         }
       }
     );
@@ -303,6 +322,8 @@ export const useEventEditorData = (eventId: string | undefined) => {
         } else if (errorCode === 'resource-exhausted') {
           setError('quota-exceeded');
           setRehearsalTimetableLoaded(true);
+        } else {
+          setError('rehearsal-error');
         }
       }
     );

@@ -545,7 +545,7 @@ export const EventEditorPage = () => {
   };
 
   // ローディング中
-  if (isEditorLoading) {
+  if (isEditorLoading && !error) {
     return (
       <div className={`bg-gray-50 text-gray-900 flex items-center justify-center ${shouldUseMobileLayout ? 'h-screen px-4' : 'min-h-screen'}`}>
         <div className="text-center">
@@ -572,10 +572,21 @@ export const EventEditorPage = () => {
             title: 'アクセスが集中しています',
             message: 'Firestoreの利用上限に達しました。しばらく待ってから再度お試しください。',
           }
+        : error?.startsWith('timeout:')
+          ? {
+              icon: 'warning',
+              title: '読み込みに時間がかかっています',
+              message: `${error.slice('timeout:'.length)}を取得できませんでした。通信状態を確認して再読み込みしてください。`,
+            }
         : {
             icon: 'warning',
             title: '読み込みエラー',
-            message: 'イベント情報の読み込みに失敗しました。もう一度お試しください。',
+            message: `${({
+              'event-error': 'イベント設定',
+              'bands-error': 'バンド情報',
+              'performance-error': '本番タイムテーブル',
+              'rehearsal-error': 'リハーサルタイムテーブル',
+            } as Record<string, string>)[error ?? ''] ?? 'イベント情報'}の読み込みに失敗しました。もう一度お試しください。`,
           };
 
     return (
@@ -585,6 +596,14 @@ export const EventEditorPage = () => {
             <div className="text-6xl mb-4"><Icon name={errorConfig.icon} className="text-6xl" /></div>
             <h1 className="text-2xl font-bold mb-2">{errorConfig.title}</h1>
             <p className="text-gray-500 mb-6">{errorConfig.message}</p>
+            {error !== 'not-found' && (
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full px-6 py-3 mb-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md font-medium transition-colors"
+              >
+                再読み込み
+              </button>
+            )}
             <button
               onClick={() => navigate('/')}
               className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md font-medium transition-colors"
