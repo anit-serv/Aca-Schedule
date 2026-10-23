@@ -32,6 +32,7 @@ async function createBand({ requestId, authContext, payload, requestHash }) {
     performanceDuration: payload.performanceDuration,
     performanceCount: payload.performanceCount,
     toriPriority: payload.toriPriority,
+    toriTargetDate: payload.toriTargetDate,
     costume: payload.costume,
     bandMaster: payload.bandMaster,
     members: payload.members,
@@ -193,6 +194,12 @@ export default async function handler(req, res) {
       userEmail: auth.userEmail,
       allowedEventIds: auth.allowedEventIds,
     });
+    if (payload.toriTargetDate && !event.performanceDates?.includes(payload.toriTargetDate)) {
+      throw new ApiError(400, "INVALID_FIELD", "toriTargetDate must be one of the event performance dates.");
+    }
+    if (payload.toriPriority === 3 && !payload.toriTargetDate) {
+      payload.toriTargetDate = [...(event.performanceDates ?? [])].sort().at(-1) ?? null;
+    }
     if (payload.backupRehearsalTimeSlots.length) {
       const rehearsalDays = await loadRehearsalDays(getAdminDb(), payload.eventId);
       validateBackupRehearsalContext(payload.backupRehearsalTimeSlots, payload.availableTimeSlots, event, rehearsalDays);

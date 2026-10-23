@@ -7,6 +7,7 @@ import { BandAvailabilityModal } from '../BandAvailabilityModal';
 import { Icon } from '../Icon';
 import { bandService } from '../../services/firestore';
 import { generateUUID } from '../../utils/generateUUID';
+import { resolveHeadlinerDate } from '../../utils/headlinerDate';
 
 interface MobileBandManagementProps {
   initialScrollPosition?: { top: number; left: number };
@@ -439,13 +440,26 @@ export const MobileBandManagement = ({ initialScrollPosition, onScrollPositionCh
                       <select
                         id={`tori-priority-${band.id}`}
                         value={band.toriPriority ?? 1}
-                        onChange={(e) => handleUpdateBand(band.id, { toriPriority: Number(e.target.value) as 1 | 2 | 3 })}
+                        onChange={(e) => {
+                          const toriPriority = Number(e.target.value) as 1 | 2 | 3;
+                          handleUpdateBand(band.id, toriPriority === 3
+                            ? { toriPriority, toriTargetDate: resolveHeadlinerDate(band, eventSettings.performanceDates) ?? null }
+                            : { toriPriority });
+                        }}
                         className="bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-sm"
                       >
                         <option value="1">1</option>
                         <option value="2">2</option>
                         <option value="3">3</option>
                       </select>
+                      {band.toriPriority === 3 && <label className="mt-2 block text-xs font-medium text-gray-500">対象の本番日
+                        <select aria-label={`${band.name}のトリ優先度3の対象日`}
+                          value={resolveHeadlinerDate(band, eventSettings.performanceDates) ?? ''}
+                          onChange={event => handleUpdateBand(band.id, { toriTargetDate: event.target.value })}
+                          className="mt-1 block rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-900">
+                          {[...eventSettings.performanceDates].sort().map(date => <option key={date} value={date}>{date}</option>)}
+                        </select>
+                      </label>}
                     </div>
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                       <input

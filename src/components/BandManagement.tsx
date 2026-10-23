@@ -4,6 +4,7 @@ import { useBandManagement } from '../hooks/useBandManagement';
 import { BandAvailabilityModal } from './BandAvailabilityModal';
 import { BandImportCSV } from './BandImportCSV';
 import { Icon } from './Icon';
+import { resolveHeadlinerDate } from '../utils/headlinerDate';
 
 interface BandManagementProps {
   initialScrollPosition?: { top: number; left: number };
@@ -79,6 +80,11 @@ export const BandManagement = ({ initialScrollPosition, onScrollPositionChange, 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [addBand]);
   const update = (changes: Partial<Band>) => { if (band) void handleUpdateBand(band.id, changes); };
+  const updateToriPriority = (priority: 1 | 2 | 3) => {
+    update(priority === 3
+      ? { toriPriority: priority, toriTargetDate: resolveHeadlinerDate(band!, eventSettings.performanceDates) ?? null }
+      : { toriPriority: priority });
+  };
   const addMember = (candidate?: string) => {
     if (!band) return;
     const name = (candidate ?? memberInput).trim();
@@ -123,7 +129,15 @@ export const BandManagement = ({ initialScrollPosition, onScrollPositionChange, 
               <label className="text-sm font-semibold">バンドマスター<input type="text" value={band.bandMaster ?? ''} onChange={event => update({ bandMaster: event.target.value })} maxLength={100} className={inputClass} /></label>
               <div><label htmlFor="band-duration" className="text-sm font-semibold">演奏時間</label><div className="flex items-center gap-2"><input id="band-duration" type="number" min="0" value={band.performanceDuration} onChange={event => update({ performanceDuration: parseInt(event.target.value, 10) || 0 })} className={`${inputClass} max-w-28`} /><span className="mt-2 text-sm text-gray-500">分</span></div><div className="mt-2 flex flex-wrap gap-1">{eventSettings.presetDurations.map(value => <button type="button" key={value} onClick={() => update({ performanceDuration: value })} className={`rounded px-2 py-1 text-xs ${band.performanceDuration === value ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>{value}分</button>)}</div></div>
               <label className="block text-sm font-semibold">出演回数<input type="number" min="1" value={band.performanceCount || 1} onChange={event => update({ performanceCount: parseInt(event.target.value, 10) || 1 })} className={`${inputClass} block max-w-28`} /></label>
-              <div><div className="flex items-center gap-1"><label htmlFor="band-tori-priority" className="text-sm font-semibold">トリ優先度</label><div className="group relative"><button type="button" aria-label="トリ優先度の説明" aria-describedby="band-tori-priority-help" className="flex rounded text-gray-500 hover:text-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"><Icon name="info" className="text-base" /></button><div id="band-tori-priority-help" role="tooltip" className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 hidden w-72 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-relaxed text-gray-700 shadow-lg group-hover:block group-focus-within:block"><p>自動配置での出演順の希望です。</p><p className="mt-1">1：指定なし（初期値）</p><p>2：いずれかのクールの最後を優先</p><p>3：最終日の最後のクールを優先</p></div></div></div><select id="band-tori-priority" value={band.toriPriority ?? 1} onChange={event => update({ toriPriority: Number(event.target.value) as 1 | 2 | 3 })} className={inputClass}><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
+              <div className="grid min-w-0 grid-cols-2 gap-3">
+                <div className="min-w-0"><div className="flex items-center gap-1"><label htmlFor="band-tori-priority" className="text-sm font-semibold">トリ優先度</label><div className="group relative"><button type="button" aria-label="トリ優先度の説明" aria-describedby="band-tori-priority-help" className="flex rounded text-gray-500 hover:text-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"><Icon name="info" className="text-base" /></button><div id="band-tori-priority-help" role="tooltip" className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 hidden w-72 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-relaxed text-gray-700 shadow-lg group-hover:block group-focus-within:block"><p>自動配置での出演順の希望です。</p><p className="mt-1">1：指定なし（初期値）</p><p>2：いずれかのクールの最後を優先</p><p>3：選択した本番日の最後のクールを優先（初期値は最終日）</p></div></div></div><select id="band-tori-priority" value={band.toriPriority ?? 1} onChange={event => updateToriPriority(Number(event.target.value) as 1 | 2 | 3)} className={inputClass}><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
+                {band.toriPriority === 3 && <label className="block min-w-0 text-sm font-semibold">対象の本番日
+                  <select aria-label="トリ優先度3の対象日" value={resolveHeadlinerDate(band, eventSettings.performanceDates) ?? ''}
+                    onChange={event => update({ toriTargetDate: event.target.value })} className={inputClass}>
+                    {[...eventSettings.performanceDates].sort().map(date => <option key={date} value={date}>{date}</option>)}
+                  </select>
+                </label>}
+              </div>
               <label className="mt-2 flex items-center gap-2 self-end rounded bg-gray-50 px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={band.costume ?? false} onChange={event => update({ costume: event.target.checked })} className="h-4 w-4 accent-emerald-600" />衣装あり</label>
             </div>
             <div className="mt-5 border-t pt-4"><h4 className="text-sm font-semibold">メンバー（{band.members.length}人）</h4><div className="mt-2 flex flex-wrap gap-1">{band.members.map(member => <span key={member} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800">{member}<button type="button" onClick={() => update({ members: band.members.filter(name => name !== member) })} aria-label={`${member}を削除`} className="text-emerald-500 hover:text-red-600">×</button></span>)}</div>

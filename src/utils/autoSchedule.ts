@@ -6,6 +6,7 @@ import { normalizeTimeRanges } from './availabilityRanges';
 import { checkBandAvailability, findConsecutiveMemberRuns } from './scheduleChecks';
 import { minimumCoolBreakMinutes } from './coolBreak';
 import { venueTimeRanges } from './venueTimeRanges';
+import { resolveHeadlinerDate } from './headlinerDate';
 
 const minutes = (time: string): number => {
   const [hour, minute] = time.split(':').map(Number);
@@ -190,9 +191,11 @@ export interface AutoScheduleScore {
   costumeTwoRunPenalty: number;
   twoRunPenalty: number;
   priority3Missing: number;
+  priority3WrongDate?: number;
   priority2Missing: number;
   priority2FinalCloser?: number;
   coolCountDispersion: number;
+  severeCoolImbalance?: number;
   dayCountDispersion: number;
   transitionMinutes: number;
   longTransitionPenalty?: number;
@@ -214,7 +217,9 @@ const seededRandom = (key: string): (() => number) => {
 };
 
 export const compareAutoScheduleScores = (a: AutoScheduleScore, b: AutoScheduleScore): number =>
-  a.priority3Missing - b.priority3Missing
+  (a.severeCoolImbalance ?? 0) - (b.severeCoolImbalance ?? 0)
+  || (a.priority3WrongDate ?? 0) - (b.priority3WrongDate ?? 0)
+  || a.priority3Missing - b.priority3Missing
   || (a.priority2FinalCloser ?? 0) - (b.priority2FinalCloser ?? 0)
   || a.sameCoolRepeats - b.sameCoolRepeats
   || a.longRunPenalty - b.longRunPenalty
@@ -231,11 +236,20 @@ export const scoreSchedule = (days: DailyTimetable[], bandMap: Map<string, Band>
   const score: AutoScheduleScore = { sameCoolRepeats: 0, longRunPenalty: 0, costumeTwoRunPenalty: 0, twoRunPenalty: 0, priority3Missing: 0, priority2Missing: 0, priority2FinalCloser: 0, coolCountDispersion: 0, dayCountDispersion: 0, transitionMinutes: 0, longTransitionPenalty: 0, preferencePenalty: 0 };
   const finalDate = days.at(-1)?.date;
   const finalCoolIndex = (days.at(-1)?.cools.length ?? 1) - 1;
+  const priority3TargetDates = new Map([...bandMap.values()].filter(band => band.toriPriority === 3)
+    .map(band => [band.id, resolveHeadlinerDate(band, days.map(day => day.date))]));
   const priority2Distances = new Map<string, number>();
   const priority3Seen = new Set<string>();
-  const priority3InFinalCool = new Set<string>();
+  const priority3OnTargetDate = new Set<string>();
+  const priority3InTargetCool = new Set<string>();
   const bandDays = new Map<string, Map<string, number>>();
   for (const day of days) {
+    const bandCounts = day.cools.map(cool => cool.entries.filter(entry => entry.type === 'band').length);
+    // Leave room for a headliner-heavy cool, while rejecting a schedule that
+    // pours most of a day into one cool to satisfy an early headliner.
+    const allowedCount = Math.ceil(bandCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, bandCounts.length)) + 5;
+    score.severeCoolImbalance = (score.severeCoolImbalance ?? 0)
+      + bandCounts.reduce((sum, count) => sum + Math.max(0, count - allowedCount) ** 2, 0);
     for (const entry of entriesOf(day)) {
       const wait = Math.max(0, entry.transitionTime ?? 0);
       score.transitionMinutes += wait;
@@ -284,7 +298,10 @@ export const scoreSchedule = (days: DailyTimetable[], bandMap: Map<string, Band>
         }
         if (band.toriPriority === 3) {
           priority3Seen.add(band.id);
-          if (day.date === finalDate && coolIndex === finalCoolIndex) priority3InFinalCool.add(band.id);
+          if (day.date === priority3TargetDates.get(band.id)) {
+            priority3OnTargetDate.add(band.id);
+            if (coolIndex === day.cools.length - 1) priority3InTargetCool.add(band.id);
+          }
         }
       });
     });
@@ -297,7 +314,10 @@ export const scoreSchedule = (days: DailyTimetable[], bandMap: Map<string, Band>
     score.preferencePenalty += (Number.isFinite(distance) ? distance * 2 : 0) + (distance > 0 ? 100 : 0);
   }
   for (const bandId of priority3Seen) {
-    if (!priority3InFinalCool.has(bandId)) {
+    if (!priority3OnTargetDate.has(bandId)) {
+      score.priority3WrongDate = (score.priority3WrongDate ?? 0) + 1;
+    }
+    if (!priority3InTargetCool.has(bandId)) {
       score.priority3Missing++;
       score.preferencePenalty += 300;
     }
@@ -315,17 +335,22 @@ const addAt = (day: DailyTimetable, band: Band, coolIndex: number, position: num
   return result && validTimes(result, bandMap, linkedCools) ? result : null;
 };
 
-/** Try direct moves and swaps into the final cool when a priority-3 band is still missing there. */
+/** Try direct moves and swaps into each priority-3 band's selected day's last cool. */
 export const refineHeadlinerPlacement = (
   initialDays: DailyTimetable[], bands: Band[], fixedEntryIds: Set<string>, linkedByDate = new Map<string, Cool[]>(),
 ): DailyTimetable[] => {
   if (!initialDays.length || !initialDays.at(-1)?.cools.length) return initialDays;
   const bandMap = new Map(bands.map(band => [band.id, band]));
-  const finalDayIndex = initialDays.length - 1;
-  const finalCoolIndex = initialDays[finalDayIndex].cools.length - 1;
   let best = initialDays;
+  const dates = initialDays.map(day => day.date);
+  for (let finalDayIndex = 0; finalDayIndex < initialDays.length; finalDayIndex++) {
+  const targetDate = initialDays[finalDayIndex].date;
+  const maxPasses = bands.filter(band => band.toriPriority === 3
+    && resolveHeadlinerDate(band, dates) === targetDate).length;
+  if (!maxPasses) continue;
+  const finalCoolIndex = initialDays[finalDayIndex].cools.length - 1;
+  if (finalCoolIndex < 0) continue;
   let bestScore = scoreSchedule(best, bandMap);
-  const maxPasses = bands.filter(band => band.toriPriority === 3).length;
   for (let pass = 0; pass < maxPasses && bestScore.priority3Missing; pass++) {
     let attempts = 0;
     const current = best;
@@ -337,7 +362,7 @@ export const refineHeadlinerPlacement = (
         if (dayIndex === finalDayIndex && coolIndex === finalCoolIndex) continue;
         for (const source of current[dayIndex].cools[coolIndex].entries) {
           const band = source.bandId ? bandMap.get(source.bandId) : undefined;
-          if (band?.toriPriority !== 3 || finalBandIds.has(band.id)
+          if (band?.toriPriority !== 3 || resolveHeadlinerDate(band, dates) !== targetDate || finalBandIds.has(band.id)
             || fixedEntryIds.has(source.id) || source.fixedStartTime) continue;
           const sourceCools = current[dayIndex].cools.map((cool, index) => index === coolIndex
             ? { ...cool, entries: cool.entries.filter(entry => entry.id !== source.id) } : cool);
@@ -396,7 +421,7 @@ export const refineHeadlinerPlacement = (
           if (dayIndex === finalDayIndex && coolIndex === finalCoolIndex) continue;
           for (const source of current[dayIndex].cools[coolIndex].entries) {
             const band = source.bandId ? bandMap.get(source.bandId) : undefined;
-            if (band?.toriPriority !== 3 || finalBandIds.has(band.id)
+            if (band?.toriPriority !== 3 || resolveHeadlinerDate(band, dates) !== targetDate || finalBandIds.has(band.id)
               || fixedEntryIds.has(source.id) || source.fixedStartTime) continue;
             for (const target of finalEntries) {
               if (!target.bandId || fixedEntryIds.has(target.id) || target.fixedStartTime) continue;
@@ -437,6 +462,7 @@ export const refineHeadlinerPlacement = (
     if (next === current) break;
     best = next;
     bestScore = nextScore;
+  }
   }
   return best;
 };
@@ -903,7 +929,7 @@ const venueBoundaryLayouts = (day: DailyTimetable): number[][] => {
       sum + (count - coolCount * durations[index] / totalDuration) ** 2, 0);
     return deviation(a) - deviation(b) || a.join(',').localeCompare(b.join(','));
   });
-  return layouts.slice(0, venues.length === 2 ? layouts.length : 20);
+  return layouts.slice(0, venues.length === 2 ? 3 : 20);
 };
 
 const prepareVenueBoundaries = (
@@ -914,7 +940,11 @@ const prepareVenueBoundaries = (
   if (day.cools.length < venues.length) return null;
   const layouts = venueBoundaryLayouts(day);
   const layout = layouts[pass % layouts.length];
-  const cools = day.cools.map(cool => ({ ...cool }));
+  // A saved automatic start describes the previous layout, not a user-fixed
+  // boundary. Rebuild empty cools before assigning them to venue windows.
+  const cools = day.cools.map(cool => cool.autoGeneratedStartTime && !cool.entries.length
+    ? { ...cool, startTime: undefined }
+    : { ...cool });
   let previousBoundary = 0;
   for (let windowIndex = 1; windowIndex < venues.length; windowIndex++) {
     const remainingWindows = venues.length - windowIndex;
@@ -938,7 +968,8 @@ const prepareVenueBoundaries = (
 
 /** Give empty cools a capacity target before inserting bands. Manual starts stay fixed. */
 const planCoolStarts = (
-  day: DailyTimetable, bands: Band[], targetCoolMinutes: number, linkedCools?: Cool[],
+  day: DailyTimetable, bands: Band[], targetCoolMinutes: number, performanceDates: string[],
+  favorHeadliners: boolean, linkedCools?: Cool[],
 ): DailyTimetable | null => {
   const venues = venueTimeRanges(day);
   const windows = assignedVenueWindows(day, venues) ?? day.cools.map(() => 0);
@@ -970,6 +1001,33 @@ const planCoolStarts = (
       cools[coolIndex].startTime = clockTime(windowStart + position * span);
       cools[coolIndex].autoGeneratedStartTime = true;
     });
+  }
+  const finalIndex = cools.length - 1;
+  const finalCool = cools[finalIndex];
+  if (favorHeadliners && finalCool?.autoGeneratedStartTime && finalCool.startTime && !finalCool.entries.length) {
+    const targetBands = bands.filter(band => band.toriPriority === 3
+      && resolveHeadlinerDate(band, performanceDates) === day.date);
+    const deadlines = targetBands.map(band => {
+      const slot = band.availableTimeSlots.find(item => item.date === day.date);
+      return Math.max(-1, ...(slot?.timeRanges ?? []).flatMap(range => venues.map(venue => {
+        const start = Math.max(minutes(day.startTime), minutes(range.startTime), minutes(venue.startTime));
+        const end = Math.min(minutes(day.endTime ?? '24:00'), minutes(range.endTime), minutes(venue.endTime));
+        return end - start >= band.performanceDuration ? end - band.performanceDuration : -1;
+      })));
+    }).filter(deadline => deadline >= 0);
+    const deadline = Math.min(Infinity, ...deadlines);
+    if (deadline < minutes(finalCool.startTime)) {
+      const adjusted = cools.map(cool => ({ ...cool }));
+      adjusted[finalIndex].startTime = clockTime(deadline);
+      for (let index = finalIndex - 1; index >= 0; index--) {
+        const nextStart = minutes(adjusted[index + 1].startTime!);
+        if (!adjusted[index].startTime || minutes(adjusted[index].startTime!) < nextStart) continue;
+        if (!adjusted[index].autoGeneratedStartTime || adjusted[index].entries.length) break;
+        adjusted[index].startTime = clockTime(nextStart - 1);
+      }
+      const candidate = retimeDay({ ...day, cools: adjusted }, new Map(bands.map(band => [band.id, band])), linkedCools);
+      if (candidate && validTimes(candidate, new Map(bands.map(band => [band.id, band])), linkedCools)) return candidate;
+    }
   }
   const planned = retimeDay({ ...day, cools }, new Map(bands.map(band => [band.id, band])), linkedCools);
   return planned && validTimes(planned, new Map(bands.map(band => [band.id, band])), linkedCools) ? planned : null;
@@ -1030,12 +1088,19 @@ export const autoSchedulePerformance = (
   let bestDays = days;
   let bestPlaced = -1;
   let bestScore: AutoScheduleScore = { sameCoolRepeats: Infinity, longRunPenalty: Infinity, costumeTwoRunPenalty: Infinity, twoRunPenalty: Infinity, priority3Missing: Infinity, priority2Missing: Infinity, priority2FinalCloser: Infinity, coolCountDispersion: Infinity, dayCountDispersion: Infinity, transitionMinutes: Infinity, preferencePenalty: Infinity };
+  const originalIds = new Set(days.flatMap(day => entriesOf(day).map(entry => entry.id)));
   const boundaryVariants = Math.max(1, ...days.map(day => venueBoundaryLayouts(day).length));
   const maxPasses = missing.length > 40 ? 12 : 20;
-  for (let pass = 0; pass < Math.min(maxPasses, Math.max(8, boundaryVariants)); pass++) {
+  // Shorter spans reserve more room in the last cool without moving its bands
+  // after the daily end time. Compare these plans only after placing bands.
+  for (let pass = 0; pass < Math.min(maxPasses, Math.max(8, boundaryVariants * 4)); pass++) {
+    const timingVariant = Math.floor(pass / boundaryVariants);
+    const plannedCoolMinutes = Math.max(1, targetCoolMinutes - Math.max(0, timingVariant - 1) * 5);
     const prepared = days.map(day => {
       const bounded = prepareVenueBoundaries(day, pass, bandMap, linkedByDate.get(day.date));
-      return bounded && planCoolStarts(bounded, bands, targetCoolMinutes, linkedByDate.get(day.date));
+      return bounded && planCoolStarts(bounded, bands, plannedCoolMinutes, dates,
+        timingVariant === 0,
+        linkedByDate.get(day.date));
     });
     if (prepared.some(day => !day)) continue;
     let current = prepared as DailyTimetable[];
@@ -1044,7 +1109,7 @@ export const autoSchedulePerformance = (
       .sort((a, b) => {
         // Reserve a final-cool slot for a headliner in the first seed. Other
         // seeds keep the availability-first order to protect placement count.
-        if (pass === 0) {
+        if (timingVariant === 0 || timingVariant === 2) {
           const headlinerOrder = Number(b.target.band.toriPriority === 3) - Number(a.target.band.toriPriority === 3);
           if (headlinerOrder) return headlinerOrder;
         }
@@ -1072,19 +1137,24 @@ export const autoSchedulePerformance = (
         continue;
       }
       options.sort((a, b) => compareAutoScheduleScores(a.score, b.score));
-      const chosen = options[pass === 0 ? 0 : Math.floor(random() * Math.min(4, options.length))];
+      const chosen = options[timingVariant === 0 || timingVariant === 2 ? 0
+        : Math.floor(random() * Math.min(4, options.length))];
       current = chosen.days;
       pending.shift();
       placed++;
     }
-    const score = scoreSchedule(current, bandMap);
+    let score = scoreSchedule(current, bandMap);
+    if (placed === missing.length && !score.severeCoolImbalance && score.priority3Missing) {
+      current = refineHeadlinerPlacement(current, bands, originalIds, linkedByDate);
+      score = scoreSchedule(current, bandMap);
+    }
     if (placed > bestPlaced || (placed === bestPlaced && compareAutoScheduleScores(score, bestScore) < 0)) { bestDays = current; bestPlaced = placed; bestScore = score; }
-    if (bestPlaced === missing.length && pass >= Math.max(2, boundaryVariants - 1)) break;
+    if (bestPlaced === missing.length && bestScore.priority3Missing === 0
+      && pass >= Math.max(2, boundaryVariants * 2 - 1)) break;
   }
   if (bestPlaced < 0) return { dailyTimetables: timetable.dailyTimetables, placed: 0, remaining: missing.length,
     error: '演奏可能時間帯の境目にクールを配置できません。クールの開始時刻や既存の配置を確認してください。' };
   // Simulated annealing refines the soft preferences after the maximum feasible placement is found.
-  const originalIds = new Set(days.flatMap(day => entriesOf(day).map(entry => entry.id)));
   let annealed = bestDays;
   let annealedScore = bestScore;
   const steps = targets?.some(target => target.date) ? 0 : Math.min(600, Math.max(100, bestPlaced * 20));

@@ -74,6 +74,7 @@ const bandToFirestore = (band: Band, eventId: string): Omit<BandFirestore, 'id'>
   performanceDuration: band.performanceDuration,
   performanceCount: band.performanceCount,
   toriPriority: band.toriPriority,
+  toriTargetDate: band.toriTargetDate ?? null,
   costume: band.costume,
   bandMaster: band.bandMaster,
   members: band.members,
@@ -92,6 +93,7 @@ const firestoreToBand = (id: string, data: DocumentData): Band => {
     performanceDuration: data.performanceDuration,
     performanceCount: data.performanceCount,
     toriPriority: [1, 2, 3].includes(data.toriPriority) ? data.toriPriority : 1,
+    toriTargetDate: typeof data.toriTargetDate === 'string' ? data.toriTargetDate : null,
     costume: data.costume === true,
     bandMaster: typeof data.bandMaster === 'string' ? data.bandMaster : '',
     // 配列は必ず新しいインスタンスを作成

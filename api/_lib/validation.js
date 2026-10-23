@@ -173,6 +173,10 @@ export function validateCreateBandPayload(payload) {
   if (![1, 2, 3].includes(toriPriority)) {
     errors.push({ field: "toriPriority", message: "must be 1, 2, or 3" });
   }
+  const toriTargetDate = payload.toriTargetDate ?? null;
+  if (toriTargetDate !== null && (typeof toriTargetDate !== "string" || !ISO_DATE_REGEX.test(toriTargetDate))) {
+    errors.push({ field: "toriTargetDate", message: "must be an ISO date or null" });
+  }
 
   const costume = payload.costume === undefined ? false : payload.costume;
   if (typeof costume !== "boolean") {
@@ -224,6 +228,7 @@ export function validateCreateBandPayload(payload) {
     performanceDuration: payload.performanceDuration,
     performanceCount,
     toriPriority,
+    toriTargetDate,
     costume,
     bandMaster: bandMaster.trim(),
     members: members.map((member) => member.trim()).filter(Boolean),

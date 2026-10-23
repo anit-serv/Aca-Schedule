@@ -47,6 +47,7 @@ export interface Band {
   performanceDuration: number; // 演奏時間（分）
   performanceCount: number; // 出演回数
   toriPriority: 1 | 2 | 3; // トリ優先度
+  toriTargetDate?: string | null; // 優先度3の対象日。未設定なら本番最終日
   costume: boolean; // 衣装
   bandMaster: string; // バンドマスター
   members: string[]; // 出演メンバー名の配列

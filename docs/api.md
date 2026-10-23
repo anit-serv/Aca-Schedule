@@ -164,6 +164,7 @@ PATには以下の特徴があります。
 | `performanceDuration` | integer | ✅ | 1〜180（分） |
 | `performanceCount` | integer | | 1〜10（デフォルト: 1） |
 | `toriPriority` | integer | | トリ優先度。1〜3（デフォルト: 1） |
+| `toriTargetDate` | string or null | | 優先度3の対象本番日（`YYYY-MM-DD`）。省略時は最終日。イベントの本番日に含まれる日付を指定 |
 | `costume` | boolean | | 衣装の有無（デフォルト: `false`） |
 | `bandMaster` | string | | バンドマスター。最大100文字（デフォルト: 空文字列） |
 | `members` | string[] | | 最大30件、各メンバー1〜40文字 |
